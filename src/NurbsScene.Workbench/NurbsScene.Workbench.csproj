@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net10.0</TargetFramework><IsPackable>true</IsPackable><Description>Reusable CAD workspace orchestration, commands, graph preview and baking.</Description></PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../NurbsScene.Kernel/NurbsScene.Kernel.csproj" />
+    <ProjectReference Include="../NurbsScene.Model/NurbsScene.Model.csproj" />
+    <ProjectReference Include="../NurbsScene.Parametric/NurbsScene.Parametric.csproj" />
+    <ProjectReference Include="../NurbsScene.Rendering/NurbsScene.Rendering.csproj" />
+    <ProjectReference Include="../NurbsScene.IO/NurbsScene.IO.csproj" />
+  </ItemGroup>
+</Project>

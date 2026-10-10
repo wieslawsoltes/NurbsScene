@@ -1,0 +1,13 @@
+<Project Sdk="Uno.Sdk">
+  <PropertyGroup>
+    <TargetFrameworks>net10.0-desktop;net10.0-browserwasm</TargetFrameworks>
+    <TargetFrameworks Condition="'$(NurbsSceneDesktopOnly)'=='true'">net10.0-desktop</TargetFrameworks>
+    <OutputType>Library</OutputType><UnoSingleProject>true</UnoSingleProject><IsPackable>true</IsPackable><GenerateLibraryLayout>true</GenerateLibraryLayout>
+    <UnoFeatures>SkiaRenderer;GLCanvas;</UnoFeatures><AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Description>Reusable Uno CAD viewports, visual graph canvas, command console, inspectors and workspace controls.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../NurbsScene.Workbench/NurbsScene.Workbench.csproj" />
+    <PackageReference Include="Uno.WinUI.Graphics3DGL" Version="6.7.135" Condition="'$(TargetFramework)'=='net10.0-browserwasm'" />
+  </ItemGroup>
+</Project>
