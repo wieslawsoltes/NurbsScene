@@ -1,0 +1,49 @@
+name: Offline modeling dependencies
+on:
+  push:
+    branches: [feat/parity-kernel]
+    paths: [.github/workflows/dependency-cache.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  dependencies:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Restore managed rendering dependencies without application source
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet restore src/NurbsScene.Rendering/NurbsScene.Rendering.csproj --packages "$RUNNER_TEMP/offline-nuget"
+          mkdir -p "$RUNNER_TEMP/modeling-dependencies"
+          tar -czf "$RUNNER_TEMP/modeling-dependencies/nuget-rendering.tar.gz" -C "$RUNNER_TEMP/offline-nuget" .
+      - name: Fetch pinned OCCT WebAssembly distribution with npm integrity metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/modeling-dependencies"
+          npm view replicad-opencascadejs@1.1.0 dist --json > occt-npm-dist.json
+          npm pack replicad-opencascadejs@1.1.0 --ignore-scripts --json > occt-npm-pack.json
+          python3 - <<'PY'
+          import base64,hashlib,json,pathlib
+          dist=json.loads(pathlib.Path('occt-npm-dist.json').read_text())
+          pack=json.loads(pathlib.Path('occt-npm-pack.json').read_text())[0]
+          data=pathlib.Path(pack['filename']).read_bytes()
+          expected='sha512-'+base64.b64encode(hashlib.sha512(data).digest()).decode()
+          if dist['integrity']!=expected or pack['integrity']!=expected: raise RuntimeError('npm integrity mismatch')
+          print('Verified npm integrity:',expected)
+          pathlib.Path('SHA256SUMS.txt').write_text('\n'.join(hashlib.sha256(p.read_bytes()).hexdigest()+'  '+p.name for p in sorted(pathlib.Path('.').iterdir()) if p.is_file())+'\n')
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pinned-modeling-dependencies
+          compression-level: 0
+          retention-days: 1
+          path: ${{ runner.temp }}/modeling-dependencies/
