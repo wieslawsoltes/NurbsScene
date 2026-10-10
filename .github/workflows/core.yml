@@ -1,0 +1,35 @@
+name: Managed core qualification
+on:
+  pull_request:
+  push:
+    branches: [main, feat/parity-kernel]
+permissions:
+  contents: read
+jobs:
+  managed-core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Generate independent numerical oracle
+        shell: bash
+        run: |
+          python -m pip install 'numpy>=1.26,<3' 'scipy>=1.12,<2'
+          mkdir -p tests/fixtures
+          python tools/generate-oracle-fixtures.py
+      - name: Compile and execute managed core tests
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p artifacts/managed-core
+          dotnet run --project tests/dotnet/NurbsScene.CoreTests -c Release 2>&1 | tee artifacts/managed-core/test.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: managed-core-evidence-${{ github.run_id }}
+          path: artifacts/managed-core/
