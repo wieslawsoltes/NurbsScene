@@ -1,0 +1,60 @@
+name: Bounded Uno dependency artifacts
+on:
+  push:
+    branches: [feat/parity-kernel]
+    paths: [.github/workflows/uno-dependency-parts.yml]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  split:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: uno-offline-build-dependencies
+          run-id: 38091253940
+          github-token: ${{ github.token }}
+          path: dependencies
+      - name: Verify and split public build dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd dependencies
+          sha256sum --check SHA256SUMS.txt
+          ls -lh *.tar.gz
+          tar -cf ../tooling.tar *.tar.gz SHA256SUMS.txt dotnet-info.txt workloads.txt
+          cd ..
+          mkdir parts
+          split --bytes=384M --numeric-suffixes=0 --suffix-length=2 tooling.tar parts/tooling.part-
+          cd parts
+          sha256sum tooling.part-* > SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: uno-tooling-part-00
+          compression-level: 0
+          retention-days: 1
+          path: parts/tooling.part-00
+      - uses: actions/upload-artifact@v4
+        with:
+          name: uno-tooling-part-01
+          compression-level: 0
+          retention-days: 1
+          path: parts/tooling.part-01
+      - uses: actions/upload-artifact@v4
+        with:
+          name: uno-tooling-part-02
+          compression-level: 0
+          retention-days: 1
+          path: parts/tooling.part-02
+      - uses: actions/upload-artifact@v4
+        with:
+          name: uno-tooling-part-03
+          compression-level: 0
+          retention-days: 1
+          path: parts/tooling.part-03
+      - uses: actions/upload-artifact@v4
+        with:
+          name: uno-tooling-checksums
+          retention-days: 1
+          path: parts/SHA256SUMS.txt
