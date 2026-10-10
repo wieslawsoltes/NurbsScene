@@ -16,16 +16,7 @@ internal static class GeometryValidation
 {
     public static void Knots(int degree, int count, ReadOnlySpan<double> knots)
     {
-        if(degree is < 1 or > 128 || count <= degree || knots.Length != count+degree+1) throw new ArgumentException("Invalid NURBS dimensions. Degree must be in 1..128.");
-        var multiplicity=0;var previous=double.NaN;
-        foreach(var knot in knots)
-        {
-            if(!double.IsFinite(knot)||knot<previous)throw new ArgumentException("Knots must be finite and nondecreasing.");
-            multiplicity=knot==previous?multiplicity+1:1;
-            if(multiplicity>degree+1)throw new ArgumentException("Knot multiplicity exceeds degree+1.");
-            previous=knot;
-        }
-        if(!(knots[degree]<knots[count]))throw new ArgumentException("NURBS domain has zero length.");
+        KnotVector.Validate(degree, count, knots);
     }
 }
 /// <summary>Immutable exact positive-weight rational B-spline, with expanded knots.</summary>
@@ -52,12 +43,10 @@ public sealed class NurbsCurve : IGeometry
     public double CurvatureAt(double t){var d=Derivatives(t,2);var length=d[1].Length;if(length==0)throw new ArithmeticException("Singular tangent.");return Vec3.Cross(d[1],d[2]).Length/(length*length*length);}
     public NurbsCurve Transform(Transform3 transform)=>new(Evaluator,Degree,_knots,_points.Select(transform.Apply));
     IGeometry IGeometry.Transform(Transform3 transform)=>Transform(transform);
-    public NurbsCurve Reverse(){var sum=_knots[0]+_knots[^1];return new(Evaluator,Degree,_knots.Reverse().Select(u=>sum-u),_points.Reverse());}
+    public NurbsCurve Reverse()=>new(Evaluator,Degree,KnotVector.Reverse(Degree,Count,_knots),_points.Reverse());
     public NurbsCurve Reparameterize(Interval domain)
-    {
-        if(!(domain.Min<domain.Max)||!double.IsFinite(domain.Min)||!double.IsFinite(domain.Max))throw new ArgumentException("Invalid target domain.");
-        var source=Domain;return new(Evaluator,Degree,_knots.Select(u=>domain.Min+(u-source.Min)*domain.Length/source.Length),_points);
-    }
+        =>new(Evaluator,Degree,KnotVector.Reparameterize(Degree,Count,_knots,domain),_points);
+
 }
 /// <summary>Immutable tensor-product NURBS surface. V varies fastest in the control net. No implicit trimming.</summary>
 public sealed class NurbsSurface : IGeometry

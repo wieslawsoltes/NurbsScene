@@ -1,0 +1,32 @@
+name: Exact surface and native parity
+on:
+  pull_request:
+  push:
+    branches: [main, feat/parity-kernel]
+permissions:
+  contents: read
+jobs:
+  surface:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Compile native reference evaluator
+        run: |
+          cmake -S native/kernel -B artifacts/native -DCMAKE_BUILD_TYPE=Release
+          cmake --build artifacts/native --parallel
+      - name: Run exact surface contracts against managed and native kernels
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p artifacts/surface-contracts
+          export LD_LIBRARY_PATH="$PWD/artifacts/native:${LD_LIBRARY_PATH:-}"
+          export NURBSSCENE_NATIVE_TESTS=1
+          dotnet run --project tests/dotnet/NurbsScene.SurfaceContracts -c Release 2>&1 | tee artifacts/surface-contracts/test.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: surface-contract-evidence-${{ github.run_id }}
+          path: artifacts/surface-contracts/

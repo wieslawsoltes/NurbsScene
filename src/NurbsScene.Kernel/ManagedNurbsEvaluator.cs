@@ -7,21 +7,39 @@ namespace NurbsScene.Kernel;
 public sealed class ManagedNurbsEvaluator : INurbsEvaluator
 {
     public string Implementation=>"Managed binary64 NURBS";
+    /// <summary>Finds the right-sided active span, or the last nonempty span
+    /// at the domain end. Public input is validated; immutable geometry uses
+    /// the validation-free internal path during repeated evaluation.</summary>
     public static int FindSpan(int degree,int count,ReadOnlySpan<double> knots,double t)
     {
+        KnotVector.Validate(degree,count,knots);
+        return FindSpanCore(degree,count,knots,t);
+    }
+    private static int FindSpanCore(int degree,int count,ReadOnlySpan<double> knots,double t)
+    {
         if(!double.IsFinite(t)||t<knots[degree]||t>knots[count])throw new ArgumentOutOfRangeException(nameof(t));
-        if(t==knots[count])return count-1;
-        var low=degree;var high=count;var mid=(low+high)/2;
-        while(t<knots[mid]||t>=knots[mid+1]){if(t<knots[mid])high=mid;else low=mid;mid=(low+high)/2;}
-        return mid;
+        if(t==knots[count])
+        {
+            var span=count-1;
+            while(span>degree&&knots[span]>=knots[count])span--;
+            return span;
+        }
+        var low=degree;var high=count;
+        while(low+1<high){var mid=low+(high-low)/2;if(t<knots[mid])high=mid;else low=mid;}
+        return low;
     }
     internal static double Binomial(int n,int k){if(k<0||k>n)return 0;k=Math.Min(k,n-k);double c=1;for(var i=1;i<=k;i++)c=c*(n-i+1)/i;return c;}
     private static double Divide(double a,double b)=>b==0?0:a/b;
     /// <summary>Basis derivatives for the p+1 active controls. Right-sided at interior knots.</summary>
     public static (int Span,double[,] Derivatives) Basis(int p,int count,ReadOnlySpan<double> knots,double t,int order)
     {
+        KnotVector.Validate(p,count,knots);
+        return BasisCore(p,count,knots,t,order);
+    }
+    private static (int Span,double[,] Derivatives) BasisCore(int p,int count,ReadOnlySpan<double> knots,double t,int order)
+    {
         if(order is <0 or >32)throw new ArgumentOutOfRangeException(nameof(order));
-        var span=FindSpan(p,count,knots,t);var n=Math.Min(p,order);var ndu=new double[p+1,p+1];var left=new double[p+1];var right=new double[p+1];var ders=new double[order+1,p+1];ndu[0,0]=1;
+        var span=FindSpanCore(p,count,knots,t);var n=Math.Min(p,order);var ndu=new double[p+1,p+1];var left=new double[p+1];var right=new double[p+1];var ders=new double[order+1,p+1];ndu[0,0]=1;
         for(var j=1;j<=p;j++)
         {
             left[j]=t-knots[span+1-j];right[j]=knots[span+j]-t;double saved=0;
@@ -48,7 +66,7 @@ public sealed class ManagedNurbsEvaluator : INurbsEvaluator
     }
     public Vec3[] Evaluate(NurbsCurve curve,double parameter,int derivativeOrder=0)
     {
-        var p=curve.Degree;var (span,basis)=Basis(p,curve.Count,curve.Knots,parameter,derivativeOrder);var h=new HPoint[derivativeOrder+1];var controls=curve.ControlPoints;double scale=0;
+        var p=curve.Degree;var (span,basis)=BasisCore(p,curve.Count,curve.Knots,parameter,derivativeOrder);var h=new HPoint[derivativeOrder+1];var controls=curve.ControlPoints;double scale=0;
         for(var i=0;i<=p;i++)scale=Math.Max(scale,controls[span-p+i].W);
         for(var k=0;k<=derivativeOrder;k++)for(var i=0;i<=p;i++)h[k]+=(controls[span-p+i]/scale)*basis[k,i];
         if(!(h[0].W>0))throw new ArithmeticException("Singular rational denominator.");
@@ -58,7 +76,7 @@ public sealed class ManagedNurbsEvaluator : INurbsEvaluator
     }
     public Vec3[,] Evaluate(NurbsSurface surface,double u,double v,int orderU=0,int orderV=0)
     {
-        var p=surface.DegreeU;var q=surface.DegreeV;var (spanU,bu)=Basis(p,surface.CountU,surface.KnotsU,u,orderU);var (spanV,bv)=Basis(q,surface.CountV,surface.KnotsV,v,orderV);var cp=surface.ControlPoints;var h=new HPoint[orderU+1,orderV+1];double scale=0;
+        var p=surface.DegreeU;var q=surface.DegreeV;var (spanU,bu)=BasisCore(p,surface.CountU,surface.KnotsU,u,orderU);var (spanV,bv)=BasisCore(q,surface.CountV,surface.KnotsV,v,orderV);var cp=surface.ControlPoints;var h=new HPoint[orderU+1,orderV+1];double scale=0;
         for(var i=0;i<=p;i++)for(var j=0;j<=q;j++)scale=Math.Max(scale,cp[(spanU-p+i)*surface.CountV+spanV-q+j].W);
         for(var a=0;a<=orderU;a++)for(var b=0;b<=orderV;b++)for(var i=0;i<=p;i++)for(var j=0;j<=q;j++)h[a,b]+=(cp[(spanU-p+i)*surface.CountV+spanV-q+j]/scale)*(bu[a,i]*bv[b,j]);
         if(!(h[0,0].W>0))throw new ArithmeticException("Singular rational surface denominator.");
