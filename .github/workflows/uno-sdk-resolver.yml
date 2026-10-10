@@ -1,0 +1,31 @@
+name: Uno SDK resolver dependency
+on:
+  push:
+    branches: [feat/parity-kernel]
+    paths: [.github/workflows/uno-sdk-resolver.yml]
+permissions:
+  contents: read
+jobs:
+  sdk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Resolve the pinned Uno SDK
+        run: dotnet restore src/NurbsScene.App/NurbsScene.App.csproj -p:NurbsSceneDesktopOnly=true --packages "${{ runner.temp }}/ordinary-packages"
+      - name: Archive only the SDK resolver package
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -d "$HOME/.nuget/packages/uno.sdk/6.7.30"
+          mkdir -p "$RUNNER_TEMP/uno-sdk-artifact"
+          tar --exclude='*.nupkg' --exclude='*.ttf' --exclude='*.otf' --exclude='*.woff' --exclude='*.woff2' --exclude='*.ttc' -czf "$RUNNER_TEMP/uno-sdk-artifact/uno-sdk-expanded.tar.gz" -C "$HOME/.nuget/packages" uno.sdk
+          cd "$RUNNER_TEMP/uno-sdk-artifact"
+          sha256sum uno-sdk-expanded.tar.gz > SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: uno-sdk-resolver
+          retention-days: 1
+          path: ${{ runner.temp }}/uno-sdk-artifact/
