@@ -1,0 +1,11 @@
+**/bin/
+**/obj/
+node_modules/
+artifacts/
+__pycache__/
+.cache/
+playwright-report/
+test-results/
+*.user
+*.suo
+.DS_Store
