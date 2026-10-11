@@ -17,3 +17,5 @@ test-results/
 /tests/fixtures/queries-scipy.json
 /benchmark.json
 /section-benchmark.json
+/tests/fixtures/areas-scipy.json
+/analysis-benchmark.json

@@ -1,30 +1,83 @@
+using System.Buffers;
 using System.Runtime.InteropServices;
 using NurbsScene.Geometry;
 
 namespace NurbsScene.Kernel;
 
-/// <summary>Optional native C ABI adapter. Does not silently switch to managed evaluation on load/ABI failure.
-/// Build native/kernel and place the platform library on the native search path.</summary>
-public sealed unsafe class NativeNurbsEvaluator : INurbsEvaluator
+/// <summary>Native C ABI adapter with pinned read-only geometry and caller-owned
+/// derivative spans. Does not silently switch to managed evaluation on ABI/load
+/// failure. Scratch storage is per call; large workspaces use a scoped pool.</summary>
+public sealed unsafe class NativeNurbsEvaluator : INurbsSpanEvaluator
 {
-    private const string Library="nurbsscene_kernel";
-    public string Implementation=>"NurbsScene native C ABI 1";
-    public NativeNurbsEvaluator(){if(ns_abi_version()!=1)throw new InvalidOperationException("Kernel ABI mismatch.");}
-    private static void Check(int status){if(status!=0)throw new ArithmeticException($"Native NURBS kernel status {status}.");}
-    private static double[] Flatten(ReadOnlySpan<HPoint> points){var flat=new double[points.Length*4];for(var i=0;i<points.Length;i++){flat[i*4]=points[i].X;flat[i*4+1]=points[i].Y;flat[i*4+2]=points[i].Z;flat[i*4+3]=points[i].W;}return flat;}
-    public Vec3[] Evaluate(NurbsCurve curve,double parameter,int derivativeOrder=0)
+    private const string Library = "nurbsscene_kernel";
+    public string Implementation => "NurbsScene native C ABI 1";
+    public NativeNurbsEvaluator()
     {
-        if(derivativeOrder is <0 or >32)throw new ArgumentOutOfRangeException(nameof(derivativeOrder));
-        var h=Flatten(curve.ControlPoints);var output=new double[(derivativeOrder+1)*3];var workspace=new double[ns_curve_workspace(curve.Degree,derivativeOrder)];
-        fixed(double* knots=curve.Knots,points=h,result=output,work=workspace)Check(ns_curve_eval(curve.Degree,curve.Count,knots,points,parameter,derivativeOrder,result,output.Length,work,workspace.Length));
-        var derivatives=new Vec3[derivativeOrder+1];for(var i=0;i<derivatives.Length;i++)derivatives[i]=new(output[i*3],output[i*3+1],output[i*3+2]);return derivatives;
+        if (sizeof(HPoint) != 4 * sizeof(double) || sizeof(Vec3) != 3 * sizeof(double))
+            throw new PlatformNotSupportedException("Native geometry requires sequential binary64 vector layouts.");
+        if (ns_abi_version() != 1) throw new InvalidOperationException("Kernel ABI mismatch.");
     }
-    public Vec3[,] Evaluate(NurbsSurface surface,double u,double v,int orderU=0,int orderV=0)
+    private static void Check(int status)
     {
-        if(orderU is <0 or >32||orderV is <0 or >32)throw new ArgumentOutOfRangeException(nameof(orderU));
-        var h=Flatten(surface.ControlPoints);var output=new double[(orderU+1)*(orderV+1)*3];var workspace=new double[ns_surface_workspace(surface.DegreeU,surface.DegreeV,orderU,orderV)];
-        fixed(double* ku=surface.KnotsU,kv=surface.KnotsV,points=h,result=output,work=workspace)Check(ns_surface_eval(surface.DegreeU,surface.DegreeV,surface.CountU,surface.CountV,ku,kv,points,u,v,orderU,orderV,result,output.Length,work,workspace.Length));
-        var derivatives=new Vec3[orderU+1,orderV+1];for(var i=0;i<=orderU;i++)for(var j=0;j<=orderV;j++){var index=(i*(orderV+1)+j)*3;derivatives[i,j]=new(output[index],output[index+1],output[index+2]);}return derivatives;
+        if (status != 0) throw new ArithmeticException($"Native NURBS kernel status {status}.");
+    }
+    private static void Order(int order)
+    {
+        if (order is < 0 or > 32) throw new ArgumentOutOfRangeException(nameof(order));
+    }
+    private static int Workspace(int size)
+        => size is > 0 and <= 100_000 ? size : throw new InvalidOperationException("Invalid native workspace size.");
+
+    public Vec3[] Evaluate(NurbsCurve curve, double parameter, int derivativeOrder = 0)
+    {
+        ArgumentNullException.ThrowIfNull(curve); Order(derivativeOrder);
+        var result = new Vec3[derivativeOrder + 1];
+        EvaluateInto(curve, parameter, derivativeOrder, result);
+        return result;
+    }
+    public void EvaluateInto(NurbsCurve curve, double parameter, int order, Span<Vec3> derivatives)
+    {
+        ArgumentNullException.ThrowIfNull(curve); Order(order);
+        if (!curve.Domain.Contains(parameter)) throw new ArgumentOutOfRangeException(nameof(parameter));
+        if (derivatives.Length < order + 1) throw new ArgumentException("Derivative buffer is too small.", nameof(derivatives));
+        var size = Workspace(ns_curve_workspace(curve.Degree, order));
+        double[]? rented = null;
+        Span<double> scratch = size <= 256 ? stackalloc double[size] : (rented = ArrayPool<double>.Shared.Rent(size)).AsSpan(0, size);
+        try
+        {
+            var controls = MemoryMarshal.Cast<HPoint, double>(curve.ControlPoints);
+            var output = MemoryMarshal.Cast<Vec3, double>(derivatives[..(order + 1)]);
+            fixed (double* knots = curve.Knots, points = controls, result = output, work = scratch)
+                Check(ns_curve_eval(curve.Degree, curve.Count, knots, points, parameter, order, result, output.Length, work, size));
+        }
+        finally { if (rented is not null) ArrayPool<double>.Shared.Return(rented); }
+    }
+    public Vec3[,] Evaluate(NurbsSurface surface, double u, double v, int orderU = 0, int orderV = 0)
+    {
+        ArgumentNullException.ThrowIfNull(surface); Order(orderU); Order(orderV);
+        var result = new Vec3[orderU + 1, orderV + 1];
+        EvaluateInto(surface, u, v, orderU, orderV, MemoryMarshal.CreateSpan(ref result[0, 0], result.Length));
+        return result;
+    }
+    public void EvaluateInto(NurbsSurface surface, double u, double v, int orderU, int orderV, Span<Vec3> derivatives)
+    {
+        ArgumentNullException.ThrowIfNull(surface); Order(orderU); Order(orderV);
+        if (!surface.DomainU.Contains(u)) throw new ArgumentOutOfRangeException(nameof(u));
+        if (!surface.DomainV.Contains(v)) throw new ArgumentOutOfRangeException(nameof(v));
+        var count = (orderU + 1) * (orderV + 1);
+        if (derivatives.Length < count) throw new ArgumentException("Derivative buffer is too small.", nameof(derivatives));
+        var size = Workspace(ns_surface_workspace(surface.DegreeU, surface.DegreeV, orderU, orderV));
+        double[]? rented = null;
+        Span<double> scratch = size <= 256 ? stackalloc double[size] : (rented = ArrayPool<double>.Shared.Rent(size)).AsSpan(0, size);
+        try
+        {
+            var controls = MemoryMarshal.Cast<HPoint, double>(surface.ControlPoints);
+            var output = MemoryMarshal.Cast<Vec3, double>(derivatives[..count]);
+            fixed (double* ku = surface.KnotsU, kv = surface.KnotsV, points = controls, result = output, work = scratch)
+                Check(ns_surface_eval(surface.DegreeU, surface.DegreeV, surface.CountU, surface.CountV,
+                    ku, kv, points, u, v, orderU, orderV, result, output.Length, work, size));
+        }
+        finally { if (rented is not null) ArrayPool<double>.Shared.Return(rented); }
     }
     [DllImport(Library,CallingConvention=CallingConvention.Cdecl)]private static extern int ns_abi_version();
     [DllImport(Library,CallingConvention=CallingConvention.Cdecl)]private static extern int ns_curve_workspace(int degree,int order);

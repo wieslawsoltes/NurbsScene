@@ -72,6 +72,7 @@ public partial class App
             Check(loadedPaths.GetNode(pick.Id).Parameters["input:P"] is DataPath persisted&&persisted.Equals(DataPath.Parse("{2;3}")),"Typed path workspace round trip on WebAssembly");
             Check((await loadedPaths.SolveAsync()).ErrorCount==0,"Reloaded tree definition solves on WebAssembly");
             await VerifySectionsAsync(view,Check);
+            await VerifySurfaceAnalysisAsync(view,Check);
             canvas.Fit();controller.Scene.ShowGrid=false;controller.Scene.ShowIsocurves=false;
             var scene=controller.Scene;var items=scene.Items.ToArray();
             // Differential readback proves modeled surfaces, not only a grid, produced pixels.

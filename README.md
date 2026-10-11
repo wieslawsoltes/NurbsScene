@@ -13,7 +13,7 @@ The application lives in `src/NurbsScene.App`. The separate `validation-harness`
 | `NurbsScene.Geometry` | Immutable binary64 geometry, cached control bounds, planes and optional span/grid evaluator contracts |
 | `NurbsScene.Kernel` | Managed/native evaluators, exact curve/surface editing, numerical arc length and bounded curve queries |
 | `NurbsScene.Model` | Documents, cached immutable snapshot views, layers, selection and atomic undoable transactions |
-| `NurbsScene.Parametric` | Typed data trees/paths, indexed dependency graph, incremental solving and 110 executable components |
+| `NurbsScene.Parametric` | Typed data trees/paths, indexed dependency graph, incremental solving and 112 executable components |
 | `NurbsScene.Rendering` | Knot-aware display tessellation, cameras, two-level spatial picking and a depth-enabled GL renderer |
 | `NurbsScene.IO` | Versioned exact `.nscene` workspaces and display-only OBJ/STL export |
 | `NurbsScene.Workbench` | Reusable application commands, graph preview and baking |
@@ -42,6 +42,8 @@ Curves and surfaces retain their weighted control points and expanded knot vecto
 The managed catalog also includes `CurveClosestPoint`, `CurveControlPoint`, `CurveEndPoints`, `ProjectToPlane` and `MirrorInPlane`. The command console exposes `ClosestPoint x,y,z [tolerance]`, `CurveControlPoint index x,y,z [weight]`, `ProjectToPlane origin normal` and `MirrorPlane origin normal`. Closest-point commands report a result without creating a point object; this is not full Rhino command compatibility. Plane operations transform authoritative rational controls, not a triangle approximation.
 
 `CurvePlaneSection` reports isolated plane intersections and coplanar overlap curves. `ShatterCurve` splits at explicit parameters. Both are available through component search. The command console provides `CurvePlane origin normal [tolerance]` for a read-only section report and `SplitCurve parameter [parameter ...]` for undoable multi-splitting. Coordinates use comma-separated triples. See [section and runtime contracts](docs/SECTIONS-AND-RUNTIME.md) for numerical limits and graph-performance validation.
+
+Surface area and centroid analysis use analytic NURBS derivatives, with explicit convergence and numerical error estimates. Use the `SurfaceArea` / `SurfaceCentroid` components or commands. The native evaluator now accepts allocation-free derivative spans. See [surface analysis and native performance](docs/SURFACE-ANALYSIS.md) for contracts, tests and limitations.
 
 The visual editor supports component search, typed wiring, number scrubbing, data-tree operations, preview, exact baking and undo/redo. Typed path values such as `{0;2;10}` survive `.nscene` round trips. Persistent trees retain explicit null items and empty branches. Matching behavior and remaining boundaries are described in [the data-tree contract](docs/DATA-TREES.md).
 

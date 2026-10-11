@@ -1,6 +1,9 @@
+using System.Runtime.InteropServices;
+
 namespace NurbsScene.Geometry;
 
 /// <summary>Binary64 modeling vector. Rendering conversion must happen after origin rebasing.</summary>
+[StructLayout(LayoutKind.Sequential)]
 public readonly record struct Vec3(double X, double Y, double Z)
 {
     public static Vec3 Zero => default;
@@ -21,6 +24,7 @@ public readonly record struct Vec3(double X, double Y, double Z)
     public static Vec3 Lerp(Vec3 a, Vec3 b, double t) => a * (1 - t) + b * t;
     public double[] ToArray() => [X, Y, Z];
 }
+[StructLayout(LayoutKind.Sequential)]
 public readonly record struct HPoint(double X, double Y, double Z, double W)
 {
     public bool IsValid => W > 0 && double.IsFinite(W) && double.IsFinite(X) && double.IsFinite(Y) && double.IsFinite(Z) && double.IsFinite(X/W) && double.IsFinite(Y/W) && double.IsFinite(Z/W);
