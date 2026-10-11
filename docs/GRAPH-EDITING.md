@@ -146,3 +146,14 @@ checks, zero page errors and 161,740 modeled-surface pixels different from the
 empty framebuffer. Software GL may satisfy the test; this is not a physical-GPU
 or FPS qualification. Later heads must pass their own complete workflow before
 merge, and Pages deploys only the exact successful main artifact.
+
+## Search placement review
+
+Screenshot inspection found that a cursor near the left edge opened a centered
+search flyout partly offscreen, even though its keyboard insertion test passed.
+The popup now clamps its anchor using the root dimensions and bounded presenter
+width, without changing the insertion point. Reopening clears stale suggestions.
+The actual-input suite asserts that the complete search panel remains within the
+workspace at both the left and right/bottom edges before entering a component.
+These geometric assertions supplement screenshots rather than treating successful
+keyboard submission as proof that the UI is visible.

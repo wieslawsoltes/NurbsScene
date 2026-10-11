@@ -80,9 +80,14 @@ async def verify_graph_editing_ui(page):
     check((await read())['state']['graphPathBuilds']==paths,'Slider parameter changes reuse every cached native wire path')
     await click('GraphUndo');await click('GraphFit')
     for attempt in range(2):
-        data=await read();box=data['controls']['GraphCanvas'];at=(box['x']+12,box['y']+12)
+        data=await read();box=data['controls']['GraphCanvas']
+        at=(box['x']+12,box['y']+12) if attempt==0 else (box['x']+box['width']-12,box['y']+box['height']-12)
         await page.mouse.dblclick(*at,delay=80);await wait('globalThis.nurbsSceneUi.state.searchOpen')
-        await click('CanvasComponentSearch');await page.keyboard.insert_text('Number')
+        await wait('!!globalThis.nurbsSceneUi.controls.CanvasSearchPanel')
+        data=await read();panel=data['controls']['CanvasSearchPanel']
+        check(panel['x']>=0 and panel['y']>=0 and panel['x']+panel['width']<=data['state']['workspaceWidth'] and panel['y']+panel['height']<=data['state']['workspaceHeight'],
+              'Canvas search stays fully visible near '+('left' if attempt==0 else 'right/bottom')+' edge')
+        await click('CanvasComponentSearch');await page.keyboard.insert_text('Number');await page.wait_for_timeout(400)
         await page.screenshot(path=str(ROOT/f'evidence/uno-canvas-search-{attempt}.png'))
         await page.keyboard.press('Enter');await wait(f'globalThis.nurbsSceneUi.state.nodeCount==={count+1} && !globalThis.nurbsSceneUi.state.searchOpen')
         checks.append('Canvas search adds an executable component'+(' after reopening' if attempt else ''))

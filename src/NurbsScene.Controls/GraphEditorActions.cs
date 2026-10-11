@@ -27,7 +27,7 @@ public sealed partial class GraphEditorControl
     private bool _clipboardBusy;
     public INurbsEvaluator ClipboardEvaluator {get;set;}=new ManagedNurbsEvaluator();
     public IEnumerable<FrameworkElement> ActionElements=>_menuElements.Concat(_contextElements);
-    public FrameworkElement? SearchElement=>_popupSearch;
+    public FrameworkElement? SearchElement=>_searchPanel;
     public bool SearchIsOpen {get;private set;}
     public bool ContextMenuIsOpen {get;private set;}
 
@@ -173,25 +173,6 @@ public sealed partial class GraphEditorControl
             var ids=fragment.Paste(session,dx,dy);_lastPaste=text;_pasteCount=repeat;Canvas.SelectNodes(ids);
         }
         finally{_clipboardBusy=false;}
-    }
-    private void ShowCanvasSearch()
-    {
-        if(Session is null)return;
-        if(_canvasSearch is null)
-        {
-            _popupSearch=new AutoSuggestBox{PlaceholderText="Search components…",Width=290,FontSize=12};
-            AutomationProperties.SetAutomationId(_popupSearch,"CanvasComponentSearch");
-            var panel=new StackPanel{Spacing=5};panel.Children.Add(ClassicChrome.Label("Search",11));panel.Children.Add(_popupSearch);
-            panel.Children.Add(ClassicChrome.Label("Enter adds a component at the canvas cursor",10));
-            _canvasSearch=new Flyout{Content=panel,Placement=FlyoutPlacementMode.Bottom};
-            _canvasSearch.Opened+=(_,_)=>{SearchIsOpen=true;_popupSearch.Focus(FocusState.Programmatic);};
-            _canvasSearch.Closed+=(_,_)=>SearchIsOpen=false;
-            _popupSearch.TextChanged+=(_,_)=>{if(Session is null)return;var query=_popupSearch.Text.Trim();_popupSearch.ItemsSource=Session.Graph.Registry.Definitions.Where(d=>d.Id.Contains(query,StringComparison.OrdinalIgnoreCase)||d.Category.Contains(query,StringComparison.OrdinalIgnoreCase)).Take(20).Select(d=>d.Id).ToArray();};
-            _popupSearch.QuerySubmitted+=(_,e)=>{var name=e.ChosenSuggestion?.ToString()??_popupSearch.Text.Trim();if(Session?.Graph.Registry.Definitions.Any(d=>d.Id==name)!=true){Report("No executable component named "+name);return;}_popupSearch.IsSuggestionListOpen=false;_canvasSearch.Hide();AddComponent(name);};
-        }
-        _popupSearch!.Text="";var at=Canvas.InsertionPoint;var center=Canvas.ViewCenter;
-        var x=Canvas.ActualWidth/2+(at.X-center.X)*Canvas.Zoom;var y=Canvas.ActualHeight/2+(at.Y-center.Y)*Canvas.Zoom;
-        _canvasSearch.ShowAt(Canvas,new FlyoutShowOptions{Position=new Point(Math.Clamp(x,0,Math.Max(0,Canvas.ActualWidth)),Math.Clamp(y,0,Math.Max(0,Canvas.ActualHeight)))});
     }
     private void UpdateActionAvailability()
     {
