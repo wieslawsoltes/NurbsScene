@@ -27,6 +27,7 @@ public sealed partial class WorkspaceController : IDisposable
     public event Action? WorkspaceReplaced;
     public string PendingCommand { get; private set; } = "";
     private readonly List<Vec3> _commandPoints = [];
+    public Vec3? CommandAnchor=>_commandPoints.Count>0?_commandPoints[^1]:null;
     public WorkspaceController(INurbsEvaluator? evaluator=null)
     {
         Kernel = new(evaluator??new ManagedNurbsEvaluator()); Registry=StandardComponents.Create(Kernel);
@@ -112,11 +113,11 @@ public sealed partial class WorkspaceController : IDisposable
         var geometry=Graph.Nodes.Where(n=>ids.Contains(n.Id)).SelectMany(n=>result.Nodes[n.Id].Outputs.Values.SelectMany(t=>t.AllItems).OfType<IGeometry>().Select(g=>(Node:n,Geometry:g))).ToArray();
         Document.Transaction("Bake definition geometry",()=>{foreach(var (node,g) in geometry)Document.Add(g,node.Name??node.Component,source:node.Id);});Report($"Baked {geometry.Length} exact geometries.");return geometry.Length;
     }
-    public void CancelCommand(){PendingCommand="";_commandPoints.Clear();}
+    public void CancelCommand(){var changed=PendingCommand!="";PendingCommand="";_commandPoints.Clear();if(changed)Changed?.Invoke();}
     public void AcceptPoint(Vec3 point)
     {
-        if(PendingCommand!="Line")return;_commandPoints.Add(point);
-        if(_commandPoints.Count==1){Report("Line: pick the end point.");return;}
+        if(PendingCommand!="Line")return;if(!point.IsFinite)throw new ArgumentException("A finite construction point is required.");_commandPoints.Add(point);
+        if(_commandPoints.Count==1){Report("Line: pick the end point.");Changed?.Invoke();return;}
         var curve=Kernel.Line(_commandPoints[0],_commandPoints[1]);Document.Transaction("Line",()=>Document.Add(curve,"Line"));CancelCommand();
     }
     private static double Number(string value)=>double.TryParse(value,NumberStyles.Float,CultureInfo.InvariantCulture,out var n)&&double.IsFinite(n)?n:throw new ArgumentException($"Not a finite number: {value}.");
@@ -130,7 +131,7 @@ public sealed partial class WorkspaceController : IDisposable
         if(command=="selall"){Document.Select(Document.VisibleObjects.Where(Document.CanEdit).Select(o=>o.Id));return;}if(command=="selnone"){Document.Select([]);return;}
         if(command is "zoomextents" or "fit"){FitRequested?.Invoke();return;}
         if(command is "shaded" or "wireframe" or "ghosted"){Scene.Mode=command=="shaded"?DisplayMode.Shaded:command=="wireframe"?DisplayMode.Wireframe:DisplayMode.Ghosted;Changed?.Invoke();return;}
-        if(command=="line"&&a.Length==0){PendingCommand="Line";_commandPoints.Clear();Report("Line: pick the start point in a viewport.");return;}
+        if(command=="line"&&a.Length==0){PendingCommand="Line";_commandPoints.Clear();Report("Line: pick the start point in a viewport.");Changed?.Invoke();return;}
         if(TryExtendedCommand(command,a))return;
         Document.Transaction(tokens[0],()=>
         {
