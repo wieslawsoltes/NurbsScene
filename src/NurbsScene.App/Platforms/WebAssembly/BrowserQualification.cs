@@ -91,6 +91,7 @@ public partial class App
         }
         catch(Exception error){report["status"]="failed";report["error"]=error.ToString();}
         Publish();
+        if(report["status"] as string=="passed")await ObserveWorkspaceUiAsync(view);
     }
 }
 #endif

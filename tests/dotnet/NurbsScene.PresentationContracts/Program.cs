@@ -84,4 +84,17 @@ Test("presentation invalidates on graph replacement and preserves prior snapshot
 Test("backward wire bounds include cubic control points for culling",()=>{
     var g=Graph();var a=g.Add("Number",300,100);var b=g.Add("Add",0,400);g.Connect(new(a.Id,"N"),new(b.Id,"A"));var w=new GraphPresentation().Get(g).Wires.Single();Check(w.Bounds.X<0&&w.Bounds.X+w.Bounds.Width>w.Start.X);Check(w.Bounds.Intersects(new(w.Start.X,0,100,600)));
 });
+Test("multi-node dragging publishes once without dirtying the solve",()=>{
+    var g=Graph();var a=g.Add("Number");var b=g.Add("Add");g.Connect(new(a.Id,"N"),new(b.Id,"A"));var before=g.SolveAsync().GetAwaiter().GetResult();var revision=g.Revision;var notifications=0;g.Changed+=()=>notifications++;
+    g.MoveNodes([new(a.Id,17,23),new(b.Id,250,300)]);Check(g.Revision==revision+2&&notifications==1);var after=g.SolveAsync().GetAwaiter().GetResult();Check(after.Evaluated==0&&ReferenceEquals(before.Nodes,after.Nodes));
+});
+Test("multi-node move validation is atomic and no-op moves stay silent",()=>{
+    var g=Graph();var a=g.Add("Number");var b=g.Add("Number");var revision=g.Revision;
+    Throws<ArgumentException>(()=>g.MoveNodes([new(a.Id,100,100),new(b.Id,double.NaN,0)]));Check(g.GetNode(a.Id).X==0&&g.Revision==revision);
+    Throws<ArgumentException>(()=>g.MoveNodes([new(a.Id,100,100),new(a.Id,200,100)]));g.MoveNodes([new(a.Id,0,0)]);Check(g.Revision==revision);
+});
+Test("interactive command anchor rejects invalid points and clears on cancel",()=>{
+    using var w=new WorkspaceController();var notifications=0;w.Changed+=()=>notifications++;w.Execute("Line");Check(notifications==1&&w.CommandAnchor is null);
+    Throws<ArgumentException>(()=>w.AcceptPoint(new(double.NaN,0,0)));Check(w.CommandAnchor is null);w.AcceptPoint(new(2,3,0));Check(w.CommandAnchor==new Vec3(2,3,0));w.CancelCommand();Check(w.CommandAnchor is null&&w.PendingCommand=="");
+});
 int failed=0;foreach(var(name,test)in tests)try{test();Console.WriteLine("PASS "+name);}catch(Exception e){failed++;Console.WriteLine("FAIL "+name+"\n"+e);}Console.WriteLine(JsonSerializer.Serialize(new{suite="presentation",total=tests.Count,passed=tests.Count-failed,failed}));return failed==0?0:1;
