@@ -48,6 +48,10 @@ public partial class App
                     for(var i=0;i<VisualTreeHelper.GetChildrenCount(value);i++)Visit(VisualTreeHelper.GetChild(value,i));
                 }
                 Visit(view);
+                // Native menu/flyout presenters live in the popup root rather
+                // than under WorkspaceView. Observe only loaded controls.
+                foreach(var item in view.GraphEditor.ActionElements)if(item.IsLoaded)Visit(item);
+                if(view.GraphEditor.SearchIsOpen&&view.GraphEditor.SearchElement is{} search&&search.IsLoaded)Visit(search);
                 var cad=view.Viewport.Canvas;var graph=view.GraphEditor.Canvas;
                 controls["CadCanvas"]=Box(cad);controls["GraphCanvas"]=Box(graph);
                 var cadOffset=cad.TransformToVisual(view).TransformPoint(new(0,0));
@@ -62,7 +66,7 @@ public partial class App
                         var p=graph.ScreenPoint(n.Node.Id,output,i);return(object)new{name=port.Name,x=graphOffset.X+p.X,y=graphOffset.Y+p.Y};
                     }).ToArray();
                     return new{id=n.Node.Id,name=n.Node.Name,component=n.Node.Component,modelX=n.Node.X,modelY=n.Node.Y,
-                        value=n.Node.Parameters.GetValueOrDefault("value"),x,y,width=n.Bounds.Width*graph.Zoom,height=n.Bounds.Height*graph.Zoom,
+                        value=n.Node.Parameters.GetValueOrDefault("value"),enabled=n.Node.Enabled,preview=n.Node.Preview,x,y,width=n.Bounds.Width*graph.Zoom,height=n.Bounds.Height*graph.Zoom,
                         inputs=Ports(false),outputs=Ports(true)};
                 }).ToArray();
                 var last=controller.Document.Objects.LastOrDefault();
@@ -74,6 +78,7 @@ public partial class App
                     graphSelected=graph.Selection.ToArray(),graphUndo=controller.GraphSession.CanUndo,graphRedo=controller.GraphSession.CanRedo,
                     graphErrors=controller.Graph.LastResult?.ErrorCount??0,graphLayoutBuilds=graph.LayoutBuilds,graphPathBuilds=graph.PathBuilds,
                     meshBuilds=controller.Scene.MeshBuildCount,layerStructureChanges=view.Inspector.LayerStructureChanges,
+                    contextMenuOpen=view.GraphEditor.ContextMenuIsOpen,searchOpen=view.GraphEditor.SearchIsOpen,
                     toolbar=view.Toolbar.Category,category=view.GraphEditor.Shelf.Category,inspector=view.Inspector.ActiveTab,
                     dock=view.Preferences.Dock,definitionVisible=view.Preferences.DefinitionVisible,inspectorVisible=view.Preferences.InspectorVisible,
                     activeViewport=cad.ActiveViewport,maximized=cad.Maximized,gridSnap=view.Aids.GridSnap,ortho=view.Aids.Ortho,endSnap=view.Aids.EndSnap,

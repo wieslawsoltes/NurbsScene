@@ -14,6 +14,7 @@ async def main(url):
   if os.getenv('CHROMIUM_PATH'):options['executable_path']=os.environ['CHROMIUM_PATH']
   browser=await pw.chromium.launch(**options)
   page=await browser.new_page(viewport={'width':1600,'height':1100},device_scale_factor=1)
+  await page.context.grant_permissions(['clipboard-read','clipboard-write'])
   errors=[];logs=[]
   page.on('pageerror',lambda error:errors.append(str(error)))
   page.on('console',lambda msg:logs.append(msg.type+': '+msg.text))
