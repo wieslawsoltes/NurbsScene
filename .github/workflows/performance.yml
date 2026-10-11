@@ -34,6 +34,7 @@ jobs:
           set -euo pipefail
           dotnet run --project tests/dotnet/NurbsScene.PerformanceContracts -c Release 2>&1 | tee artifacts/performance/contracts.log
           dotnet run --project tests/dotnet/NurbsScene.QueryContracts -c Release 2>&1 | tee artifacts/performance/queries.log
+          dotnet run --project tests/dotnet/NurbsScene.ReviewContracts -c Release 2>&1 | tee artifacts/performance/review.log
       - name: Measure identical harness on baseline and candidate
         shell: bash
         run: |
