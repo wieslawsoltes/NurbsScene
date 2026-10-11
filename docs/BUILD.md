@@ -21,11 +21,16 @@ python -m pip install 'numpy>=1.26,<3' 'scipy>=1.12,<2'
 mkdir -p tests/fixtures
 python tools/generate-oracle-fixtures.py
 python tools/generate-length-oracle.py
+python tools/generate-query-oracle.py
 dotnet run --project tests/dotnet/NurbsScene.CoreTests -c Release
 dotnet run --project tests/dotnet/NurbsScene.MeasurementTests -c Release
 dotnet run --project tests/dotnet/NurbsScene.IntegrationTests -c Release
 dotnet run --project tests/dotnet/NurbsScene.WorkbenchTests -c Release
 dotnet run --project tests/dotnet/NurbsScene.GraphContracts -c Release
+dotnet run --project tests/dotnet/NurbsScene.PerformanceContracts -c Release
+dotnet run --project tests/dotnet/NurbsScene.QueryContracts -c Release
+dotnet run --project tests/dotnet/NurbsScene.ReviewContracts -c Release
+dotnet run --project tests/dotnet/NurbsScene.SectionContracts -c Release
 cmake -S native/kernel -B artifacts/native -DCMAKE_BUILD_TYPE=Release
 cmake --build artifacts/native --parallel
 LD_LIBRARY_PATH="$PWD/artifacts/native" NURBSSCENE_NATIVE_TESTS=1 dotnet run --project tests/dotnet/NurbsScene.SurfaceContracts -c Release
@@ -44,7 +49,7 @@ python -m playwright install chromium
 python tests/browser/test_uno.py
 ```
 
-The opt-in hook exercises real managed commands, undo/redo, graph changes, exact baking, workspace and typed-path round trips, four viewports and differential GL framebuffer readback. No GPU mocks or skip-on-unavailable path exists. It is smoke qualification, not complete UI, hardware or performance coverage.
+The opt-in hook exercises real managed commands, undo/redo, graph changes, exact baking, workspace and typed-path round trips, four viewports and differential GL framebuffer readback. Seven additional checks cover curve-plane sections, overlap reporting, the new components, execution-plan/result reuse, definition serialization, and application-controller splitting/undo. No GPU mocks or skip-on-unavailable path exists. It is smoke qualification, not complete UI, hardware or performance coverage.
 
 The pinned Uno 6.7.135 browser GL adapter selects the framework's existing RGBA readback/channel-conversion path and rejects an unknown framework contract. Browser drawing does not require the optional debug-renderer extension. Inherited shared-context GL errors are recorded separately; context loss and NurbsScene submission errors still fail.
 
@@ -68,3 +73,13 @@ That script builds the native/WASM kernel, runs the native and Node suites, pack
 The `pages.yml` workflow runs only after the main branch's Uno qualification succeeds. It checks that the tested commit is still current main, downloads that exact run's qualified artifact, then uses GitHub Pages deployment with its scoped OIDC permissions. It never publishes the JavaScript harness as Uno. Repository Pages must use GitHub Actions as its build source.
 
 Use per-commit CI artifacts for current evidence. Reports in `docs/history/alpha` describe the original partial alpha and its older environment.
+
+## Section and graph performance evidence
+
+`sections.yml` runs the new numerical/runtime contract suite and then the same
+`tests/section-performance` harness sequentially against baseline main
+`21ed2c787c26acd533efd385d25b5fd699785e1c` and the candidate. Release builds,
+`DOTNET_TieredCompilation=0`, three warm-up calls, and seven measured samples are
+used. JSON includes per-operation medians, min/max samples and allocation counts;
+CI preserves both JSON files, test output and the tested tree. This is not an FPS,
+GPU, cold-start or complete UI benchmark. See `SECTIONS-AND-RUNTIME.md`.

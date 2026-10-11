@@ -37,7 +37,8 @@ public sealed partial class DataTree
     public DataTree Branch(DataPath path)
     {
         ArgumentNullException.ThrowIfNull(path);
-        return new(Branches.Where(b => b.Path.Equals(path)));
+        var index=FindBranch(path);
+        return index<0?Empty:new([Branches[index]]);
     }
 
     /// <summary>Replace a path, merging colliding branches in original numeric path order.</summary>

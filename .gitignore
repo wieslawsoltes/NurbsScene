@@ -16,3 +16,4 @@ test-results/
 /tests/fixtures/lengths-scipy.json
 /tests/fixtures/queries-scipy.json
 /benchmark.json
+/section-benchmark.json
