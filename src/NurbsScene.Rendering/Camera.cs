@@ -49,20 +49,3 @@ public static class ViewportLayout
     }
 }
 public sealed record PickResult(string ObjectId,Vec3 Point,double Distance);
-public static class MeshPicker
-{
-    public static PickResult? Pick(DisplayScene scene,ViewportRectangle viewport,double x,double y)
-    {
-        var ray=viewport.Camera.Ray(x,y,viewport.Width,viewport.Height);PickResult? best=null;
-        foreach(var item in scene.Items.Where(i=>!i.Locked))
-        {
-            var mesh=scene.Meshes[item.Geometry.Id];
-            for(var i=0;i<mesh.Indices.Length;i+=3)
-            {
-                var a=mesh.Positions[mesh.Indices[i]];var b=mesh.Positions[mesh.Indices[i+1]];var c=mesh.Positions[mesh.Indices[i+2]];var ab=b-a;var ac=c-a;var p=Vec3.Cross(ray.Direction,ac);var det=Vec3.Dot(ab,p);if(Math.Abs(det)<1e-14*Math.Max(1,ab.Length*ac.Length))continue;var t=ray.Origin-a;var u=Vec3.Dot(t,p)/det;if(u<0||u>1)continue;var q=Vec3.Cross(t,ab);var v=Vec3.Dot(ray.Direction,q)/det;if(v<0||u+v>1)continue;var distance=Vec3.Dot(ac,q)/det;if(distance<0||best is not null&&distance>=best.Distance)continue;var point=ray.Origin+ray.Direction*distance;if(scene.ClipPlane is{} clip&&Vec3.Dot(clip.Normal,point)+clip.Offset<0)continue;best=new(item.Id,point,distance);
-            }
-            if(mesh.Indices.Length==0)for(var i=1;i<mesh.Positions.Length;i++){var a=viewport.Camera.Project(mesh.Positions[i-1],viewport.Width,viewport.Height);var b=viewport.Camera.Project(mesh.Positions[i],viewport.Width,viewport.Height);if(a.Depth<0||b.Depth<0)continue;var dx=b.X-a.X;var dy=b.Y-a.Y;var length=dx*dx+dy*dy;var t=length==0?0:Math.Clamp(((x-a.X)*dx+(y-a.Y)*dy)/length,0,1);if(Math.Sqrt(Math.Pow(x-a.X-t*dx,2)+Math.Pow(y-a.Y-t*dy,2))>7)continue;var point=Vec3.Lerp(mesh.Positions[i-1],mesh.Positions[i],t);var distance=(point-ray.Origin).Length;if(best is null||distance<best.Distance)best=new(item.Id,point,distance);}
-        }
-        return best;
-    }
-}
