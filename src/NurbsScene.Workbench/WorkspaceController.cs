@@ -10,7 +10,7 @@ using NurbsScene.Rendering;
 namespace NurbsScene.Workbench;
 
 /// <summary>UI-independent application engine. Requires the caller's UI synchronization context when bound to controls.</summary>
-public sealed class WorkspaceController : IDisposable
+public sealed partial class WorkspaceController : IDisposable
 {
     private CancellationTokenSource? _solveCancellation;
     private Graph _subscribedGraph;
@@ -131,6 +131,7 @@ public sealed class WorkspaceController : IDisposable
         if(command is "zoomextents" or "fit"){FitRequested?.Invoke();return;}
         if(command is "shaded" or "wireframe" or "ghosted"){Scene.Mode=command=="shaded"?DisplayMode.Shaded:command=="wireframe"?DisplayMode.Wireframe:DisplayMode.Ghosted;Changed?.Invoke();return;}
         if(command=="line"&&a.Length==0){PendingCommand="Line";_commandPoints.Clear();Report("Line: pick the start point in a viewport.");return;}
+        if(TryExtendedCommand(command,a))return;
         Document.Transaction(tokens[0],()=>
         {
             switch(command)
