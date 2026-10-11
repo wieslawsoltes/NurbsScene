@@ -1,0 +1,26 @@
+name: Managed rendering and interchange
+on:
+  push:
+    branches: [main, feat/parity-kernel]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Compile rendering and verify exact workspace, OBJ and STL
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/integration
+          dotnet run --project tests/dotnet/NurbsScene.IntegrationTests -c Release 2>&1 | tee artifacts/integration/test.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: managed-integration-${{ github.run_id }}
+          path: artifacts/integration/
