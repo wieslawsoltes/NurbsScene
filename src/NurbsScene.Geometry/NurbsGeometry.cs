@@ -30,14 +30,23 @@ public sealed class NurbsCurve : IGeometry
     public ReadOnlySpan<double> Knots => _knots;
     public ReadOnlySpan<HPoint> ControlPoints => _points;
     public Interval Domain => new(_knots[Degree],_knots[Count]);
-    public Bounds3 Bounds => _points.Aggregate(Bounds3.Empty,(bounds,p)=>bounds.Include(p.Position));
+    public Bounds3 Bounds { get; }
     public NurbsCurve(INurbsEvaluator evaluator,int degree,IEnumerable<double> knots,IEnumerable<HPoint> points)
     {
         Evaluator=evaluator??throw new ArgumentNullException(nameof(evaluator));Degree=degree;_knots=knots.ToArray();_points=points.ToArray();
         GeometryValidation.Knots(degree,Count,_knots);
         if(_points.Any(p=>!p.IsValid))throw new ArgumentException("NURBS controls must be finite and have positive weights.");
+        Bounds=ComputeBounds(_points);
     }
-    public Vec3 PointAt(double t)=>Evaluator.Evaluate(this,t)[0];
+    private static Bounds3 ComputeBounds(ReadOnlySpan<HPoint> controls)
+    {
+        var bounds=Bounds3.Empty;foreach(var point in controls)bounds=bounds.Include(point.Position);return bounds;
+    }
+    public Vec3 PointAt(double t)
+    {
+        if(Evaluator is not INurbsSpanEvaluator fast)return Evaluator.Evaluate(this,t)[0];
+        Span<Vec3> result=stackalloc Vec3[1];fast.EvaluateInto(this,t,0,result);return result[0];
+    }
     public Vec3[] Derivatives(double t,int order=2)=>Evaluator.Evaluate(this,t,order);
     public Vec3 TangentAt(double t)=>Derivatives(t,1)[1].Normalized();
     public double CurvatureAt(double t){var d=Derivatives(t,2);var length=d[1].Length;if(length==0)throw new ArithmeticException("Singular tangent.");return Vec3.Cross(d[1],d[2]).Length/(length*length*length);}
@@ -57,14 +66,19 @@ public sealed class NurbsSurface : IGeometry
     public int DegreeU { get; } public int DegreeV { get; } public int CountU { get; } public int CountV { get; }
     public ReadOnlySpan<double> KnotsU=>_u;public ReadOnlySpan<double> KnotsV=>_v;public ReadOnlySpan<HPoint> ControlPoints=>_points;
     public Interval DomainU=>new(_u[DegreeU],_u[CountU]);public Interval DomainV=>new(_v[DegreeV],_v[CountV]);
-    public Bounds3 Bounds=>_points.Aggregate(Bounds3.Empty,(bounds,p)=>bounds.Include(p.Position));
+    public Bounds3 Bounds { get; }
     public NurbsSurface(INurbsEvaluator evaluator,int degreeU,int degreeV,int countU,int countV,IEnumerable<double> knotsU,IEnumerable<double> knotsV,IEnumerable<HPoint> points)
     {
         Evaluator=evaluator??throw new ArgumentNullException(nameof(evaluator));DegreeU=degreeU;DegreeV=degreeV;CountU=countU;CountV=countV;_u=knotsU.ToArray();_v=knotsV.ToArray();_points=points.ToArray();
         GeometryValidation.Knots(degreeU,countU,_u);GeometryValidation.Knots(degreeV,countV,_v);
         if((long)countU*countV!=_points.Length||_points.Length>1_000_000||_points.Any(p=>!p.IsValid))throw new ArgumentException("Invalid NURBS surface control net.");
+        var bounds=Bounds3.Empty;foreach(var point in _points)bounds=bounds.Include(point.Position);Bounds=bounds;
     }
-    public Vec3 PointAt(double u,double v)=>Evaluator.Evaluate(this,u,v)[0,0];
+    public Vec3 PointAt(double u,double v)
+    {
+        if(Evaluator is not INurbsSpanEvaluator fast)return Evaluator.Evaluate(this,u,v)[0,0];
+        Span<Vec3> result=stackalloc Vec3[1];fast.EvaluateInto(this,u,v,0,0,result);return result[0];
+    }
     public Vec3[,] Derivatives(double u,double v,int orderU=2,int orderV=2)=>Evaluator.Evaluate(this,u,v,orderU,orderV);
     public Vec3 NormalAt(double u,double v){var d=Derivatives(u,v,1,1);return Vec3.Cross(d[1,0],d[0,1]).Normalized();}
     public (double Gaussian,double Mean) CurvatureAt(double u,double v)

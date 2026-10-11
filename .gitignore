@@ -14,3 +14,5 @@ test-results/
 /validation-harness/offline.html
 /tests/fixtures/curves-scipy.json
 /tests/fixtures/lengths-scipy.json
+/tests/fixtures/queries-scipy.json
+/benchmark.json

@@ -42,7 +42,7 @@ public static class GeometryComponents
             "Exact homogeneous knot insertion. D: 0=U, 1=V.");
         Add("RefineSurfaceKnots", "Surface", [surface, N("D"), Port("Knots", ValueKind.Number, PortAccess.List)], [surface], c =>
             Output(("S", c.Get<NurbsSurface>("S").RefineKnots(Direction(c), c.Get<ImmutableArray<object?>>("Knots").Select(Convert.ToDouble)))),
-            "Prevalidated exact knot refinement, including requested multiplicities.");
+            "Prevalidatedated exact knot refinement, including requested multiplicities.");
         Add("ElevateSurfaceDegree", "Surface", [surface, N("D"), N("N", 1)], [surface], c =>
             Output(("S", c.Get<NurbsSurface>("S").ElevateDegree(Direction(c), Integer(c.Number("N"), 0, 127)))),
             "Exact homogeneous degree elevation along U or V; clamped continuous knot vectors required.");
@@ -79,5 +79,6 @@ public static class GeometryComponents
         Add("CurveInfo", "Curve", [curve], [N("Degree"), N("Count"), N("T0"), N("T1")], c => {
             var s = c.Get<NurbsCurve>("C"); return Output(("Degree", s.Degree), ("Count", s.Count), ("T0", s.Domain.Min), ("T1", s.Domain.Max));
         }, "Authoritative curve degree, control count and parameter domain.");
+        QueryComponents.Register(registry);
     }
 }

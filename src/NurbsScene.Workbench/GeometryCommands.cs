@@ -18,6 +18,7 @@ public sealed partial class WorkspaceController
     }
     private bool TryExtendedCommand(string command, string[] args)
     {
+        if(TryQueryCommand(command,args))return true;
         if (command == "curvelength")
         {
             if (args.Length > 1) throw new ArgumentException("CurveLength [absoluteTolerance]");

@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using NurbsScene.Geometry;
 
 namespace NurbsScene.Model;
@@ -26,14 +27,19 @@ public sealed class SceneDocument
     public double AngleTolerance { get; init; }=1e-5;
     public string ActiveLayer { get=>_activeLayer; set {GetLayer(value);if(_activeLayer==value)return;_activeLayer=value;Notify("metadata");} }
     public long Revision { get; private set; }
-    public IReadOnlyList<SceneObject> Objects=>_objects.Values.ToArray();
-    public IReadOnlyList<Layer> Layers=>_layers.Values.ToArray();
-    public IReadOnlySet<string> Selection=>new HashSet<string>(_selection);
+    private IReadOnlyList<SceneObject>? _objectView;
+    private IReadOnlyList<Layer>? _layerView;
+    private IReadOnlySet<string>? _selectionView;
+    // Snapshot views are detached from mutable storage and cached until a write.
+    // Repeated Contains calls during rendering must not copy the whole selection.
+    public IReadOnlyList<SceneObject> Objects=>_objectView??=Array.AsReadOnly(_objects.Values.ToArray());
+    public IReadOnlyList<Layer> Layers=>_layerView??=Array.AsReadOnly(_layers.Values.ToArray());
+    public IReadOnlySet<string> Selection=>_selectionView??=new ReadOnlySet<string>(new HashSet<string>(_selection));
     public bool CanUndo=>_undo.Count>0;public bool CanRedo=>_redo.Count>0;
     public SceneDocument()=>_layers.Add("default",new("default","Default",ColorRgba.Default));
     public SceneObject GetObject(string id)=>_objects.TryGetValue(id,out var o)?o:throw new KeyNotFoundException($"Unknown object {id}.");
     public Layer GetLayer(string id)=>_layers.TryGetValue(id,out var l)?l:throw new KeyNotFoundException($"Unknown layer {id}.");
-    private void Notify(string kind){Revision++;if(!_inTransaction)Changed?.Invoke(new(kind,Revision));}
+    private void Notify(string kind){_objectView=null;_layerView=null;_selectionView=null;Revision++;if(!_inTransaction)Changed?.Invoke(new(kind,Revision));}
     public Layer AddLayer(string name,ColorRgba color,string? id=null)
     {
         if(!color.IsValid)throw new ArgumentException("Invalid layer color.");var layer=new Layer(id??Guid.NewGuid().ToString("N"),name,color);_layers.Add(layer.Id,layer);Notify("layer");return layer;
@@ -53,7 +59,7 @@ public sealed class SceneDocument
     {
         var objects=ids.Distinct().Select(GetObject).ToArray();if(objects.Length==0)return;if(objects.Any(o=>o.Locked||GetLayer(o.LayerId).Locked))throw new InvalidOperationException("Locked objects cannot be deleted.");foreach(var o in objects){_objects.Remove(o.Id);_selection.Remove(o.Id);}Notify("delete");
     }
-    public void Select(IEnumerable<string> ids,bool add=false){var objects=ids.Select(GetObject).ToArray();if(!add)_selection.Clear();foreach(var o in objects.Where(CanEdit))_selection.Add(o.Id);if(!_inTransaction)Changed?.Invoke(new("selection",Revision));}
+    public void Select(IEnumerable<string> ids,bool add=false){var objects=ids.Select(GetObject).ToArray();if(!add)_selection.Clear();foreach(var o in objects.Where(CanEdit))_selection.Add(o.Id);_selectionView=null;if(!_inTransaction)Changed?.Invoke(new("selection",Revision));}
     public SceneObject[] Transform(IEnumerable<string> ids,Transform3 transform,bool copy=false)
     {
         var objects=ids.Distinct().Select(GetObject).ToArray();if(copy&&(long)_objects.Count+objects.Length>100000)throw new InvalidOperationException("Object budget exceeded.");if(objects.Any(o=>!CanEdit(o)))throw new InvalidOperationException("Some selected objects are locked or hidden.");var prepared=objects.Select(o=>(Object:o,Geometry:o.Geometry.Transform(transform))).ToArray();var result=new List<SceneObject>();foreach(var(o,geometry)in prepared){var next=o with{Geometry=geometry};if(copy)next=Add(geometry,o.Name,o.LayerId,color:o.Color,source:o.Source);else Update(next);result.Add(next);}return result.ToArray();
@@ -62,9 +68,11 @@ public sealed class SceneDocument
     public ColorRgba ObjectColor(SceneObject value)=>value.Color??GetLayer(value.LayerId).Color;
     public DocumentSnapshot Snapshot()=>new(Name,Units,AbsoluteTolerance,AngleTolerance,ActiveLayer,Layers.ToArray(),Objects.ToArray(),_selection.ToArray());
     private void Restore(DocumentSnapshot snapshot){_objects=snapshot.Objects.ToDictionary(o=>o.Id);_layers=snapshot.Layers.ToDictionary(l=>l.Id);_selection.Clear();_selection.UnionWith(snapshot.Selection);_name=snapshot.Name;_activeLayer=snapshot.ActiveLayer;Notify("restore");}
+    private static bool IsAsyncResult(Type type)=>typeof(Task).IsAssignableFrom(type)||type==typeof(ValueTask)
+        ||type.IsGenericType&&type.GetGenericTypeDefinition()==typeof(ValueTask<>);
     public T Transaction<T>(string name,Func<T> action)
     {
-        if(typeof(Task).IsAssignableFrom(typeof(T))||action.Method.IsDefined(typeof(System.Runtime.CompilerServices.AsyncStateMachineAttribute),false))throw new ArgumentException("Document transactions must be synchronous.");if(_inTransaction)throw new InvalidOperationException("Nested transactions are not supported.");var before=Snapshot();var revision=Revision;_inTransaction=true;try{var value=action();if(value is Task)throw new InvalidOperationException("Document transactions must be synchronous.");if(Revision!=revision){_undo.Push(new(name,before,Snapshot()));if(_undo.Count>100){var keep=_undo.Take(100).Reverse().ToArray();_undo.Clear();foreach(var entry in keep)_undo.Push(entry);}_redo.Clear();}return value;}catch{Restore(before);throw;}finally{_inTransaction=false;Changed?.Invoke(new("transaction",Revision));}
+        if(IsAsyncResult(typeof(T))||action.Method.IsDefined(typeof(System.Runtime.CompilerServices.AsyncStateMachineAttribute),false))throw new ArgumentException("Document transactions must be synchronous.");if(_inTransaction)throw new InvalidOperationException("Nested transactions are not supported.");var before=Snapshot();var revision=Revision;_inTransaction=true;try{var value=action();if(value is not null&&IsAsyncResult(value.GetType()))throw new InvalidOperationException("Document transactions must be synchronous.");if(Revision!=revision){_undo.Push(new(name,before,Snapshot()));if(_undo.Count>100){var keep=_undo.Take(100).Reverse().ToArray();_undo.Clear();foreach(var entry in keep)_undo.Push(entry);}_redo.Clear();}return value;}catch{Restore(before);throw;}finally{_inTransaction=false;Changed?.Invoke(new("transaction",Revision));}
     }
     public void Transaction(string name,Action action){if(action.Method.IsDefined(typeof(System.Runtime.CompilerServices.AsyncStateMachineAttribute),false))throw new ArgumentException("Document transactions must be synchronous.");Transaction(name,()=>{action();return true;});}
     public bool Undo(){if(_inTransaction)throw new InvalidOperationException("Undo is not allowed inside a transaction.");if(!_undo.TryPop(out var entry))return false;_redo.Push(entry);Restore(entry.Before);return true;}
