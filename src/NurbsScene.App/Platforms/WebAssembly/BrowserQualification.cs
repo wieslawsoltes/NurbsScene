@@ -37,7 +37,8 @@ public partial class App
         {
             var controller=view.Controller;var canvas=view.Viewport.Canvas;
             await Wait(()=>canvas.Frames>0||canvas.LastError is not null,"Uno GPU canvas did not initialize.");
-            Check(canvas.LastError is null&&canvas.Frames>0,"Uno created a GPU context and submitted a frame");
+            report["gpuBackend"]=canvas.Backend;report["lastGpuError"]=canvas.LastError;
+            Check(canvas.LastError is null&&canvas.Frames>0,"Uno created a GPU context and submitted a frame: "+canvas.LastError);
             await Wait(()=>controller.Graph.LastResult is {Stale:false} r&&r.Revision==controller.Graph.Revision,"Parametric solution did not settle.");
             Check(controller.Graph.LastResult!.ErrorCount==0,"Managed pavilion graph solved without errors");
             var count=controller.Document.Objects.Count;

@@ -10,4 +10,7 @@
   <Project Path="src/NurbsScene.Workbench/NurbsScene.Workbench.csproj" />
   <Project Path="tests/dotnet/NurbsScene.CoreTests/NurbsScene.CoreTests.csproj" />
   <Project Path="tests/dotnet/NurbsScene.IntegrationTests/NurbsScene.IntegrationTests.csproj" />
+  <Project Path="tests/dotnet/NurbsScene.MeasurementTests/NurbsScene.MeasurementTests.csproj" />
+  <Project Path="tests/dotnet/NurbsScene.WorkbenchTests/NurbsScene.WorkbenchTests.csproj" />
+  <Project Path="tests/dotnet/NurbsScene.SurfaceContracts/NurbsScene.SurfaceContracts.csproj" />
 </Solution>

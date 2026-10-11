@@ -35,15 +35,15 @@ public sealed class CadViewport : GLCanvasElement
         IsTabStop=true;SizeChanged+=(_,_)=>Invalidate();
         PointerPressed+=Pressed;PointerMoved+=Moved;PointerReleased+=Released;PointerCanceled+=(_,e)=>{_gesture="";ReleasePointerCapture(e.Pointer);};
         PointerWheelChanged+=Wheel;DoubleTapped+=(_,e)=>{var view=At(e.GetPosition(this));if(view is not null)Maximize(view.Name);e.Handled=true;};
-        RegisterPropertyChangedCallback(IsGLInitializedProperty,(_,_)=>{if(IsLoaded&&IsGLInitialized==false)Report("Uno could not initialize a GPU context. No substitute renderer is active.");});
+        RegisterPropertyChangedCallback(IsGLInitializedProperty,(_,_)=>{if(IsLoaded&&IsGLInitialized==false&&LastError is null)Report("Uno could not initialize a GPU context. No substitute renderer is active.");});
     }
     public ViewportRectangle[] Viewports=>ViewportLayout.Create(_pixelWidth,_pixelHeight,Cameras,Maximized);
     public void Maximize(string name){Maximized=Maximized==name?null:name;LayoutChanged?.Invoke();Invalidate();}
     public void Fit(){foreach(var camera in Cameras.Values)camera.Fit(Scene.Bounds);if(!Scene.Bounds.IsEmpty)Scene.Rebase(Scene.Bounds.Center);Invalidate();}
-    private void Report(string text){LastError=text;DiagnosticsChanged?.Invoke(text);}
+    private void Report(string text){LastError=text;System.Console.Error.WriteLine("NURBSSCENE_GL: "+text);DiagnosticsChanged?.Invoke(text);}
     protected override void Init(GL gl)
     {
-        try{_renderer=new(gl);LastError=null;DiagnosticsChanged?.Invoke(_renderer.Backend);}
+        try{UnoGlReadback.Configure(this);_renderer=new(gl);LastError=null;DiagnosticsChanged?.Invoke(_renderer.Backend);}
         catch(Exception error){Report(error.Message);throw;}
     }
     protected override unsafe void RenderOverride(GL gl)

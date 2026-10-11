@@ -21,6 +21,7 @@ public sealed unsafe class GlRenderer : IDisposable
     private int _width, _height;
     private bool _disposed;
     public long Frames { get; private set; }
+    public int InheritedErrorCount { get; private set; }
     public string Backend { get; }
     public int TriangleCount { get; private set; }
     public int LineCount { get; private set; }
@@ -32,8 +33,12 @@ public sealed unsafe class GlRenderer : IDisposable
     public GlRenderer(GL gl)
     {
         _gl = gl;
-        _es = gl.GetStringS(StringName.ShadingLanguageVersion).Contains("OpenGL ES", StringComparison.OrdinalIgnoreCase);
-        Backend = $"{gl.GetStringS(StringName.Version)} / {gl.GetStringS(StringName.Renderer)}";
+        ObserveInheritedErrors("initialization");
+        var shadingVersion = gl.GetStringS(StringName.ShadingLanguageVersion);
+        _es = OperatingSystem.IsBrowser() || shadingVersion.Contains("GLSL ES", StringComparison.OrdinalIgnoreCase) || shadingVersion.Contains("OpenGL ES", StringComparison.OrdinalIgnoreCase);
+        // Some GLES/WASM resolvers translate GL_RENDERER to an unmasked query.
+        // Do not demand the optional debug extension for normal drawing.
+        Backend = OperatingSystem.IsBrowser() ? $"WebGL2 / {shadingVersion}" : $"{gl.GetStringS(StringName.Version)} / {gl.GetStringS(StringName.Renderer)}";
         using var state = new HostState(gl, _es);
         try
         {
@@ -52,6 +57,19 @@ public sealed unsafe class GlRenderer : IDisposable
         }
     }
 
+    private void ObserveInheritedErrors(string boundary)
+    {
+        // GL error flags belong to the shared context, not a canvas instance.
+        // Attribute pre-existing host errors before issuing our own commands.
+        for (var i = 0; i < 8; i++)
+        {
+            var error = _gl.GetError(); if (error == GLEnum.NoError) return;
+            InheritedErrorCount++;
+            if (InheritedErrorCount <= 8) Console.Error.WriteLine($"NURBSSCENE_GL_HOST: {error} before {boundary}.");
+            if ((uint)error == 0x0507) throw new InvalidOperationException("The host GL context was lost.");
+        }
+        throw new InvalidOperationException("Host GL errors did not drain within the boundary budget.");
+    }
     private static string Resource(string name)
     {
         var assembly = typeof(GlRenderer).Assembly;
@@ -159,6 +177,7 @@ public sealed unsafe class GlRenderer : IDisposable
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (width < 1 || height < 1) return;
+        ObserveInheritedErrors("frame submission");
         using var host = new HostState(_gl, _es);
         Resize(width, height); Synchronize(scene); TriangleCount = 0; LineCount = 0;
         _gl.BindFramebuffer(FramebufferTarget.Framebuffer, _framebuffer);
@@ -206,6 +225,7 @@ public sealed unsafe class GlRenderer : IDisposable
         _gl.ActiveTexture(TextureUnit.Texture0); _gl.BindTexture(TextureTarget.Texture2D, _colorTexture);
         _gl.BindSampler(0, 0);
         _gl.Uniform1(_gl.GetUniformLocation(_compose.Id, "scene"), 0); _gl.BindVertexArray(_composeVao); _gl.DrawArrays(PrimitiveType.Triangles, 0, 3);
+        host.Dispose();
         var error = _gl.GetError(); if (error != GLEnum.NoError) throw new InvalidOperationException($"GPU submission failed: {error}.");
         Frames++;
     }
@@ -230,7 +250,7 @@ public sealed unsafe class GlRenderer : IDisposable
     }
     private sealed class HostState : IDisposable
     {
-        private readonly GL _gl; private readonly bool _es;
+        private readonly GL _gl; private readonly bool _es; private bool _restored;
         private readonly Dictionary<GetPName, int> _integers = [];
         private readonly Dictionary<EnableCap, bool> _enabled = [];
         private readonly float[] _clear = new float[4]; private readonly int[] _colorMask = new int[4]; private readonly int[] _scissor = new int[4];
@@ -247,6 +267,7 @@ public sealed unsafe class GlRenderer : IDisposable
         }
         public void Dispose()
         {
+            if (_restored) return; _restored = true;
             _gl.BindFramebuffer(FramebufferTarget.ReadFramebuffer, (uint)_integers[GetPName.ReadFramebufferBinding]); _gl.BindFramebuffer(FramebufferTarget.DrawFramebuffer, (uint)DrawFramebuffer);
             _gl.BindRenderbuffer(RenderbufferTarget.Renderbuffer, (uint)_integers[GetPName.RenderbufferBinding]); _gl.BindVertexArray((uint)_integers[GetPName.VertexArrayBinding]); _gl.BindBuffer(BufferTargetARB.ArrayBuffer, (uint)_integers[GetPName.ArrayBufferBinding]); _gl.UseProgram((uint)_integers[GetPName.CurrentProgram]);
             _gl.ActiveTexture(TextureUnit.Texture0); _gl.BindTexture(TextureTarget.Texture2D, (uint)_texture0); _gl.BindSampler(0, (uint)_sampler0); _gl.ActiveTexture((TextureUnit)_integers[GetPName.ActiveTexture]);
