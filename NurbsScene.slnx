@@ -21,4 +21,5 @@
   <Project Path="tests/dotnet/NurbsScene.AnalysisContracts/NurbsScene.AnalysisContracts.csproj" />
   <Project Path="src/NurbsScene.Presentation/NurbsScene.Presentation.csproj" />
   <Project Path="tests/dotnet/NurbsScene.PresentationContracts/NurbsScene.PresentationContracts.csproj" />
+  <Project Path="tests/dotnet/NurbsScene.EditingContracts/NurbsScene.EditingContracts.csproj" />
 </Solution>
