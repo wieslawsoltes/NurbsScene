@@ -67,7 +67,8 @@ selection changes and solver-result publication reuse layout metadata and cached
 wire paths; topology/position changes invalidate the relevant snapshot. Offscreen
 nodes/wires are culled before drawing and low zoom reduces detail. The grid uses
 horizontal/vertical lines rather than a draw per grid intersection. Culling is
-still linear; one node move currently rebuilds the full drawing snapshot. The
+still linear. PR #6 adds incident-wire metadata/path reuse for node edits; see
+`GRAPH-EDITING.md` for its measured scope and remaining snapshot costs. The
 runtime's numeric solve cache and exact geometry remain separate.
 
 Layer rows retain their identity on selection-only changes, with virtualized

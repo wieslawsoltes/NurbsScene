@@ -29,6 +29,7 @@ dotnet run --project tests/dotnet/NurbsScene.IntegrationTests -c Release
 dotnet run --project tests/dotnet/NurbsScene.WorkbenchTests -c Release
 dotnet run --project tests/dotnet/NurbsScene.GraphContracts -c Release
 dotnet run --project tests/dotnet/NurbsScene.PresentationContracts -c Release
+dotnet run --project tests/dotnet/NurbsScene.EditingContracts -c Release
 dotnet run --project tests/dotnet/NurbsScene.PerformanceContracts -c Release
 dotnet run --project tests/dotnet/NurbsScene.QueryContracts -c Release
 dotnet run --project tests/dotnet/NurbsScene.ReviewContracts -c Release
@@ -93,3 +94,9 @@ The real Uno browser suite also runs `test_workspace_ui.py`, using mouse and key
 input against observed native-control and Skia-canvas bounds. It retains JSON logs
 and right/bottom/narrow screenshots. Presentation benchmarks and allocation contracts
 run separately in `presentation.yml`. See `CLASSIC-WORKSPACE.md` for scope and limits.
+
+Graph clipboard/menu/selection scenarios run inside the same actual Uno test via
+`test_graph_editing_ui.py`. `editing.yml` separately runs fragment/arrangement
+contracts and identical presentation benchmarks against previous main `1d41fc57`.
+See `GRAPH-EDITING.md`; performance numbers from the earlier presentation milestone
+are not assumed to apply to later source.

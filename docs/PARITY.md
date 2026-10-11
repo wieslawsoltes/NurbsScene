@@ -1,6 +1,6 @@
 # Current implementation and compatibility boundaries
 
-This inventory includes the preserved-source import, typed data trees, curve-query additions, curve-plane sections, and graph-performance review through PR #5. It does not claim full Rhino/Grasshopper parity.
+This inventory includes the preserved-source import, typed data trees, curve-query additions, curve-plane sections, and graph-performance review through PR #6. It does not claim full Rhino/Grasshopper parity.
 
 | Area | Implemented | Remaining boundary |
 |---|---|---|
@@ -38,3 +38,9 @@ contracts and real pointer/keyboard browser scenarios. Graph metadata/path reuse
 layer-row retention and view/layout behavior have dedicated checks. This is not
 pixel-identical UI, full docking/Osnap/CPlane/gumball or desktop-runtime parity.
 The existing GL renderer and numerical kernel are retained. See `CLASSIC-WORKSPACE.md`.
+
+The graph-editing milestone adds versioned exact graph fragments, clipboard and
+duplicate actions, native editor/context menus, alignment/distribution, selection
+windows and cursor search. Incremental drawing retains unchanged nodes and wires.
+It does not add Grasshopper clipboard/file compatibility, clusters or plugins;
+see `GRAPH-EDITING.md` for contracts and benchmark scope.
