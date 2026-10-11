@@ -1,0 +1,43 @@
+name: Curve sections and graph performance
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  sections:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DOTNET_TieredCompilation: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Numerical section and runtime review contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/sections
+          dotnet run --project tests/dotnet/NurbsScene.SectionContracts -c Release 2>&1 | tee artifacts/sections/contracts.log
+      - name: Compare identical workloads on previous main and candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          baseline="$RUNNER_TEMP/nurbsscene-section-baseline"
+          git worktree add --detach "$baseline" 21ed2c787c26acd533efd385d25b5fd699785e1c
+          mkdir -p "$baseline/tests/section-performance"
+          cp tests/section-performance/*.cs tests/section-performance/*.csproj "$baseline/tests/section-performance/"
+          dotnet run --project "$baseline/tests/section-performance" -c Release -- "$GITHUB_WORKSPACE/artifacts/sections/baseline.json"
+          dotnet run --project tests/section-performance -c Release -- "$GITHUB_WORKSPACE/artifacts/sections/candidate.json"
+          git rev-parse HEAD HEAD^{tree} > artifacts/sections/tested-revision.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sections-${{ github.run_id }}
+          path: artifacts/sections/

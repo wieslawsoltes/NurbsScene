@@ -17,4 +17,5 @@
   <Project Path="tests/dotnet/NurbsScene.PerformanceContracts/NurbsScene.PerformanceContracts.csproj" />
   <Project Path="tests/dotnet/NurbsScene.QueryContracts/NurbsScene.QueryContracts.csproj" />
   <Project Path="tests/dotnet/NurbsScene.ReviewContracts/NurbsScene.ReviewContracts.csproj" />
+  <Project Path="tests/dotnet/NurbsScene.SectionContracts/NurbsScene.SectionContracts.csproj" />
 </Solution>
