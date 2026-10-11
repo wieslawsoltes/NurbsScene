@@ -141,6 +141,20 @@ Test("selected workspace refresh has a linear allocation budget", () => {
     Check(bytes<512_000,$"Refresh allocated {bytes} bytes for 600 shared-geometry selections");
     Check(workspace.Scene.Items.All(i=>i.Selected));
 });
+Test("warming a display index does not change record equality or hash keys", () => {
+    var mesh=MeshBuilder.Build(Plane(0),Vec3.Zero,8);var copy=mesh with{};
+    var hash=mesh.GetHashCode();var keys=new HashSet<DisplayMesh>{mesh};
+    var method=typeof(DisplayMesh).GetMethod("GetPickingIndex",BindingFlags.Instance|BindingFlags.NonPublic)!;
+    _ =method.Invoke(mesh,[false]);
+    Check(mesh.GetHashCode()==hash&&keys.Contains(mesh)&&mesh.Equals(copy),"A private cache altered record value semantics");
+});
+Test("ValueTask transactions are rejected before invoking their action", () => {
+    var document=new SceneDocument();var called=false;
+    Throws<ArgumentException>(()=>document.Transaction("generic",()=>{called=true;return new ValueTask<int>(3);}));
+    Check(!called);
+    Throws<ArgumentException>(()=>document.Transaction("nongeneric",()=>{called=true;return ValueTask.CompletedTask;}));
+    Check(!called&&!document.CanUndo);
+});
 int failed=0;
 foreach(var (name,run) in tests)try{run();System.Console.WriteLine("PASS "+name);}catch(Exception ex){failed++;System.Console.WriteLine("FAIL "+name+"\n"+ex);}
 System.Console.WriteLine(JsonSerializer.Serialize(new{suite="review-regressions",total=tests.Count,passed=tests.Count-failed,failed}));return failed==0?0:1;

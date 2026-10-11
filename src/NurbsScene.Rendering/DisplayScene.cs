@@ -18,6 +18,14 @@ public sealed record DisplayMesh(Guid GeometryId,Vec3[] Positions,float[] Vertic
 {
     public uint[]? LineIndices { get; init; }
     private TrianglePickIndex? _pickIndex;
+    // Lazy implementation state is not part of this record's value. In
+    // particular, a first pick must not invalidate a caller's hash-table key.
+    public bool Equals(DisplayMesh? other)=>ReferenceEquals(this,other)||other is not null
+        &&GeometryId==other.GeometryId&&Bounds==other.Bounds
+        &&ReferenceEquals(Positions,other.Positions)&&ReferenceEquals(Vertices,other.Vertices)
+        &&ReferenceEquals(Indices,other.Indices)&&ReferenceEquals(Lines,other.Lines)
+        &&ReferenceEquals(LineIndices,other.LineIndices);
+    public override int GetHashCode()=>HashCode.Combine(GeometryId,Positions,Vertices,Indices,Lines,Bounds,LineIndices);
     internal TrianglePickIndex GetPickingIndex(out bool created)
     {
         var cached=Volatile.Read(ref _pickIndex);
