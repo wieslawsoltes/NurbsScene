@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net10.0</TargetFramework><IsPackable>true</IsPackable><Description>UI-independent workspace commands, construction aids, command history and cached graph presentation.</Description></PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../NurbsScene.Parametric/NurbsScene.Parametric.csproj" />
+    <ProjectReference Include="../NurbsScene.Rendering/NurbsScene.Rendering.csproj" />
+  </ItemGroup>
+</Project>
