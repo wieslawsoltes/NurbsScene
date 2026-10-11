@@ -9,6 +9,7 @@ public static class QueryComponents
     public static void Register(ComponentRegistry registry)
     {
         SectionComponents.Register(registry);
+        SurfaceAnalysisComponents.Register(registry);
         void Add(string id,string category,PortDefinition[] inputs,PortDefinition[] outputs,Func<ComponentContext,IReadOnlyDictionary<string,object?>> execute,string help)
             =>registry.Register(new(id,category,help,inputs.ToImmutableArray(),outputs.ToImmutableArray(),c=>{c.CancellationToken.ThrowIfCancellationRequested();return ValueTask.FromResult(execute(c));}));
         PortDefinition Number(string name,double value=0)=>new(name,ValueKind.Number,Default:value);
