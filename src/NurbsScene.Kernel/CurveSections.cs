@@ -129,7 +129,7 @@ public static class CurveSections
         for(var i=0;i<boundaries.Length;i++)if(Math.Abs(values[i])<=rounding)
         {
             output.Add(boundaries[i]);
-            if(i>0&&i<boundaries.Length-1&&values[i]!=0)budget.PrecisionLimited=true;
+            if(values[i]!=0)budget.PrecisionLimited=true;
         }
         for(var i=1;i<boundaries.Length;i++)
         {

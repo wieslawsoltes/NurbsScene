@@ -7,6 +7,7 @@ public sealed partial class WorkspaceController
 {
     private bool TryQueryCommand(string command,string[] args)
     {
+        if(TrySectionCommand(command,args))return true;
         if(command is not("closestpoint" or "curveclosestpoint" or "curvecontrolpoint" or "projecttoplane" or "mirrorplane"))return false;
         var selected=Selected();if(selected.Length==0)throw new ArgumentException("Select geometry first.");
         if(command is "closestpoint" or "curveclosestpoint")
