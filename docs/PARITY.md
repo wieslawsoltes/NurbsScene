@@ -31,4 +31,4 @@ The Uno browser hook adds seven checks for real managed sections, overlaps, comp
 
 The offline JavaScript suite is separate. Historical alpha evidence is preserved as history, not rewritten to imply checks that were never run.
 
-The area/native milestone adds 26 managed/native analysis checks and seven Uno browser checks (29 browser checks total). It does not add second/product moments, inertia, solid volume or arbitrary-trim area integration. Native allocation improvements apply to the optional C ABI adapter, not the default browser evaluator or GPU rendering. See `SURFACE-ANALYSIS.md`.
+The area/native milestone adds 27 managed/native analysis checks and seven Uno browser checks (29 browser checks total). It does not add second/product moments, inertia, solid volume or arbitrary-trim area integration. Native allocation improvements apply to the optional C ABI adapter, not the default browser evaluator or GPU rendering. See `SURFACE-ANALYSIS.md`.

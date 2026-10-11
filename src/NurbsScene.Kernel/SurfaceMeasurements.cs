@@ -105,7 +105,12 @@ public static class SurfaceMeasurements
             if ((i & 255) == 0) cancellation.ThrowIfCancellationRequested();
             var p = source.ControlPoints[i]; var w = p.W / weight;
             if (w == 0) throw new ArithmeticException("Relative surface weight underflow.");
-            controls[i] = HPoint.FromPoint((p.Position - origin) / radius, w);
+            var offset = p.Position - origin;
+            var normalized = HPoint.FromPoint(offset / radius, w);
+            if ((offset.X != 0 && normalized.X == 0) || (offset.Y != 0 && normalized.Y == 0) ||
+                (offset.Z != 0 && normalized.Z == 0))
+                throw new ArithmeticException("Surface normalization would lose a nonzero coordinate to underflow.");
+            controls[i] = normalized;
         }
         var surface = new NurbsSurface(source.Evaluator, source.DegreeU, source.DegreeV, source.CountU, source.CountV,
             source.KnotsU.ToArray(), source.KnotsV.ToArray(), controls);
@@ -115,6 +120,8 @@ public static class SurfaceMeasurements
             var high = Rule(surface, u, v, Nodes5, Weights5, cancellation);
             var low = Rule(surface, u, v, Nodes3, Weights3, cancellation); evaluations += 42;
             var floor = 64 * Epsilon * high.Area;
+            if (high.Area > 0 && floor == 0)
+                throw new ArithmeticException("Surface integrand is too small for a representable error estimate.");
             // Interior Gauss rules alone can both miss a thin rational boundary
             // layer. Sample just inside all edges; excessive contrast forces
             // refinement (or an explicit unresolved work-limit result).

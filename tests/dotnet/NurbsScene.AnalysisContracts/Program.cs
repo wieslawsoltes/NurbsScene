@@ -82,6 +82,10 @@ Test("legacy scalar and batch evaluators agree",()=>{
 Test("concurrent surface measurements keep scratch and caches isolated",()=>{
     var s=factory.Saddle(6,4,1.3);var expected=Area(s);Parallel.For(0,16,i=>{var a=Area(s,new(CacheResult:i%2==0));Near(a.Area,expected.Area);Point(a.Centroid,expected.Centroid!.Value);});
 });
+Test("extreme aspect ratio cannot silently collapse a finite area to zero",()=>{
+    var thin=Rectangle(1e-200,1e200);
+    Throws<ArithmeticException>(()=>thin.GetAreaProperties());
+});
 Test("twelve independent SciPy surface integral references",()=>{
     using var json=JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory,"areas-scipy.json")));
     foreach(var c in json.RootElement.GetProperty("cases").EnumerateArray()){

@@ -44,7 +44,7 @@ must fit the budget or the call throws instead of returning a partial-domain are
 
 After complete initial coverage, exhausted evaluation/cell/depth budgets return a
 full-domain estimate with `Converged == false` and an explicit `Termination` value.
-Cancellation throws. Unrepresentable quadrature nodes, relative-weight underflow,
+Cancellation throws. Unrepresentable quadrature nodes, relative-weight/normalization underflow,
 overflow and non-finite integrands fail explicitly. A zero-area patch returns
 `Centroid == null`; the centroid component diagnoses this instead of inventing an
 origin point. The component refuses nonconverged results. No arbitrary-trim or
@@ -90,14 +90,14 @@ LD_LIBRARY_PATH="$PWD/artifacts/native" NURBSSCENE_NATIVE_TESTS=1 \
   dotnet run --project tests/dotnet/NurbsScene.AnalysisContracts -c Release
 ```
 
-The suite contains 26 checks when the native flag is enabled: planar/tilted patches,
+The suite contains 27 checks when the native flag is enabled: planar/tilted patches,
 cylinders, spheres and cones; singular poles; parameter/degree/knot invariance;
-large translations/scaling; disconnected and narrow spans; limits, cache identity,
+large translations/scaling and explicit extreme-aspect-ratio failure; disconnected and narrow spans; limits, cache identity,
 cancellation and concurrency; native ABI layout, sentinels and allocation checks;
 component execution, workspace round trips and read-only commands. Twelve surface
 fixtures use an independent SciPy tensor-spline implementation and 32/48-point
 Gauss rules that must agree before a reference is accepted. Those references are
-not certified global oracles. The CI job requires the native flag and runs all 26.
+not certified global oracles. The CI job requires the native flag and runs all 27.
 
 Seven additional real Uno WebAssembly checks extend the existing 22-check browser
 hook: cylinder analysis, cache reuse, components, exact workspace round trip,
