@@ -75,6 +75,7 @@ public partial class App
                     objects=controller.Document.Objects.Count,layers=controller.Document.Layers.Count,
                     selected=controller.Document.Selection.Count,documentRevision=controller.Document.Revision,
                     nodeCount=controller.Graph.Nodes.Count,wireCount=controller.Graph.Wires.Count,graphRevision=controller.Graph.Revision,
+                    graphFocus=graph.FocusState.ToString(),focusedElement=Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(view.XamlRoot)?.GetType().FullName,
                     graphSelected=graph.Selection.ToArray(),graphUndo=controller.GraphSession.CanUndo,graphRedo=controller.GraphSession.CanRedo,
                     graphErrors=controller.Graph.LastResult?.ErrorCount??0,graphLayoutBuilds=graph.LayoutBuilds,graphPathBuilds=graph.PathBuilds,
                     meshBuilds=controller.Scene.MeshBuildCount,layerStructureChanges=view.Inspector.LayerStructureChanges,

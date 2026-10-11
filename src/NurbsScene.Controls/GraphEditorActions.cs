@@ -50,13 +50,16 @@ public sealed partial class GraphEditorControl
         foreach(var(id,text)in new[]{("Enable","Enable selected"),("Disable","Disable selected"),("PreviewOn","Preview on"),("PreviewOff","Preview off"),("Bake","Bake selected")})solution.Items.Add(ActionItem(id,text,_menuElements));
         Children.Add(bar);SetRow(bar,1);
         Canvas.ContextMenuRequested+=ShowContextMenu;
+        // Register on the editor ancestor: a scoped accelerator searches the
+        // scope owner's descendants. Keep the focused-canvas guard so native
+        // text editors retain their own clipboard and undo shortcuts.
         foreach(var(key,action)in new[]{(VirtualKey.C,"Copy"),(VirtualKey.X,"Cut"),(VirtualKey.V,"Paste"),(VirtualKey.D,"Duplicate"),(VirtualKey.A,"SelectAll"),(VirtualKey.Z,"Undo"),(VirtualKey.Y,"Redo")})
         {
-            var id=action;var accelerator=new KeyboardAccelerator{Key=key,Modifiers=VirtualKeyModifiers.Control,ScopeOwner=Canvas};
-            accelerator.Invoked+=(sender,e)=>{if(Canvas.FocusState==FocusState.Unfocused)return;_ =RunActionAsync(id);e.Handled=true;};Canvas.KeyboardAccelerators.Add(accelerator);
+            var id=action;var accelerator=new KeyboardAccelerator{Key=key,Modifiers=VirtualKeyModifiers.Control,ScopeOwner=this};
+            accelerator.Invoked+=(sender,e)=>{if(Canvas.FocusState==FocusState.Unfocused)return;_ =RunActionAsync(id);e.Handled=true;};KeyboardAccelerators.Add(accelerator);
         }
-        var context=new KeyboardAccelerator{Key=VirtualKey.F10,Modifiers=VirtualKeyModifiers.Shift,ScopeOwner=Canvas};
-        context.Invoked+=(_,e)=>{if(Canvas.FocusState==FocusState.Unfocused)return;ShowContextMenu(new(Canvas.ActualWidth/2,Canvas.ActualHeight/2));e.Handled=true;};Canvas.KeyboardAccelerators.Add(context);
+        var context=new KeyboardAccelerator{Key=VirtualKey.F10,Modifiers=VirtualKeyModifiers.Shift,ScopeOwner=this};
+        context.Invoked+=(_,e)=>{if(Canvas.FocusState==FocusState.Unfocused)return;ShowContextMenu(new(Canvas.ActualWidth/2,Canvas.ActualHeight/2));e.Handled=true;};KeyboardAccelerators.Add(context);
     }
     private MenuFlyoutItem ActionItem(string id,string text,List<FrameworkElement> tracking)
     {
