@@ -8,7 +8,9 @@ ROOT=Path(__file__).resolve().parents[2]
 class OfflineBrowserTests(unittest.IsolatedAsyncioTestCase):
  async def asyncSetUp(self):
   self.pw=await async_playwright().start()
-  self.browser=await self.pw.chromium.launch(executable_path=os.getenv('CHROMIUM_PATH','/usr/bin/chromium'),headless=True,args=['--no-sandbox'])
+  options={'headless':True}
+  if os.getenv('CHROMIUM_PATH'):options['executable_path']=os.environ['CHROMIUM_PATH']
+  self.browser=await self.pw.chromium.launch(**options)
   self.page=await self.browser.new_page(viewport={'width':1600,'height':1100},device_scale_factor=1)
   self.errors=[];self.page.on('pageerror',lambda e:self.errors.append(str(e)))
   await self.page.set_content((ROOT/'validation-harness/offline.html').read_text())

@@ -1,0 +1,36 @@
+name: Native WASM and reusable JavaScript packages
+on:
+  pull_request:
+  push:
+    branches: [main, feat/parity-kernel]
+permissions:
+  contents: read
+jobs:
+  modules:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install compiler and browser test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang lld cmake
+          python -m pip install -r tests/requirements.txt
+          python -m playwright install --with-deps chromium
+      - name: Numerical tests, package isolation and offline UI regressions
+        run: bash tools/validate.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: javascript-evidence-${{ github.run_id }}
+          path: evidence/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: reusable-javascript-packages-${{ github.sha }}
+          path: artifacts/npm/*.tgz

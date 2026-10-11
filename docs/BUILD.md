@@ -1,10 +1,8 @@
-# Building and qualifying NurbsScene
+# Build and validation
 
-The authoritative application is `src/NurbsScene.App`, built with the pinned Uno SDK in `global.json`. The JavaScript workspace under `validation-harness` is a separate consumer of the reusable JavaScript packages, not a substitute Uno application.
+`global.json` pins the Uno SDK and a compatible .NET 10 SDK range. The preserved source import is complete. Temporary transfer and dependency-cache workflows have been removed; their prior commits remain in Git history.
 
-## Managed desktop and browser application
-
-Install a .NET 10 SDK compatible with `global.json` and the WebAssembly workload:
+## Real Uno application
 
 ```sh
 dotnet workload install wasm-tools
@@ -14,11 +12,9 @@ python tools/stage-uno-site.py
 python -m http.server 8766 --bind 127.0.0.1 --directory artifacts/site
 ```
 
-Desktop compilation is not a substitute for running each supported desktop platform. Browser builds use the real managed kernel, graph engine, reusable Uno controls and GL renderer.
+`src/NurbsScene.App` contains the host; reusable controls and modeling/application logic live in separate projects. Desktop compilation does not substitute for running every desktop platform.
 
-## Numerical and document tests
-
-The two independent SciPy fixture generators run only during testing; the application has no SciPy dependency.
+## Managed numerical, graph and document suites
 
 ```sh
 python -m pip install 'numpy>=1.26,<3' 'scipy>=1.12,<2'
@@ -29,9 +25,13 @@ dotnet run --project tests/dotnet/NurbsScene.CoreTests -c Release
 dotnet run --project tests/dotnet/NurbsScene.MeasurementTests -c Release
 dotnet run --project tests/dotnet/NurbsScene.IntegrationTests -c Release
 dotnet run --project tests/dotnet/NurbsScene.WorkbenchTests -c Release
+dotnet run --project tests/dotnet/NurbsScene.GraphContracts -c Release
+cmake -S native/kernel -B artifacts/native -DCMAKE_BUILD_TYPE=Release
+cmake --build artifacts/native --parallel
+LD_LIBRARY_PATH="$PWD/artifacts/native" NURBSSCENE_NATIVE_TESTS=1 dotnet run --project tests/dotnet/NurbsScene.SurfaceContracts -c Release
 ```
 
-`CurveLength` integrates analytic NURBS speed with adaptive Gauss–Kronrod quadrature. Its reported error is an estimate, not a certified geometric error bound. `DivideCurve` uses inverse arc length; `DivideParameter` deliberately remains uniform parameter sampling. Surface trim commands extract rectangular parameter domains, not arbitrary B-rep trim loops.
+SciPy generates independent test oracles; it is not an application dependency. Arc-length errors are numerical estimates rather than certified bounds. Surface trim commands extract rectangular UV domains, not arbitrary B-rep trim loops.
 
 ## Actual GPU browser qualification
 
@@ -40,27 +40,31 @@ dotnet publish src/NurbsScene.App -c Release -f net10.0-browserwasm -p:NurbsScen
 python tools/stage-uno-site.py
 python -m pip install playwright
 python -m playwright install chromium
-# Serve artifacts/site on port 8766 in a separate terminal.
+# Serve artifacts/site on port 8766 in another terminal.
 python tests/browser/test_uno.py
 ```
 
-The opt-in build hook checks managed commands, undo/redo, parametric edits, exact baking, workspace round-trip, four viewports, and differential readback of actual GL surface pixels. A missing GPU context or failed framebuffer comparison fails the test. The hook is omitted from normal builds. It is a smoke qualification, not proof of full UI, hardware, performance or Rhino/Grasshopper compatibility.
+The opt-in hook exercises real managed commands, undo/redo, graph changes, exact baking, workspace and typed-path round trips, four viewports and differential GL framebuffer readback. No GPU mocks or skip-on-unavailable path exists. It is smoke qualification, not complete UI, hardware or performance coverage.
 
-The pinned Uno browser GL package requires its existing RGBA readback/channel-conversion path instead of a BGRA call through the native GLES resolver. `UnoGlReadback` makes that boundary explicit and rejects an unknown framework contract. Browser rendering does not depend on the optional debug-renderer extension. Pre-existing shared-context GL errors are recorded separately from errors introduced by NurbsScene; context loss and application submission errors are still failures.
+The pinned Uno 6.7.135 browser GL adapter selects the framework's existing RGBA readback/channel-conversion path and rejects an unknown framework contract. Browser drawing does not require the optional debug-renderer extension. Inherited shared-context GL errors are recorded separately; context loss and NurbsScene submission errors still fail.
 
-## Native C / WebAssembly and JavaScript packages
+Ordinary builds omit the hook. Pages intentionally publishes the exact **qualification-enabled alpha artifact** tested by CI; its checks run only with the explicit `?qualification=1` query. This permits reproducible validation of the deployed alpha without substituting another renderer or application.
 
-The freestanding C kernel is built with CMake and Clang's wasm32 target. Generated WebAssembly and offline HTML are build outputs, not alternate authoritative geometry.
+## Native/WebAssembly and six JavaScript packages
+
+Install CMake, Clang with its wasm32 linker, Node 22 and the Python test dependencies:
 
 ```sh
-npm ci --ignore-scripts
-bash tools/build-kernel.sh
-python -m unittest discover -s tests/native -v
-npm test
-node tools/pack-javascript.mjs
-node tools/test-npm-consumer.mjs
-python tools/build-offline-harness.py
-python tests/browser/test_offline.py
+python -m pip install -r tests/requirements.txt
+python -m playwright install chromium
+# CHROMIUM_PATH may select a local Chromium executable; otherwise Playwright's bundled browser is used.
+bash tools/validate.sh
 ```
 
-The source transfer is still being completed on the feature branch. Historical alpha reports are preserved under `docs/history`; use current CI run artifacts for results at the exact commit being evaluated. Full Rhino/Grasshopper parity, solid B-rep modeling, proprietary interchange/plugin compatibility and production qualification remain incomplete.
+That script builds the native/WASM kernel, runs the native and Node suites, packs six independently installable npm archives, tests a clean consumer, and runs the separate offline harness interaction suite. It does not qualify the Uno application or successful GPU rendering. Generated WASM, fixtures, offline HTML and evidence are reproducible outputs, not source files.
+
+## GitHub Pages
+
+The `pages.yml` workflow runs only after the main branch's Uno qualification succeeds. It checks that the tested commit is still current main, downloads that exact run's qualified artifact, then uses GitHub Pages deployment with its scoped OIDC permissions. It never publishes the JavaScript harness as Uno. Repository Pages must use GitHub Actions as its build source.
+
+Use per-commit CI artifacts for current evidence. Reports in `docs/history/alpha` describe the original partial alpha and its older environment.

@@ -12,4 +12,4 @@ python3 tools/build-offline-harness.py
 python3 tests/browser/test_offline.py 2>&1 | tee evidence/browser-offline-tests.log
 python3 tools/check-source-layout.py
 printf '\nValidated: native kernel, JavaScript modules and offline browser interaction subset.\n'
-printf 'NOT qualified: managed/Uno build, GPU execution, full Rhino/Grasshopper parity.\n'
+printf 'This script does not exercise managed/Uno builds or GPU qualification; use the separate CI suites. Full parity is not claimed.\n'

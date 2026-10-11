@@ -1,0 +1,64 @@
+name: Deploy qualified Uno application
+on:
+  workflow_run:
+    workflows: [Uno application build and browser qualification]
+    types: [completed]
+    branches: [main]
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: github-pages
+  cancel-in-progress: false
+jobs:
+  deploy:
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Require the qualified commit to remain current main
+        id: current
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const ref = await github.rest.git.getRef({owner: context.repo.owner, repo: context.repo.repo, ref: 'heads/main'});
+            return ref.data.object.sha === context.payload.workflow_run.head_sha;
+      - uses: actions/download-artifact@v4
+        if: steps.current.outputs.result == 'true'
+        with:
+          name: qualified-uno-browser-${{ github.event.workflow_run.head_sha }}
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+          path: site
+      - name: Check the actual Uno publication and record its tested revision
+        if: steps.current.outputs.result == 'true'
+        env:
+          TESTED_SHA: ${{ github.event.workflow_run.head_sha }}
+          TESTED_RUN: ${{ github.event.workflow_run.id }}
+        run: |
+          python3 - <<'PYCODE'
+          import json, os
+          from pathlib import Path
+          root=Path('site')
+          if not (root/'index.html').is_file() or not any(root.rglob('*.wasm')):
+              raise SystemExit('Missing real Uno publication; no harness substitution')
+          if any(p.is_symlink() for p in root.rglob('*')):
+              raise SystemExit('Unexpected publication symlink')
+          (root/'deployed-revision.json').write_text(json.dumps({'application':'Uno Platform','commit':os.environ['TESTED_SHA'],'qualificationRun':os.environ['TESTED_RUN']}))
+          PYCODE
+      - uses: actions/configure-pages@v5
+        if: steps.current.outputs.result == 'true'
+      - uses: actions/upload-pages-artifact@v4
+        if: steps.current.outputs.result == 'true'
+        with:
+          path: site
+      - uses: actions/deploy-pages@v4
+        if: steps.current.outputs.result == 'true'
+        id: deployment
