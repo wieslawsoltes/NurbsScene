@@ -12,7 +12,7 @@ using Windows.System;
 namespace NurbsScene.Controls;
 
 /// <summary>Reusable vector-drawn visual editor with typed port wiring, graph history, numeric scrubbing, culling and zoom LOD.</summary>
-public sealed class GraphCanvas : SKCanvasElement,IDisposable
+public sealed partial class GraphCanvas : SKCanvasElement,IDisposable
 {
     private GraphSession? _session;private Graph? _graph;private bool _subscribed;
     private readonly HashSet<string> _selection=[];
@@ -24,11 +24,12 @@ public sealed class GraphCanvas : SKCanvasElement,IDisposable
     private PortHit? _wire;
     private GraphSnapshot? _before;
     private readonly Dictionary<string,(double X,double Y)> _starts=[];
-    private bool _moved;
+    private bool _moved,_rightPan;
     private readonly GraphPresentation _presentation=new();
     private GraphDrawing? _drawing;
     private readonly Dictionary<string,PresentedNode> _layouts=[];
     private readonly List<SKPath> _paths=[];
+    private readonly Dictionary<string,(PresentedWire Wire,SKPath Path)> _wirePaths=[];
     private readonly SKPathEffect _treeDash=SKPathEffect.CreateDash([5,4],0);
     public long LayoutBuilds=>_presentation.BuildCount;
     public long PathBuilds {get;private set;}
@@ -49,9 +50,22 @@ public sealed class GraphCanvas : SKCanvasElement,IDisposable
         var next=_presentation.Get(_session!.Graph);
         if(!ReferenceEquals(next,_drawing))
         {
-            foreach(var path in _paths)path.Dispose();_paths.Clear();_layouts.Clear();
+            _paths.Clear();_layouts.Clear();
+            var live=new HashSet<string>();
             foreach(var node in next.Nodes)_layouts[node.Node.Id]=node;
-            foreach(var wire in next.Wires){_paths.Add(MakePath(new(wire.Start.X,wire.Start.Y),new(wire.End.X,wire.End.Y)));PathBuilds++;}
+            foreach(var wire in next.Wires)
+            {
+                live.Add(wire.Wire.Id);
+                if(!_wirePaths.TryGetValue(wire.Wire.Id,out var cached)||!ReferenceEquals(cached.Wire,wire))
+                {
+                    cached.Path?.Dispose();
+                    cached=(wire,MakePath(new(wire.Start.X,wire.Start.Y),new(wire.End.X,wire.End.Y)));
+                    _wirePaths[wire.Wire.Id]=cached;PathBuilds++;
+                }
+                _paths.Add(cached.Path);
+            }
+            foreach(var id in _wirePaths.Keys.Where(id=>!live.Contains(id)).ToArray())
+            {_wirePaths[id].Path.Dispose();_wirePaths.Remove(id);}
             _drawing=next;
         }
         return next;
@@ -62,9 +76,22 @@ public sealed class GraphCanvas : SKCanvasElement,IDisposable
         set{Unsubscribe();_session=value;Subscribe();_selection.Clear();SelectionChanged?.Invoke();Invalidate();}
     }
     public IReadOnlySet<string> Selection=>new HashSet<string>(_selection);
+    public int SelectionCount=>_selection.Count;
+    public bool IsInteracting=>_gesture!="";
+    public bool IsSelected(string id)=>_selection.Contains(id);
     public event Action? SelectionChanged;
     public event Action<string>? Message;
     public event Action? SearchRequested;
+    public event Action<Point>? ContextMenuRequested;
+    public CanvasPoint InsertionPoint=>_worldLast==default?ViewCenter:new(_worldLast.X,_worldLast.Y);
+    public CanvasPoint ViewCenter {get{var p=World(new(ActualWidth/2,ActualHeight/2));return new(p.X,p.Y);}}
+    public void SelectNodes(IEnumerable<string> ids)
+    {
+        if(_session is null)return;
+        var selected=ids.Take(10_001).ToArray();if(selected.Length>10_000)throw new ArgumentException("Selection budget exceeded.");
+        foreach(var id in selected)_session.Graph.GetNode(id);
+        _selection.Clear();_selection.UnionWith(selected);SelectionChanged?.Invoke();Invalidate();
+    }
     private sealed record PortHit(string Node,string Port,bool Output);
     public GraphCanvas()
     {
@@ -72,6 +99,8 @@ public sealed class GraphCanvas : SKCanvasElement,IDisposable
         Loaded+=(_,_)=>Subscribe();Unloaded+=(_,_)=>Unsubscribe();SizeChanged+=(_,_)=>Invalidate();
         PointerPressed+=Pressed;PointerMoved+=Moved;PointerReleased+=Released;
         PointerCanceled+=(_,e)=>{CancelGesture();ReleasePointerCapture(e.Pointer);};
+        PointerCaptureLost+=(_,_)=>{if(_gesture!="")CancelGesture();};
+        RightTapped+=(_,e)=>e.Handled=true;
         PointerWheelChanged+=(_,e)=>{var point=e.GetCurrentPoint(this);var world=World(point.Position);_zoom=Math.Clamp(_zoom*(float)Math.Exp(point.Properties.MouseWheelDelta*.001),.15f,3.5f);_panX=(float)point.Position.X-(float)world.X*_zoom;_panY=(float)point.Position.Y-(float)world.Y*_zoom;ViewChanged?.Invoke();Invalidate();e.Handled=true;};
         DoubleTapped+=(_,e)=>{_worldLast=World(e.GetPosition(this));if(NodeAt(_worldLast) is null)SearchRequested?.Invoke();e.Handled=true;};
         KeyDown+=(_,e)=>{if(e.Key==VirtualKey.Delete){DeleteSelected();e.Handled=true;}else if(e.Key==VirtualKey.Escape){CancelGesture();e.Handled=true;}else if(e.Key==VirtualKey.F){Fit();e.Handled=true;}else if(e.Key==VirtualKey.Space){SearchRequested?.Invoke();e.Handled=true;}};
@@ -186,7 +215,7 @@ public sealed class GraphCanvas : SKCanvasElement,IDisposable
     public void SelectNode(string id)=>Select(id,false);
     public void AddComponent(string component)
     {
-        if(_session is null)return;var at=_worldLast==default?World(new(ActualWidth/2,ActualHeight/2)):_worldLast;
+        if(_session is null)return;var at=InsertionPoint;
         _session.Edit("Add component",graph=>{var node=graph.Add(component,at.X,at.Y);Select(node.Id,false);});
     }
     public void DeleteSelected(){if(_session is null||_selection.Count==0)return;try{var ids=_selection.ToArray();_session.Edit("Delete components",graph=>{foreach(var id in ids)graph.Remove(id);});_selection.Clear();SelectionChanged?.Invoke();}catch(Exception error){Message?.Invoke(error.Message);}}
@@ -199,15 +228,17 @@ public sealed class GraphCanvas : SKCanvasElement,IDisposable
     {
         if(_session is null)return;var point=e.GetCurrentPoint(this);_start=_last=point.Position;_worldStart=_worldLast=World(point.Position);_moved=false;_before=null;_slider=null;_wire=null;
         Focus(FocusState.Pointer);CapturePointer(e.Pointer);var node=NodeAt(_worldStart);var port=PortAt(_worldStart);var shift=(e.KeyModifiers&VirtualKeyModifiers.Shift)!=0;
-        if(point.Properties.IsMiddleButtonPressed||point.Properties.IsRightButtonPressed)_gesture="pan";
+        _rightPan=point.Properties.IsRightButtonPressed;
+        if(point.Properties.IsMiddleButtonPressed||_rightPan)_gesture="pan";
         else if(port is not null){_wire=port;_gesture="wire";}
         else if(node is not null)
         {
-            if(!_selection.Contains(node.Id)||shift)Select(node.Id,shift);_before=_session.Graph.Snapshot();
+            if(shift&&_selection.Remove(node.Id)){SelectionChanged?.Invoke();_gesture="";ReleasePointerCapture(e.Pointer);Invalidate();e.Handled=true;return;}
+            if(!_selection.Contains(node.Id))Select(node.Id,shift);_before=_session.Graph.Snapshot();
             if((node.Component is "Number" or "Integer")&&_worldStart.Y>Rect(node).Bottom-22){_gesture="slider";_slider=node.Id;Scrub(node,_worldStart.X);}
             else{_gesture="nodes";_starts.Clear();foreach(var n in _session.Graph.Nodes.Where(n=>_selection.Contains(n.Id)))_starts[n.Id]=(n.X,n.Y);}
         }
-        else{if(!shift){_selection.Clear();SelectionChanged?.Invoke();}_gesture=shift?"marquee":"pan";}
+        else{if(!shift){_selection.Clear();SelectionChanged?.Invoke();}_gesture="marquee";}
         Invalidate();e.Handled=true;
     }
     private void Scrub(GraphNode node,double x)
@@ -225,23 +256,32 @@ public sealed class GraphCanvas : SKCanvasElement,IDisposable
     private void Released(object sender,PointerRoutedEventArgs e)
     {
         if(_session is null)return;
+        Point? context=null;
         try
         {
-            _worldLast=World(e.GetCurrentPoint(this).Position);
+            var screen=e.GetCurrentPoint(this).Position;
+            _worldLast=World(screen);
+            if(_gesture=="pan"&&_rightPan&&!_moved)
+            {
+                var node=NodeAt(_worldLast);
+                if(node is null)SelectNodes([]);else if(!_selection.Contains(node.Id))Select(node.Id,false);
+                context=screen;
+            }
             if(_wire is{} source&&PortAt(_worldLast) is{} target&&source.Output!=target.Output)
             {
                 var output=source.Output?source:target;var input=source.Output?target:source;
                 _session.Edit("Connect ports",graph=>graph.Connect(new(output.Node,output.Port),new(input.Node,input.Port),replace:(e.KeyModifiers&VirtualKeyModifiers.Shift)==0));
             }
             if(_before is not null&&(_moved||_gesture=="slider"))_session.Record(_gesture=="slider"?"Change number":"Move components",_before);
-            if(_gesture=="marquee")
+            if(_gesture=="marquee"&&_moved)
             {
-                var r=new SKRect((float)Math.Min(_worldStart.X,_worldLast.X),(float)Math.Min(_worldStart.Y,_worldLast.Y),(float)Math.Max(_worldStart.X,_worldLast.X),(float)Math.Max(_worldStart.Y,_worldLast.Y));foreach(var node in _session.Graph.Nodes)if(r.IntersectsWith(Rect(node)))_selection.Add(node.Id);SelectionChanged?.Invoke();
+                var r=new SKRect((float)Math.Min(_worldStart.X,_worldLast.X),(float)Math.Min(_worldStart.Y,_worldLast.Y),(float)Math.Max(_worldStart.X,_worldLast.X),(float)Math.Max(_worldStart.Y,_worldLast.Y));foreach(var node in _session.Graph.Nodes)if(_worldLast.X>=_worldStart.X?r.Contains(Rect(node)):r.IntersectsWith(Rect(node)))_selection.Add(node.Id);SelectionChanged?.Invoke();
             }
         }
         catch(Exception error){Message?.Invoke(error.Message);}
         finally{_gesture="";_wire=null;_before=null;_slider=null;ReleasePointerCapture(e.Pointer);Invalidate();SelectionChanged?.Invoke();e.Handled=true;}
+        if(context is{} point)ContextMenuRequested?.Invoke(point);
     }
-    private void CancelGesture(){if(_before is not null&&_session is not null)_session.RestoreUncommitted(_before);_before=null;_gesture="";_wire=null;_slider=null;Invalidate();}
-    public void Dispose(){Unsubscribe();foreach(var path in _paths)path.Dispose();_paths.Clear();_treeDash.Dispose();_font.Dispose();_paint.Dispose();}
+    private void CancelGesture(){var before=_before;_before=null;_gesture="";_wire=null;_slider=null;if(before is not null&&_session is not null)_session.RestoreUncommitted(before);Invalidate();}
+    public void Dispose(){Unsubscribe();foreach(var path in _wirePaths.Values)path.Path.Dispose();_wirePaths.Clear();_paths.Clear();_treeDash.Dispose();_font.Dispose();_paint.Dispose();}
 }
