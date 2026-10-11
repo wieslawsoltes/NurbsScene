@@ -16,41 +16,104 @@ public sealed record PresentedNode(GraphNode Node,ComponentDefinition Definition
 }
 public sealed record PresentedWire(Wire Wire,CanvasPoint Start,CanvasPoint End,CanvasBox Bounds);
 public sealed record GraphDrawing(ImmutableArray<PresentedNode> Nodes,ImmutableArray<PresentedWire> Wires);
-/// <summary>Owner-thread presentation cache. An unchanged draw does not copy graph
-/// nodes/wires, enumerate ports, allocate endpoints or rebuild layout. Geometry
-/// caches are independent of solve results and selection. Culling remains linear.</summary>
+/// <summary>Owner-thread drawing cache with immutable snapshots. A node update
+/// reuses every unchanged node and wire record, recomputing only incident paths
+/// when its bounds move. Topology changes rebuild the adjacency index. Changed
+/// revisions still scan a node snapshot; this is not constant-time graph editing.</summary>
 public sealed class GraphPresentation
 {
     private Graph? _graph;
-    private long _revision=-1;
+    private long _revision=-1,_topology=-1;
     private GraphDrawing _drawing=new([],[]);
+    private readonly Dictionary<string,int> _nodeIndex=[];
+    private readonly Dictionary<string,List<int>> _incident=[];
     public long BuildCount {get;private set;}
+    public long NodeBuilds {get;private set;}
+    public long WireBuilds {get;private set;}
+    public long TopologyBuilds {get;private set;}
+
     public GraphDrawing Get(Graph graph)
     {
         ArgumentNullException.ThrowIfNull(graph);
         if(ReferenceEquals(graph,_graph)&&graph.Revision==_revision)return _drawing;
-        return Build(graph);
+        if(!ReferenceEquals(graph,_graph)||graph.TopologyRevision!=_topology)Rebuild(graph);
+        else UpdateNodes(graph);
+        _graph=graph;_revision=graph.Revision;_topology=graph.TopologyRevision;BuildCount++;
+        return _drawing;
     }
-    private GraphDrawing Build(Graph graph)
+    public static CanvasBox Bounds(GraphNode node,ComponentDefinition definition)
     {
-        var snapshot=graph.Snapshot();
-        var nodes=snapshot.Nodes.Select(n=>{
-            var d=graph.Registry.Get(n.Component);
-            var height=n.Component is "Number" or "Integer"?38:n.Component=="Text"?76:Math.Max(56,Math.Max(d.Inputs.Length,d.Outputs.Length)*19+24);
-            return new PresentedNode(n,d,new(n.X,n.Y,n.Component is "Number" or "Integer"?180:156,height));
-        }).ToImmutableArray();
-        var ports=new Dictionary<PortAddress,CanvasPoint>();
-        var outputs=new Dictionary<PortAddress,CanvasPoint>();
-        foreach(var n in nodes)
+        var slider=node.Component is "Number" or "Integer";
+        var height=slider?38:node.Component=="Text"?76:Math.Max(56,Math.Max(definition.Inputs.Length,definition.Outputs.Length)*19+24);
+        return new(node.X,node.Y,slider?180:156,height);
+    }
+    private PresentedNode Present(GraphNode node,ComponentDefinition definition)
+    {
+        NodeBuilds++;
+        return new(node,definition,Bounds(node,definition));
+    }
+    private PresentedWire Present(Wire wire,ImmutableArray<PresentedNode> nodes)
+    {
+        var from=nodes[_nodeIndex[wire.From.Node]];var to=nodes[_nodeIndex[wire.To.Node]];
+        static int Port(ImmutableArray<PortDefinition> ports,string name)
         {
-            for(var i=0;i<n.Definition.Inputs.Length;i++)ports.Add(new(n.Node.Id,n.Definition.Inputs[i].Name),n.Port(false,i));
-            for(var i=0;i<n.Definition.Outputs.Length;i++)outputs.Add(new(n.Node.Id,n.Definition.Outputs[i].Name),n.Port(true,i));
+            for(var i=0;i<ports.Length;i++)if(ports[i].Name==name)return i;
+            throw new InvalidOperationException("Drawing contains a missing port.");
         }
-        var wires=snapshot.Wires.Select(w=>{
-            var a=outputs[w.From];var b=ports[w.To];var delta=Math.Max(35,Math.Abs(b.X-a.X)*.48);
-            var min=Math.Min(a.X,b.X-delta);var max=Math.Max(a.X+delta,b.X);
-            return new PresentedWire(w,a,b,new(min,Math.Min(a.Y,b.Y)-3,max-min,Math.Abs(b.Y-a.Y)+6));
-        }).ToImmutableArray();
-        _drawing=new(nodes,wires);_graph=graph;_revision=graph.Revision;BuildCount++;return _drawing;
+        var a=from.Port(true,Port(from.Definition.Outputs,wire.From.Port));
+        var b=to.Port(false,Port(to.Definition.Inputs,wire.To.Port));
+        var delta=Math.Max(35,Math.Abs(b.X-a.X)*.48);
+        var min=Math.Min(a.X,b.X-delta);var max=Math.Max(a.X+delta,b.X);
+        WireBuilds++;
+        return new(wire,a,b,new(min,Math.Min(a.Y,b.Y)-3,max-min,Math.Abs(b.Y-a.Y)+6));
+    }
+    private void Rebuild(Graph graph)
+    {
+        var snapshot=graph.Snapshot();_nodeIndex.Clear();_incident.Clear();
+        // Graph identity matters: undo/load may use identical ids for new objects.
+        var oldNodes=ReferenceEquals(graph,_graph)?_drawing.Nodes.ToDictionary(n=>n.Node.Id):new();
+        var oldWires=ReferenceEquals(graph,_graph)?_drawing.Wires.ToDictionary(w=>w.Wire.Id):new();
+        var nodes=ImmutableArray.CreateBuilder<PresentedNode>(snapshot.Nodes.Length);
+        foreach(var node in snapshot.Nodes)
+        {
+            _nodeIndex.Add(node.Id,nodes.Count);
+            nodes.Add(oldNodes.TryGetValue(node.Id,out var old)&&ReferenceEquals(old.Node,node)?old:Present(node,graph.Registry.Get(node.Component)));
+        }
+        var n=nodes.MoveToImmutable();
+        var wires=ImmutableArray.CreateBuilder<PresentedWire>(snapshot.Wires.Length);
+        foreach(var wire in snapshot.Wires)
+        {
+            void Index(string id){if(!_incident.TryGetValue(id,out var list))_incident.Add(id,list=[]);list.Add(wires.Count);}
+            Index(wire.From.Node);Index(wire.To.Node);
+            if(oldWires.TryGetValue(wire.Id,out var previous)&&previous.Wire==wire&&
+                oldNodes.TryGetValue(wire.From.Node,out var from)&&from.Bounds==n[_nodeIndex[wire.From.Node]].Bounds&&
+                oldNodes.TryGetValue(wire.To.Node,out var to)&&to.Bounds==n[_nodeIndex[wire.To.Node]].Bounds)wires.Add(previous);
+            else wires.Add(Present(wire,n));
+        }
+        _drawing=new(n,wires.MoveToImmutable());TopologyBuilds++;
+    }
+    private void UpdateNodes(Graph graph)
+    {
+        var source=graph.Nodes;
+        ImmutableArray<PresentedNode>.Builder? changed=null;
+        HashSet<int>? affected=null;
+        for(var i=0;i<source.Count;i++)
+        {
+            var prior=_drawing.Nodes[i];var node=source[i];
+            if(ReferenceEquals(prior.Node,node))continue;
+            var next=Present(node,prior.Definition);
+            (changed??=_drawing.Nodes.ToBuilder())[i]=next;
+            if(next.Bounds!=prior.Bounds&&_incident.TryGetValue(node.Id,out var wires))
+                foreach(var index in wires)(affected??=[]).Add(index);
+        }
+        if(changed is null)return;
+        var nodes=changed.ToImmutable();var paths=_drawing.Wires;
+        if(affected is not null)
+        {
+            var wires=paths.ToBuilder();
+            foreach(var i in affected)wires[i]=Present(paths[i].Wire,nodes);
+            paths=wires.ToImmutable();
+        }
+        _drawing=new(nodes,paths);
     }
 }

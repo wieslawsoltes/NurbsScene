@@ -81,9 +81,13 @@ public sealed class Graph(ComponentRegistry registry)
         if(children.Count==0)_outgoing.Remove(wire.From.Node);
         var inputs=_inputWires[wire.To];inputs.Remove(wire);if(inputs.Count==0)_inputWires.Remove(wire.To);
     }
-    public ComponentRegistry Registry { get; }=registry;
+    public ComponentRegistry Registry { get; }=registry??throw new ArgumentNullException(nameof(registry));
     public event Action? Changed;public event Action<GraphResult>? Solved;
     public long Revision { get; private set; }
+    /// <summary>Changes only for added/removed nodes or wires, not parameter or layout edits.</summary>
+    public long TopologyRevision { get; private set; }
+    public int NodeCount { get { lock(_gate)return _nodes.Count; } }
+    public int WireCount { get { lock(_gate)return _wires.Count; } }
     public GraphResult? LastResult { get; private set; }
     public IReadOnlyList<GraphNode> Nodes { get {lock(_gate)return _nodes.Values.ToArray();} }
     public IReadOnlyList<Wire> Wires { get {lock(_gate)return _wires.Values.ToArray();} }
@@ -92,7 +96,7 @@ public sealed class Graph(ComponentRegistry registry)
     public GraphNode Add(string component,double x=0,double y=0,IReadOnlyDictionary<string,object?>? parameters=null,string? name=null,string? id=null)
     {
         Registry.Get(component);if(!double.IsFinite(x)||!double.IsFinite(y))throw new ArgumentException("Node position must be finite.");var node=new GraphNode(id??Guid.NewGuid().ToString("N"),component,x,y,ParameterValues.Freeze(parameters),name);
-        lock(_gate){if(_nodes.Count>=10000)throw new InvalidOperationException("Node budget exceeded.");_nodes.Add(node.Id,node);_plan=null;Invalidate(node.Id);Revision++;}NotifyChanged();return node;
+        lock(_gate){if(_nodes.Count>=10000)throw new InvalidOperationException("Node budget exceeded.");_nodes.Add(node.Id,node);TopologyRevision++;_plan=null;Invalidate(node.Id);Revision++;}NotifyChanged();return node;
     }
     public void Update(GraphNode node)
     {
@@ -107,16 +111,16 @@ public sealed class Graph(ComponentRegistry registry)
             var successors=_outgoing.TryGetValue(id,out var children)?children.Keys.ToArray():[];
             foreach(var wire in _wires.Values.Where(w=>w.From.Node==id||w.To.Node==id).ToArray()){_wires.Remove(wire.Id);Unlink(wire);}
             foreach(var next in successors)Invalidate(next);
-            _nodes.Remove(id);_plan=null;_cache.Remove(id);_dirty.Remove(id);Revision++;
+            _nodes.Remove(id);TopologyRevision++;_plan=null;_cache.Remove(id);_dirty.Remove(id);Revision++;
         }
         NotifyChanged();
     }
     private bool WouldCycle(string from,string to){var stack=new Stack<string>();var seen=new HashSet<string>();stack.Push(to);while(stack.TryPop(out var id)){if(id==from)return true;if(!seen.Add(id))continue;if(_outgoing.TryGetValue(id,out var children))foreach(var child in children.Keys)stack.Push(child);}return false;}
     public Wire Connect(PortAddress from,PortAddress to,bool replace=false,string transform="none",string? id=null)
     {
-        Wire wire;lock(_gate){var a=Registry.Get(GetNode(from.Node).Component).Outputs.SingleOrDefault(p=>p.Name==from.Port)??throw new ArgumentException("Source port is missing.");var b=Registry.Get(GetNode(to.Node).Component).Inputs.SingleOrDefault(p=>p.Name==to.Port)??throw new ArgumentException("Target port is missing.");if(!Compatible(a.Kind,b.Kind))throw new ArgumentException("Incompatible port types.");if(WouldCycle(from.Node,to.Node))throw new InvalidOperationException("Connection would introduce a cycle.");if(transform is not("none" or "flatten" or "graft" or "simplify"))throw new ArgumentException("Unknown wire transform.");if(_inputWires.TryGetValue(to,out var existing)&&existing.Any(w=>w.From==from))throw new ArgumentException("Duplicate wire.");if(id is not null&&_wires.ContainsKey(id))throw new ArgumentException("Duplicate wire identity.");var replaced=replace&&_inputWires.TryGetValue(to,out var target)?target.ToArray():[];if(_wires.Count-replaced.Length>=MaximumWires)throw new InvalidOperationException("Wire budget exceeded.");foreach(var old in replaced){_wires.Remove(old.Id);Unlink(old);}wire=new(id??Guid.NewGuid().ToString("N"),from,to,transform);_wires.Add(wire.Id,wire);_plan=null;Link(wire);Invalidate(to.Node);Revision++;}NotifyChanged();return wire;
+        Wire wire;lock(_gate){var a=Registry.Get(GetNode(from.Node).Component).Outputs.SingleOrDefault(p=>p.Name==from.Port)??throw new ArgumentException("Source port is missing.");var b=Registry.Get(GetNode(to.Node).Component).Inputs.SingleOrDefault(p=>p.Name==to.Port)??throw new ArgumentException("Target port is missing.");if(!Compatible(a.Kind,b.Kind))throw new ArgumentException("Incompatible port types.");if(WouldCycle(from.Node,to.Node))throw new InvalidOperationException("Connection would introduce a cycle.");if(transform is not("none" or "flatten" or "graft" or "simplify"))throw new ArgumentException("Unknown wire transform.");if(_inputWires.TryGetValue(to,out var existing)&&existing.Any(w=>w.From==from))throw new ArgumentException("Duplicate wire.");if(id is not null&&_wires.ContainsKey(id))throw new ArgumentException("Duplicate wire identity.");var replaced=replace&&_inputWires.TryGetValue(to,out var target)?target.ToArray():[];if(_wires.Count-replaced.Length>=MaximumWires)throw new InvalidOperationException("Wire budget exceeded.");foreach(var old in replaced){_wires.Remove(old.Id);Unlink(old);}wire=new(id??Guid.NewGuid().ToString("N"),from,to,transform);_wires.Add(wire.Id,wire);TopologyRevision++;_plan=null;Link(wire);Invalidate(to.Node);Revision++;}NotifyChanged();return wire;
     }
-    public void Disconnect(string id){lock(_gate){var w=_wires[id];_wires.Remove(id);_plan=null;Unlink(w);Invalidate(w.To.Node);Revision++;}NotifyChanged();}
+    public void Disconnect(string id){lock(_gate){var w=_wires[id];_wires.Remove(id);TopologyRevision++;_plan=null;Unlink(w);Invalidate(w.To.Node);Revision++;}NotifyChanged();}
     private static bool Compatible(ValueKind a,ValueKind b)=>a==ValueKind.Any||b==ValueKind.Any||a==b||(a==ValueKind.Integer&&b==ValueKind.Number)||((a is ValueKind.Point or ValueKind.Vector)&&(b is ValueKind.Point or ValueKind.Vector))||(b==ValueKind.Geometry&&(a is ValueKind.Curve or ValueKind.Surface));
     private static void Validate(object? value,PortDefinition port)
     {
