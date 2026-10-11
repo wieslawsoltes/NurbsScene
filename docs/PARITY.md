@@ -1,25 +1,28 @@
 # Current implementation and compatibility boundaries
 
-This inventory describes the source after completion of the preserved-source import and the typed-data-path work. It does not claim full Rhino/Grasshopper parity.
+This inventory includes the preserved-source import, typed data trees, curve-query additions and performance/correctness review in PR #2. It does not claim full Rhino/Grasshopper parity.
 
 | Area | Implemented | Remaining boundary |
 |---|---|---|
-| Exact geometry | Positive-weight rational curves and tensor-product surfaces; expanded knots; analytic curve and mixed surface derivatives | Negative/zero projective weights, full periodic/disconnected editing coverage and every extreme-conditioning case |
-| Curve modeling | Lines, polylines, rational arcs/circles, interpolation, insertion, split/trim, elevation, compatible loft inputs | Full joining, intersections, offsets, blending, fitting and Rhino command behavior |
-| Surface modeling | Extrusion, revolution, loft, exact isocurves; U/V refinement, elevation, split/reversal; rectangular extraction; control/weight edits; Bezier patches | Arbitrary trimming loops, robust surface intersections, sweep/network/patch variants and full editing semantics |
+| Exact geometry | Positive-weight rational curves and tensor-product surfaces; expanded knots; analytic derivatives; optional span/grid evaluators and cached bounds | Negative/zero projective weights, full periodic/disconnected editing coverage and every extreme-conditioning case |
+| Curve modeling | Lines, polylines, arcs/circles, interpolation, insertion, split/trim, elevation, control/weight editing, closest-point queries | Full joining, intersections, offsets, blending, fitting and Rhino command behavior; query distance gaps are numerical estimates |
+| Surface modeling | Extrusion, revolution, loft, exact isocurves; U/V refinement/elevation/split/reversal; rectangular extraction; control/weight edits; Bezier patches | Arbitrary trimming loops, robust surface intersections, sweep/network/patch variants and full editing semantics |
+| Transforms | Translation, rotation, scale, affine plane projection and reflection of authoritative controls | Complete transform tools, gumball constraints, construction planes and command semantics |
 | Solids | No integrated solid-modeling backend | B-rep topology, booleans, fillets/chamfers, healing, sewing, shells and production robust predicates. OCCT is not integrated |
 | Measurements | Analytic-speed adaptive Gauss-Kronrod length, inverse arc length and equal-distance division with cancellation/work limits | Error estimates are not certified bounds; disconnected full-multiplicity length requests fail explicitly |
-| Parametric engine | 103 managed / 102 JavaScript executable definitions, typed ports, persistent trees/paths, bounded matching, cycle rejection, incremental cache, cancellation and stale-solve rejection | Complete Grasshopper catalog, clusters, scripting/plugin compatibility and all branch-matching/data-conversion rules |
-| Documents | Immutable geometry snapshots, layers, locking, selection, undo/redo, atomic editing and explicit invalid-input errors | Full Rhino object types, blocks, history, reference files, annotations and large-project qualification |
+| Parametric engine | 108 managed / 102 JavaScript definitions, typed ports, persistent trees/paths, bounded matching, cycle rejection, incremental cache, cancellation and stale-solve rejection | Complete Grasshopper catalog, clusters, scripting/plugin compatibility and all matching/conversion rules |
+| Documents | Cached immutable snapshot views, layers, locking, selection, undo/redo, atomic editing and explicit invalid-input errors | Full Rhino object types, blocks, history, reference files, annotations and large-project qualification |
 | Interchange | Managed exact `.nscene`; separate JS workspace dialect; OBJ/STL display export | `.3dm`, `.gh`, `.ghx`, STEP/IGES and plugin interchange. Display STL is not a watertight-solid certificate |
-| Uno UI | Desktop/browser source, four viewports, graph canvas/search/typed connections, inspectors, commands, baking, workspace file pickers | Identical Rhino/Grasshopper visuals and behavior, complete docking/toolbars/accessibility/input-device coverage |
-| Rendering | Uno GL/WebGL2 depth rendering with explicit shared-state restoration and readback tests; JavaScript WebGPU/WebGL2 source | Direct Uno WebGPU, certified surface tessellation, production materials/lighting, transparency, clipping, hardware/performance matrix |
+| Uno UI | Desktop/browser source, four viewports, graph search/typed wiring, inspectors, commands, baking and workspace pickers | Identical Rhino/Grasshopper visuals/behavior, complete docking/toolbars/accessibility/input-device coverage |
+| Rendering | GL/WebGL2 depth rendering, shared-state restoration, knot-aware surface sampling, origin re-encoding, hierarchical picking and clip-aware selection; separate JS WebGPU source | Direct Uno WebGPU, certified adaptive surface tessellation, production materials/lighting/transparency, full clipping and hardware/performance matrix |
 | Other Rhino systems | Not implemented | SubD, full meshing, rendering plugins, layouts/printing, scripting ecosystem and remaining product features |
 
 ## Validation scope
 
-Numerical tests compare the native/managed kernel to analytic results and independent SciPy fixtures. The managed graph suites exercise every newly added component, sparse paths, empty branches, serialization, dependency-index changes, cancellation and a 2,001-node incremental graph. These are bounded tests, not a guarantee for arbitrary workloads.
+Numerical tests compare the native/managed kernel to analytic results and independent SciPy fixtures. Closest-point references minimize many intervals independently; they are not certified global-minimum oracles. Tests compare distances and enforce work budgets. The graph suites include sparse paths, empty branches, serialization, dependency changes, cancellation and a 2,001-node incremental graph.
 
-The real Uno browser suite compiles and runs the managed application, exercises commands/undo/redo/graph changes/baking/interchange and compares actual GL framebuffer pixels against an empty scene and after camera motion. Missing contexts or submission errors fail the test. Software GL may satisfy this check; no physical-GPU performance claim follows.
+The performance suite compares one identical harness against baseline `f0bd8e3` and the candidate on one runner. Structural tests separately check allocation and traversal budgets. The 17 review regressions cover clipping, tiny viewports, cache identity/record cloning, narrow knot spans, grid input limits, immutable document views and selected-workspace refresh allocations. These are bounded checks, not proof of every possible input or a complete product review. See `PERFORMANCE-AND-REVIEW.md`.
 
-The offline JavaScript suite is separate: it tests the six reusable modules and their browser controls without claiming Uno or GPU qualification. Historical alpha evidence is preserved as history, not rewritten to imply checks that were never run.
+The real Uno browser suite compiles and runs the application and compares actual GL framebuffer pixels against an empty scene and after camera motion. It exercises managed commands, undo/redo, graph edits, baking, workspace and typed-path round trips. The new query APIs and review contracts are additionally tested in managed .NET CI; the browser smoke test does not exercise every new API or command. Software GL may satisfy the browser check; no physical-GPU performance claim follows.
+
+The offline JavaScript suite is separate. Historical alpha evidence is preserved as history, not rewritten to imply checks that were never run.
