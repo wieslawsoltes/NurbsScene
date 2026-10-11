@@ -36,6 +36,7 @@ public sealed class WorkspaceView : UserControl,IDisposable
     private readonly Dictionary<string,Button> _viewportTabs=[];
     private bool _disposed,_graphVisible=true,_ownsController,_fitAfterLayout;
     private bool? _effectiveRight;
+    private readonly DispatcherTimer _layoutFit=new(){Interval=TimeSpan.FromMilliseconds(50)};
     private long _savedDocument=-1,_savedGraph=-1;
     private const string PreferenceKey="NurbsScene.Workspace.Layout.v1";
     public WorkspaceView(WorkspaceController? controller=null)
@@ -79,7 +80,12 @@ public sealed class WorkspaceView : UserControl,IDisposable
         Viewport.Canvas.ConstructionPointPicked+=p=>{try{Controller.AcceptPoint(p);}catch(Exception error){Console.WriteLine(error.Message);Controller.CancelCommand();}};
         Viewport.Canvas.CursorMoved+=hit=>_coordinates.Text=hit is null?"World":FormattableString.Invariant($"World  x {hit.Point.X:0.000}  y {hit.Point.Y:0.000}  z {hit.Point.Z:0.000}  {hit.Snap}");
         Viewport.Canvas.DiagnosticsChanged+=text=>{Console.WriteLine(text);Refresh();};Viewport.Canvas.LayoutChanged+=Refresh;
-        GraphEditor.Canvas.SizeChanged+=(_,_)=>{if(_fitAfterLayout&&GraphEditor.Canvas.ActualWidth>120&&GraphEditor.Canvas.ActualHeight>80){_fitAfterLayout=false;GraphEditor.Canvas.Fit();}};
+        _layoutFit.Tick+=(_,_)=>{
+            _layoutFit.Stop();
+            if(!_disposed&&_fitAfterLayout&&GraphEditor.Canvas.ActualWidth>120&&GraphEditor.Canvas.ActualHeight>80)
+            {_fitAfterLayout=false;GraphEditor.Canvas.Fit();}
+        };
+        GraphEditor.Canvas.SizeChanged+=(_,_)=>QueueLayoutFit();
         SizeChanged+=(_,_)=>ApplyLayout();Loaded+=(_,_)=>{ApplyLayout();GraphEditor.Canvas.Fit();Viewport.Canvas.Fit();};
         var save=new KeyboardAccelerator{Key=VirtualKey.S,Modifiers=VirtualKeyModifiers.Control};save.Invoked+=(sender,e)=>{_ =SafeAsync(SaveAsync);e.Handled=true;};KeyboardAccelerators.Add(save);
         foreach(var key in new[]{VirtualKey.F2,VirtualKey.F7,VirtualKey.F8,VirtualKey.F9}){var accelerator=new KeyboardAccelerator{Key=key};accelerator.Invoked+=(_,e)=>{if(key==VirtualKey.F2)Console.BeginCommand("");else if(key==VirtualKey.F7){Controller.Scene.ShowGrid=!Controller.Scene.ShowGrid;Refresh();}else if(key==VirtualKey.F8){Aids.Ortho=!Aids.Ortho;UpdateAids();}else{Aids.GridSnap=!Aids.GridSnap;UpdateAids();}e.Handled=true;};KeyboardAccelerators.Add(accelerator);}
@@ -105,6 +111,14 @@ public sealed class WorkspaceView : UserControl,IDisposable
             if(right){_workspace.ColumnDefinitions[0].Width=new GridLength(Preferences.Split,GridUnitType.Star);_workspace.ColumnDefinitions[1].Width=new GridLength(5);_workspace.ColumnDefinitions[2].Width=new GridLength(1-Preferences.Split,GridUnitType.Star);}
             else{_workspace.RowDefinitions[0].Height=new GridLength(Preferences.Split,GridUnitType.Star);_workspace.RowDefinitions[1].Height=new GridLength(5);_workspace.RowDefinitions[2].Height=new GridLength(1-Preferences.Split,GridUnitType.Star);}
         }
+        QueueLayoutFit();
+    }
+    private void QueueLayoutFit()
+    {
+        // Docking can produce several intermediate SizeChanged events. Coalesce
+        // them before reading final ActualWidth/Height, not the first event.
+        if(_disposed||!_fitAfterLayout)return;
+        _layoutFit.Stop();_layoutFit.Start();
     }
     private void InstallGrip(Border grip,bool definition)
     {
@@ -175,5 +189,5 @@ public sealed class WorkspaceView : UserControl,IDisposable
     {
         var objects=Controller.Document.Selection.Count>0?Controller.Document.Objects.Where(o=>Controller.Document.Selection.Contains(o.Id)).ToArray():Controller.Document.Objects.ToArray();var picker=new FileSavePicker{SuggestedFileName=Controller.Document.Name};picker.FileTypeChoices.Add(stl?"Display mesh STL":"Display mesh OBJ",new List<string>{stl?".stl":".obj"});var file=await picker.PickSaveFileAsync();if(file is null)return;if(stl)await FileIO.WriteBytesAsync(file,WorkspaceFormat.ExportStl(objects));else await FileIO.WriteTextAsync(file,WorkspaceFormat.ExportObj(objects));Console.WriteLine("Exported display triangulation. This is not exact CAD interchange or a watertight-solid certificate.");
     }
-    public void Dispose(){if(_disposed)return;_disposed=true;Controller.Changed-=Refresh;Controller.Message-=Console.WriteLine;Controller.FitRequested-=Viewport.Canvas.Fit;Controller.WorkspaceReplaced-=Replaced;Inspector.Detach();GraphEditor.Dispose();if(_ownsController)Controller.Dispose();}
+    public void Dispose(){if(_disposed)return;_disposed=true;_layoutFit.Stop();Controller.Changed-=Refresh;Controller.Message-=Console.WriteLine;Controller.FitRequested-=Viewport.Canvas.Fit;Controller.WorkspaceReplaced-=Replaced;Inspector.Detach();GraphEditor.Dispose();if(_ownsController)Controller.Dispose();}
 }
