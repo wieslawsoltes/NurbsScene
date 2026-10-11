@@ -1,0 +1,4 @@
+# Tests can use newer compatible patch releases; delivery versions are in evidence/verification.json.
+numpy>=1.26,<3
+scipy>=1.12,<2
+playwright==1.57.0

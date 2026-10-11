@@ -1,0 +1,25 @@
+{
+  "name": "@nurbsscene/graphics",
+  "version": "0.1.0-alpha.1",
+  "type": "module",
+  "exports": {
+    ".": "./index.js",
+    "./camera": "./camera.js",
+    "./picking": "./picking.js",
+    "./shaders": "./shaders.js",
+    "./*.js": "./*.js"
+  },
+  "files": [
+    "*.js"
+  ],
+  "license": "MIT",
+  "description": "Camera-relative WebGPU/WebGL2 CAD renderer with PBR shading, analytic screen-space lines and BVH selection.",
+  "dependencies": {
+    "@nurbsscene/geometry": "0.1.0-alpha.1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/wieslawsoltes/NurbsScene.git",
+    "directory": "packages/graphics"
+  }
+}

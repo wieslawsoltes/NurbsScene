@@ -1,0 +1,22 @@
+{
+  "name": "@nurbsscene/geometry",
+  "version": "0.1.0-alpha.1",
+  "type": "module",
+  "exports": {
+    ".": "./index.js",
+    "./math": "./math.js",
+    "./kernel.wasm": "./dist/nurbsscene.wasm",
+    "./*.js": "./*.js"
+  },
+  "files": [
+    "*.js",
+    "dist/*.wasm"
+  ],
+  "license": "MIT",
+  "description": "Double-precision rational NURBS on a shared native/WebAssembly numerical kernel.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/wieslawsoltes/NurbsScene.git",
+    "directory": "packages/geometry"
+  }
+}
