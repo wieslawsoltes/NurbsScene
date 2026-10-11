@@ -1,0 +1,30 @@
+name: Source snapshot
+on:
+  push:
+    branches: [main, feat/parity-kernel]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Archive tracked source and history
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/source-snapshot"
+          git archive --format=tar.gz --prefix=NurbsScene/ HEAD > "$RUNNER_TEMP/source-snapshot/NurbsScene-source.tar.gz"
+          git bundle create "$RUNNER_TEMP/source-snapshot/NurbsScene.bundle" HEAD
+          git rev-parse HEAD HEAD^{tree} > "$RUNNER_TEMP/source-snapshot/revision.txt"
+          cd "$RUNNER_TEMP/source-snapshot"
+          sha256sum NurbsScene* > SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: source-${{ github.sha }}
+          path: ${{ runner.temp }}/source-snapshot/
+          retention-days: 7

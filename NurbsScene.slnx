@@ -1,0 +1,17 @@
+<Solution>
+  <Project Path="src/NurbsScene.App/NurbsScene.App.csproj" />
+  <Project Path="src/NurbsScene.Controls/NurbsScene.Controls.csproj" />
+  <Project Path="src/NurbsScene.Geometry/NurbsScene.Geometry.csproj" />
+  <Project Path="src/NurbsScene.IO/NurbsScene.IO.csproj" />
+  <Project Path="src/NurbsScene.Kernel/NurbsScene.Kernel.csproj" />
+  <Project Path="src/NurbsScene.Model/NurbsScene.Model.csproj" />
+  <Project Path="src/NurbsScene.Parametric/NurbsScene.Parametric.csproj" />
+  <Project Path="src/NurbsScene.Rendering/NurbsScene.Rendering.csproj" />
+  <Project Path="src/NurbsScene.Workbench/NurbsScene.Workbench.csproj" />
+  <Project Path="tests/dotnet/NurbsScene.CoreTests/NurbsScene.CoreTests.csproj" />
+  <Project Path="tests/dotnet/NurbsScene.IntegrationTests/NurbsScene.IntegrationTests.csproj" />
+  <Project Path="tests/dotnet/NurbsScene.MeasurementTests/NurbsScene.MeasurementTests.csproj" />
+  <Project Path="tests/dotnet/NurbsScene.WorkbenchTests/NurbsScene.WorkbenchTests.csproj" />
+  <Project Path="tests/dotnet/NurbsScene.SurfaceContracts/NurbsScene.SurfaceContracts.csproj" />
+  <Project Path="tests/dotnet/NurbsScene.GraphContracts/NurbsScene.GraphContracts.csproj" />
+</Solution>

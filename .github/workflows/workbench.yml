@@ -1,0 +1,26 @@
+name: Geometry components and commands
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  workbench:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Execute every added component and test transactional commands
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/workbench
+          dotnet run --project tests/dotnet/NurbsScene.WorkbenchTests -c Release 2>&1 | tee artifacts/workbench/test.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: geometry-components-${{ github.run_id }}
+          path: artifacts/workbench/

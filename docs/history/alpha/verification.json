@@ -1,0 +1,149 @@
+{
+  "schema": "nurbsscene.delivery-validation",
+  "schemaVersion": 1,
+  "generatedUtc": "2026-10-09T22:50:58.869524+00:00",
+  "version": "0.1.0-alpha.1",
+  "status": "partial local implementation; not a complete clone or production-qualified product",
+  "sourceCommit": "275615d13f19ee511c8a4a52c2f724f40364533d",
+  "sourceManifest": "source-manifest-sha256.txt",
+  "sourceManifestSha256": "19cc5e6d0d00db475b172507349d88612f60399f3a22f418ff088de9f40e3fdb",
+  "sourceFileCount": 126,
+  "packages": {
+    "managedReusableLibraries": 8,
+    "managedApplicationHosts": 1,
+    "managedTestProjects": 2,
+    "managedCompiled": false,
+    "npmTarballs": 6,
+    "nativeAbi": 1
+  },
+  "passed": [
+    {
+      "suite": "native C numerical kernel",
+      "tests": 12,
+      "log": "native-tests.log",
+      "oracle": "Analytic fixtures and independent SciPy BSpline comparisons"
+    },
+    {
+      "suite": "Node/WASM module tests",
+      "tests": 60,
+      "log": "modules-tests.log",
+      "scope": "Geometry, parametric graph, document/IO and CPU graphics algorithms"
+    },
+    {
+      "suite": "offline Chromium interaction scenarios",
+      "tests": 12,
+      "log": "browser-offline-tests.log",
+      "scope": "JavaScript controls and actual WASM; not the Uno application; no GPU qualification"
+    },
+    {
+      "suite": "isolated npm consumer",
+      "packages": 6,
+      "log": "npm-consumer.log",
+      "scope": "Offline tarball installation, actual packaged WASM/graph/IO/CPU scene; controls assets resolve, no DOM in this Node test"
+    },
+    {
+      "suite": "structural source checks",
+      "projectFiles": 11,
+      "log": "validation-run.log",
+      "scope": "XML/XAML/project references, ESM syntax/import paths; not C# compilation"
+    }
+  ],
+  "blockedOrUnexecuted": [
+    {
+      "gate": "C# / Uno compilation and runtime",
+      "status": "not executed",
+      "reason": "dotnet, csc, Mono unavailable; dependency acquisition was unsuccessful"
+    },
+    {
+      "gate": "Uno browser qualification",
+      "status": "not executed",
+      "reason": "No compiled Uno browser output"
+    },
+    {
+      "gate": "WebGPU/WebGL2 execution",
+      "status": "not qualified",
+      "reason": "Offline Chromium exposes no WebGPU and failed WebGL2 context creation; no simulated renderer substituted",
+      "evidence": "browser-offline-diagnostics.json"
+    },
+    {
+      "gate": "HTTP browser navigation",
+      "status": "blocked in this environment",
+      "reason": "Earlier localhost navigation returned ERR_BLOCKED_BY_ADMINISTRATOR; policy not modified"
+    },
+    {
+      "gate": "Windows/macOS/Linux Uno runtime",
+      "status": "not executed"
+    },
+    {
+      "gate": "GitHub publication and Pages deployment",
+      "status": "not performed",
+      "reason": "First GitHub write was blocked by OpenAI because it could not determine the safety status. No alternate write route attempted."
+    }
+  ],
+  "notImplemented": [
+    "B-rep topology and trimmed solids",
+    "Solid booleans, fillets/chamfers and healing",
+    "Open CASCADE integration",
+    "Full Rhino/Grasshopper command/component/plugin compatibility",
+    "3dm/gh/ghx and other CAD interchange",
+    "Identical reference UI",
+    "Professional production renderer and exhaustive hardware/performance qualification"
+  ],
+  "testCommand": "bash tools/validate.sh",
+  "tools": {
+    "node": "v22.16.0",
+    "python": "3.13.5",
+    "platform": "Linux-6.18.44-x86_64-with-glibc2.41",
+    "cc": "cc (Debian 14.2.0-19) 14.2.0",
+    "clang": "clang version 17.0.0 (https://github.com/swiftlang/llvm-project.git 10999b6d034fe318f3d56c83bddb6572593a8bb0)",
+    "cmake": "cmake version 3.31.6",
+    "chromium": "Chromium 144.0.7559.96 built on Debian GNU/Linux 13 (trixie)",
+    "scipy": "1.17.0",
+    "numpy": "2.3.5",
+    "playwright": "1.57.0",
+    "dotnetAvailable": false
+  },
+  "compiledOutputs": [
+    {
+      "path": "packages/geometry/dist/nurbsscene.wasm",
+      "sha256": "1805b65159eb9a2dd5aebfa32ac0fad7086296175be6d3e115611ab5ca34c554"
+    },
+    {
+      "path": "artifacts/native/libnurbsscene_kernel.so",
+      "target": "Linux x86_64",
+      "sha256": "cb69468bbe3f62224acfefdff28dd22c99bba844dc99b89d9b31ba804208969d"
+    }
+  ],
+  "npmArchives": [
+    {
+      "name": "nurbsscene-controls-0.1.0-alpha.1.tgz",
+      "sha256": "9cfdb9a5bbb14089eaf96e0faf4af05b9bdbc19a84b0b82e22245a0e6dc4ebbb",
+      "bytes": 9069
+    },
+    {
+      "name": "nurbsscene-geometry-0.1.0-alpha.1.tgz",
+      "sha256": "e723ae00016782f91a4e10a6c8349863fa4711b8f63dcd25f207a8d6c89f5bda",
+      "bytes": 19832
+    },
+    {
+      "name": "nurbsscene-graphics-0.1.0-alpha.1.tgz",
+      "sha256": "5760d47fcdd2dd68acd06c40e4edafeafa51b4f9e0075253b8290d02e1a4f307",
+      "bytes": 13707
+    },
+    {
+      "name": "nurbsscene-io-0.1.0-alpha.1.tgz",
+      "sha256": "aa1e6ff0410b25673ec848eac876c03e3fcf22bab8f953cda1b7a796859b1400",
+      "bytes": 2797
+    },
+    {
+      "name": "nurbsscene-model-0.1.0-alpha.1.tgz",
+      "sha256": "c68a3c52593cab8850734997849728e9d1eaa114063326baf0c52a3181b3c62f",
+      "bytes": 4875
+    },
+    {
+      "name": "nurbsscene-parametric-0.1.0-alpha.1.tgz",
+      "sha256": "f22eb008721c416937f2e75b3312c5b4274b44fdc850078576143adbfe9ae5e4",
+      "bytes": 14488
+    }
+  ]
+}

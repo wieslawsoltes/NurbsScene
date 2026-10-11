@@ -1,0 +1,22 @@
+{
+  "name": "@nurbsscene/model",
+  "version": "0.1.0-alpha.1",
+  "type": "module",
+  "license": "MIT",
+  "exports": {
+    ".": "./index.js",
+    "./*.js": "./*.js"
+  },
+  "dependencies": {
+    "@nurbsscene/geometry": "0.1.0-alpha.1"
+  },
+  "files": [
+    "*.js",
+    "*.css"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/wieslawsoltes/NurbsScene.git",
+    "directory": "packages/model"
+  }
+}

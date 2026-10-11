@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net10.0</TargetFramework><IsPackable>true</IsPackable><AllowUnsafeBlocks>true</AllowUnsafeBlocks><Description>Reusable NurbsScene io library.</Description></PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../NurbsScene.Geometry/NurbsScene.Geometry.csproj" />
+    <ProjectReference Include="../NurbsScene.Model/NurbsScene.Model.csproj" />
+    <ProjectReference Include="../NurbsScene.Parametric/NurbsScene.Parametric.csproj" />
+    <ProjectReference Include="../NurbsScene.Rendering/NurbsScene.Rendering.csproj" />
+  </ItemGroup>
+</Project>

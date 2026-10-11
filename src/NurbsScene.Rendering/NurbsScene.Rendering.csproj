@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>net10.0</TargetFramework><IsPackable>true</IsPackable><AllowUnsafeBlocks>true</AllowUnsafeBlocks><Description>Reusable NurbsScene rendering library.</Description></PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../NurbsScene.Geometry/NurbsScene.Geometry.csproj" />
+    <ProjectReference Include="../NurbsScene.Kernel/NurbsScene.Kernel.csproj" />
+    <PackageReference Include="Silk.NET.OpenGL" Version="2.23.0" />
+    <EmbeddedResource Include="Shaders/*.glsl" />
+  </ItemGroup>
+</Project>

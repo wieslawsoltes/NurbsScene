@@ -1,0 +1,66 @@
+name: Uno application build and browser qualification
+on:
+  push:
+    branches: [main, feat/parity-kernel]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  desktop:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Build the real Uno desktop application
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/uno-desktop
+          dotnet build src/NurbsScene.App -c Release -f net10.0-desktop -p:NurbsSceneDesktopOnly=true 2>&1 | tee artifacts/uno-desktop/build.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: uno-desktop-build-${{ github.run_id }}
+          path: artifacts/uno-desktop/
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: dotnet workload install wasm-tools
+      - name: Compile and publish Uno WebAssembly
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence
+          dotnet publish src/NurbsScene.App -c Release -f net10.0-browserwasm -p:NurbsSceneQualification=true 2>&1 | tee evidence/uno-build.log
+          python tools/stage-uno-site.py
+      - run: python -m pip install playwright
+      - run: python -m playwright install --with-deps chromium
+      - name: Real Uno browser and framebuffer regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m http.server 8766 --bind 127.0.0.1 --directory artifacts/site > evidence/http.log 2>&1 &
+          server=$!
+          trap 'kill "$server"' EXIT
+          python tests/browser/test_uno.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: uno-browser-evidence-${{ github.run_id }}
+          path: evidence/
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: qualified-uno-browser-${{ github.sha }}
+          path: artifacts/site/

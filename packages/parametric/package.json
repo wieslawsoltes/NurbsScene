@@ -1,0 +1,25 @@
+{
+  "name": "@nurbsscene/parametric",
+  "version": "0.1.0-alpha.1",
+  "type": "module",
+  "exports": {
+    ".": "./graph.js",
+    "./components": "./components.js",
+    "./expression": "./expression.js",
+    "./data-tree": "./data-tree.js",
+    "./*.js": "./*.js"
+  },
+  "files": [
+    "*.js"
+  ],
+  "license": "MIT",
+  "description": "Typed deterministic incremental visual-programming DAG, persistent data trees and NURBS components.",
+  "dependencies": {
+    "@nurbsscene/geometry": "0.1.0-alpha.1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/wieslawsoltes/NurbsScene.git",
+    "directory": "packages/parametric"
+  }
+}

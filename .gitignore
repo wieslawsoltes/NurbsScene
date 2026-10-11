@@ -1,0 +1,16 @@
+**/bin/
+**/obj/
+node_modules/
+artifacts/
+__pycache__/
+.cache/
+playwright-report/
+test-results/
+*.user
+*.suo
+.DS_Store
+/evidence/
+/packages/geometry/dist/
+/validation-harness/offline.html
+/tests/fixtures/curves-scipy.json
+/tests/fixtures/lengths-scipy.json

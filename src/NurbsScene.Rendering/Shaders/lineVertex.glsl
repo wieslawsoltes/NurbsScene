@@ -1,0 +1,3 @@
+#version 300 es
+precision highp float;layout(location=0)in vec3 startPoint;layout(location=1)in vec3 endPoint;uniform mat4 matrix;uniform vec3 viewport;out float side;out vec3 world;
+void main(){float endpoints[6]=float[6](0.,1.,1.,0.,1.,0.);float sides[6]=float[6](-1.,-1.,1.,-1.,1.,1.);vec4 a=matrix*vec4(startPoint,1.),b=matrix*vec4(endPoint,1.);vec2 delta=(b.xy/max(abs(b.w),.000001)-a.xy/max(abs(a.w),.000001))*viewport.xy;vec2 perp=vec2(-delta.y,delta.x)/max(length(delta),.000001);vec4 p=mix(a,b,endpoints[gl_VertexID]);p.xy+=perp/viewport.xy*viewport.z*sides[gl_VertexID]*p.w;p.z-=.000015*p.w;gl_Position=p;side=sides[gl_VertexID];world=mix(startPoint,endPoint,endpoints[gl_VertexID]);}

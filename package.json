@@ -1,0 +1,6 @@
+{
+ "name":"nurbsscene-workspace","version":"0.1.0-alpha.1","private":true,"type":"module",
+ "workspaces":["packages/*"],
+ "scripts":{"test":"node --test tests/*.test.mjs","build:kernel":"bash tools/build-kernel.sh","serve:harness":"python3 -m http.server 8765 --bind 127.0.0.1","validate":"bash tools/validate.sh"},
+ "engines":{"node":">=22"}
+}

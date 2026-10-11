@@ -1,0 +1,2 @@
+#version 300 es
+precision highp float;in float side;in vec3 world;uniform vec4 color;uniform vec4 material;uniform vec4 clipPlane;out vec4 outputColor;void main(){if(material.w>.5&&dot(clipPlane.xyz,world)+clipPlane.w<0.)discard;outputColor=vec4(color.rgb,color.a*(1.-smoothstep(.45,1.,abs(side))));}
