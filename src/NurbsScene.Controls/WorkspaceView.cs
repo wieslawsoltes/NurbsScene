@@ -79,7 +79,7 @@ public sealed class WorkspaceView : UserControl,IDisposable
         Viewport.Canvas.CursorMoved+=hit=>_coordinates.Text=hit is null?"World":FormattableString.Invariant($"World  x {hit.Point.X:0.000}  y {hit.Point.Y:0.000}  z {hit.Point.Z:0.000}  {hit.Snap}");
         Viewport.Canvas.DiagnosticsChanged+=text=>{Console.WriteLine(text);Refresh();};Viewport.Canvas.LayoutChanged+=Refresh;
         SizeChanged+=(_,_)=>ApplyLayout();Loaded+=(_,_)=>{ApplyLayout();GraphEditor.Canvas.Fit();Viewport.Canvas.Fit();};
-        var save=new KeyboardAccelerator{Key=VirtualKey.S,Modifiers=VirtualKeyModifiers.Control};save.Invoked+=(_,e)=>{_ =SafeAsync(SaveAsync);e.Handled=true;};KeyboardAccelerators.Add(save);
+        var save=new KeyboardAccelerator{Key=VirtualKey.S,Modifiers=VirtualKeyModifiers.Control};save.Invoked+=(sender,e)=>{_ =SafeAsync(SaveAsync);e.Handled=true;};KeyboardAccelerators.Add(save);
         foreach(var key in new[]{VirtualKey.F2,VirtualKey.F7,VirtualKey.F8,VirtualKey.F9}){var accelerator=new KeyboardAccelerator{Key=key};accelerator.Invoked+=(_,e)=>{if(key==VirtualKey.F2)Console.BeginCommand("");else if(key==VirtualKey.F7){Controller.Scene.ShowGrid=!Controller.Scene.ShowGrid;Refresh();}else if(key==VirtualKey.F8){Aids.Ortho=!Aids.Ortho;UpdateAids();}else{Aids.GridSnap=!Aids.GridSnap;UpdateAids();}e.Handled=true;};KeyboardAccelerators.Add(accelerator);}
         if(_ownsController)Controller.LoadPavilion();ApplyLayout();Refresh();UpdateAids();Console.WriteLine("NurbsScene — independent CAD alpha. Type a command, or double-click the definition canvas to search.");
     }

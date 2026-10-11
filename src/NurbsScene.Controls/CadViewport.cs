@@ -152,12 +152,13 @@ public sealed class ViewportControl : Grid
     }
     private void Headers()
     {
-        foreach(var group in _titleGroups.Values)group.Visibility=Visibility.Collapsed;
         var layout=ViewportLayout.Create(Math.Max(0,(int)ActualWidth),Math.Max(0,(int)ActualHeight),Canvas.Cameras,Canvas.Maximized);
-        foreach(var v in layout)
+        var visible=layout.Where(v=>v.Width>=40&&v.Height>=25).ToDictionary(v=>v.Name);
+        foreach(var (name,group) in _titleGroups)
         {
-            if(v.Width<40||v.Height<25)continue;
-            var group=_titleGroups[v.Name];group.Visibility=Visibility.Visible;_titles[v.Name].Background=Canvas.ActiveViewport==v.Name?ClassicChrome.Selected:ClassicChrome.Background;
+            group.Visibility=visible.ContainsKey(name)?Visibility.Visible:Visibility.Collapsed;
+            if(!visible.TryGetValue(name,out var v))continue;
+            _titles[name].Background=Canvas.ActiveViewport==name?ClassicChrome.Selected:ClassicChrome.Background;
             Microsoft.UI.Xaml.Controls.Canvas.SetLeft(group,v.X+3);Microsoft.UI.Xaml.Controls.Canvas.SetTop(group,v.Y+3);
         }
         _overlay.Invalidate();

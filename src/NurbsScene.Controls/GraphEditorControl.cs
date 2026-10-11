@@ -31,6 +31,10 @@ public sealed class GraphEditorControl : Grid,IDisposable
     private readonly TextBlock _zoom=ClassicChrome.Label("100%",10);
     private readonly ColumnDefinition _inspectorColumn=new(){Width=new GridLength(0)};
     private bool _inspectorVisible;
+    private bool _rebuilding;
+    private long _inspectorGeneration;
+    private Graph? _inspectorGraph;
+    private string? _inspectorNode;
     public event Action<IReadOnlySet<string>>? BakeRequested;
     public event Action<string>? Message;
     public event Action<string>? DockRequested;
@@ -80,15 +84,30 @@ public sealed class GraphEditorControl : Grid,IDisposable
     }
     private void Report(string text){_status.Text=text;Message?.Invoke(text);}
     private static Button Button(string name,Action action)=>ClassicChrome.Button(name,action);
-    private void Edit(string name,Action<Graph> action){try{Session?.Edit(name,action);}catch(Exception error){Report(error.Message);}}
+    private void EditInspector(string name,Action<Graph> action)
+    {
+        if(_rebuilding||Session is null||!ReferenceEquals(Session.Graph,_inspectorGraph)||_inspectorNode is null)return;
+        if(!Canvas.Selection.Contains(_inspectorNode)||!Session.Graph.Nodes.Any(n=>n.Id==_inspectorNode))return;
+        try{Session.Edit(name,action);}catch(Exception error){Report(error.Message);}
+    }
     private void Label(string text)=>_inspector.Children.Add(new TextBlock{Text=text,FontSize=11,TextWrapping=TextWrapping.Wrap});
     private void RefreshInspector()
     {
-        _inspector.Children.Clear();if(Session is null)return;
+        if(_rebuilding)return;
+        _rebuilding=true;
+        try{BuildInspector();}
+        finally{_rebuilding=false;}
+    }
+    private void BuildInspector()
+    {
+        var generation=++_inspectorGeneration;
+        void Edit(string name,Action<Graph> action){if(generation==_inspectorGeneration)EditInspector(name,action);}
+        void EditLive(FrameworkElement source,string name,Action<Graph> action){if(source.IsLoaded)Edit(name,action);}
+        _inspectorGraph=null;_inspectorNode=null;_inspector.Children.Clear();if(Session is null)return;
         var selectedIds=Canvas.Selection;var selected=Session.Graph.Nodes.Where(n=>selectedIds.Contains(n.Id)).ToArray();
         if(selected.Length!=1){Label(selected.Length==0?"Select a component to inspect inputs, preview and data matching.":$"{selected.Length} components selected");Label("Drag ports to connect. Shift-drag keeps existing input wires. Drag numbers to scrub. Double-click empty canvas to search.");return;}
-        var node=selected[0];var definition=Session.Graph.Registry.Get(node.Component);Label($"{definition.Category} / {definition.Id}");Label(definition.Description);
-        var name=new TextBox{Text=node.Name??node.Component,Header="Name",FontSize=12};name.LostFocus+=(_,_)=>{if(name.Text!=node.Name)Edit("Rename component",g=>g.Update(g.GetNode(node.Id) with{Name=name.Text}));};_inspector.Children.Add(name);
+        var node=selected[0];_inspectorGraph=Session.Graph;_inspectorNode=node.Id;var definition=Session.Graph.Registry.Get(node.Component);Label($"{definition.Category} / {definition.Id}");Label(definition.Description);
+        var name=new TextBox{Text=node.Name??node.Component,Header="Name",FontSize=12};name.LostFocus+=(_,_)=>{if(name.IsLoaded&&name.Text!=(node.Name??node.Component))Edit("Rename component",g=>g.Update(g.GetNode(node.Id) with{Name=name.Text}));};_inspector.Children.Add(name);
         var enabled=new CheckBox{Content="Enabled",IsChecked=node.Enabled,FontSize=12};enabled.Click+=(_,_)=>Edit("Enable component",g=>g.Update(g.GetNode(node.Id) with{Enabled=enabled.IsChecked==true}));_inspector.Children.Add(enabled);
         var preview=new CheckBox{Content="Preview",IsChecked=node.Preview,FontSize=12};preview.Click+=(_,_)=>Edit("Preview component",g=>g.Update(g.GetNode(node.Id) with{Preview=preview.IsChecked==true}));_inspector.Children.Add(preview);
         var matching=new ComboBox{Header="List matching",ItemsSource=new[]{"longest","shortest","cross"},SelectedItem=node.Matching,HorizontalAlignment=HorizontalAlignment.Stretch,FontSize=12};matching.SelectionChanged+=(_,_)=>{if(matching.SelectedItem is string mode)Edit("Change matching",g=>g.Update(g.GetNode(node.Id) with{Matching=mode}));};_inspector.Children.Add(matching);
@@ -101,7 +120,7 @@ public sealed class GraphEditorControl : Grid,IDisposable
         }
         if(node.Component=="Text")
         {
-            var text=new TextBox{Header="Text",Text=node.Parameters.GetValueOrDefault("text")?.ToString()??"",AcceptsReturn=true,TextWrapping=TextWrapping.Wrap,FontSize=12};text.LostFocus+=(_,_)=>Edit("Edit text",g=>{var n=g.GetNode(node.Id);g.Update(n with{Parameters=n.Parameters.SetItem("text",text.Text)});});_inspector.Children.Add(text);
+            var text=new TextBox{Header="Text",Text=node.Parameters.GetValueOrDefault("text")?.ToString()??"",AcceptsReturn=true,TextWrapping=TextWrapping.Wrap,FontSize=12};text.LostFocus+=(_,_)=>EditLive(text,"Edit text",g=>{var n=g.GetNode(node.Id);g.Update(n with{Parameters=n.Parameters.SetItem("text",text.Text)});});_inspector.Children.Add(text);
         }
         foreach(var port in definition.Inputs)
         {
@@ -114,14 +133,14 @@ public sealed class GraphEditorControl : Grid,IDisposable
             }
             else if((port.Kind is ValueKind.Point or ValueKind.Vector)&&port.Access==PortAccess.Item)
             {
-                var p=value is Vec3 vector?vector:Vec3.Zero;var text=new TextBox{Text=string.Join(',',p.ToArray().Select(x=>x.ToString("R",CultureInfo.InvariantCulture))),FontSize=12};text.LostFocus+=(_,_)=>Edit("Set vector input",g=>{var a=text.Text.Split(',').Select(s=>double.Parse(s,CultureInfo.InvariantCulture)).ToArray();if(a.Length!=3)throw new ArgumentException("Enter x,y,z.");var n=g.GetNode(node.Id);g.Update(n with{Parameters=n.Parameters.SetItem(key,new Vec3(a[0],a[1],a[2]))});});_inspector.Children.Add(text);
+                var p=value is Vec3 vector?vector:Vec3.Zero;var text=new TextBox{Text=string.Join(',',p.ToArray().Select(x=>x.ToString("R",CultureInfo.InvariantCulture))),FontSize=12};text.LostFocus+=(_,_)=>EditLive(text,"Set vector input",g=>{var a=text.Text.Split(',').Select(s=>double.Parse(s,CultureInfo.InvariantCulture)).ToArray();if(a.Length!=3)throw new ArgumentException("Enter x,y,z.");var n=g.GetNode(node.Id);g.Update(n with{Parameters=n.Parameters.SetItem(key,new Vec3(a[0],a[1],a[2]))});});_inspector.Children.Add(text);
             }
             else if(port.Kind==ValueKind.Path&&port.Access==PortAccess.Item)
             {
                 var text=new TextBox{Text=(value as DataPath??DataPath.Root).ToString(),PlaceholderText="{0;2;10}",FontSize=12};
                 AutomationProperties.SetName(text,$"{port.Name} data path");
                 AutomationProperties.SetAutomationId(text,$"PathInput_{port.Name}");
-                text.LostFocus+=(_,_)=>Edit("Set path input",g=>{var path=DataPath.Parse(text.Text);var n=g.GetNode(node.Id);g.Update(n with{Parameters=n.Parameters.SetItem(key,path)});});
+                text.LostFocus+=(_,_)=>EditLive(text,"Set path input",g=>{var path=DataPath.Parse(text.Text);var n=g.GetNode(node.Id);g.Update(n with{Parameters=n.Parameters.SetItem(key,path)});});
                 _inspector.Children.Add(text);
             }
             else Label("Connect a compatible component output.");

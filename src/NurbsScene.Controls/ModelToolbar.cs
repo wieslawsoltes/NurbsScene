@@ -10,6 +10,7 @@ public sealed class ModelToolbar : Grid
     private readonly StackPanel _tools=new(){Orientation=Orientation.Horizontal,Spacing=1,Padding=new(4,1,4,1)};
     private readonly Dictionary<string,Button> _categoryButtons=[];
     private readonly Dictionary<string,Button> _buttons=[];
+    private bool _canUndo,_canRedo;
     public string Category {get;private set;}="Standard";
     public IReadOnlyDictionary<string,Button> CategoryButtons=>_categoryButtons;
     public IReadOnlyDictionary<string,Button> Buttons=>_buttons;
@@ -34,6 +35,7 @@ public sealed class ModelToolbar : Grid
         foreach(var id in new[]{"New","Open","Save","Undo","Redo","Fit","Definition"})Add(WorkspaceCommands.Tools.Single(t=>t.Id==id));
         _tools.Children.Add(new Border{Width=1,Height=22,Margin=new(5,2,5,2),Background=ClassicChrome.Border});
         foreach(var tool in WorkspaceCommands.Category(category))if(!_buttons.ContainsKey(tool.Id))Add(tool);
+        SetUndo(_canUndo,_canRedo);
     }
-    public void SetUndo(bool undo,bool redo){_buttons["Undo"].IsEnabled=undo;_buttons["Redo"].IsEnabled=redo;}
+    public void SetUndo(bool undo,bool redo){_canUndo=undo;_canRedo=redo;_buttons["Undo"].IsEnabled=undo;_buttons["Redo"].IsEnabled=redo;}
 }
