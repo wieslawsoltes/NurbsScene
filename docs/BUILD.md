@@ -22,11 +22,13 @@ mkdir -p tests/fixtures
 python tools/generate-oracle-fixtures.py
 python tools/generate-length-oracle.py
 python tools/generate-query-oracle.py
+python tools/generate-area-oracle.py
 dotnet run --project tests/dotnet/NurbsScene.CoreTests -c Release
 dotnet run --project tests/dotnet/NurbsScene.MeasurementTests -c Release
 dotnet run --project tests/dotnet/NurbsScene.IntegrationTests -c Release
 dotnet run --project tests/dotnet/NurbsScene.WorkbenchTests -c Release
 dotnet run --project tests/dotnet/NurbsScene.GraphContracts -c Release
+dotnet run --project tests/dotnet/NurbsScene.PresentationContracts -c Release
 dotnet run --project tests/dotnet/NurbsScene.PerformanceContracts -c Release
 dotnet run --project tests/dotnet/NurbsScene.QueryContracts -c Release
 dotnet run --project tests/dotnet/NurbsScene.ReviewContracts -c Release
@@ -34,6 +36,7 @@ dotnet run --project tests/dotnet/NurbsScene.SectionContracts -c Release
 cmake -S native/kernel -B artifacts/native -DCMAKE_BUILD_TYPE=Release
 cmake --build artifacts/native --parallel
 LD_LIBRARY_PATH="$PWD/artifacts/native" NURBSSCENE_NATIVE_TESTS=1 dotnet run --project tests/dotnet/NurbsScene.SurfaceContracts -c Release
+LD_LIBRARY_PATH="$PWD/artifacts/native" NURBSSCENE_NATIVE_TESTS=1 dotnet run --project tests/dotnet/NurbsScene.AnalysisContracts -c Release
 ```
 
 SciPy generates independent test oracles; it is not an application dependency. Arc-length errors are numerical estimates rather than certified bounds. Surface trim commands extract rectangular UV domains, not arbitrary B-rep trim loops.
@@ -83,3 +86,10 @@ Use per-commit CI artifacts for current evidence. Reports in `docs/history/alpha
 used. JSON includes per-operation medians, min/max samples and allocation counts;
 CI preserves both JSON files, test output and the tested tree. This is not an FPS,
 GPU, cold-start or complete UI benchmark. See `SECTIONS-AND-RUNTIME.md`.
+
+## Workspace UI regressions
+
+The real Uno browser suite also runs `test_workspace_ui.py`, using mouse and keyboard
+input against observed native-control and Skia-canvas bounds. It retains JSON logs
+and right/bottom/narrow screenshots. Presentation benchmarks and allocation contracts
+run separately in `presentation.yml`. See `CLASSIC-WORKSPACE.md` for scope and limits.

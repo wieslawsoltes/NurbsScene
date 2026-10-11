@@ -17,6 +17,7 @@ The application lives in `src/NurbsScene.App`. The separate `validation-harness`
 | `NurbsScene.Rendering` | Knot-aware display tessellation, cameras, two-level spatial picking and a depth-enabled GL renderer |
 | `NurbsScene.IO` | Versioned exact `.nscene` workspaces and display-only OBJ/STL export |
 | `NurbsScene.Workbench` | Reusable application commands, graph preview and baking |
+| `NurbsScene.Presentation` | UI-independent commands, construction aids, layout preferences and cached graph presentation |
 | `NurbsScene.Controls` | Uno viewports, graph editor, inspectors, command console and workspace |
 
 `native/kernel` supplies the freestanding C/WebAssembly numerical kernel. Six independent npm packages in `packages/` provide geometry, model, parametric, graphics, controls and interchange; their catalog contains 102 components and is not identical to the managed catalog. The JavaScript graphics package has WebGPU and WebGL2 implementations. The Uno application's current renderer uses desktop GL / browser WebGL2, **not a direct Uno WebGPU backend**.
@@ -34,6 +35,16 @@ python -m http.server 8766 --bind 127.0.0.1 --directory artifacts/site
 ```
 
 See [build and validation instructions](docs/BUILD.md) and [performance/review contracts](docs/PERFORMANCE-AND-REVIEW.md). CI preserves evidence for the exact commit; compilation, browser smoke tests, physical-GPU performance and full compatibility are distinct qualifications.
+
+## Workspace and interaction
+
+The compact Uno workspace uses tabbed icon toolbars, command recall/suggestions,
+viewport activation/maximization, property/layer/object tabs, and a right- or
+bottom-docked definition editor with component shelves. Grid Snap, Ortho and curve
+end snaps drive real point construction. The authored vector icons, compact
+sliders and cached graph paths bring the UI closer to Rhino/Grasshopper conventions
+without claiming identical visuals or complete behavior. See [workspace controls,
+performance and verification](docs/CLASSIC-WORKSPACE.md).
 
 ## Modeling and visual programming
 

@@ -1,6 +1,6 @@
 # Current implementation and compatibility boundaries
 
-This inventory includes the preserved-source import, typed data trees, curve-query additions, curve-plane sections, and graph-performance review through PR #4. It does not claim full Rhino/Grasshopper parity.
+This inventory includes the preserved-source import, typed data trees, curve-query additions, curve-plane sections, and graph-performance review through PR #5. It does not claim full Rhino/Grasshopper parity.
 
 | Area | Implemented | Remaining boundary |
 |---|---|---|
@@ -13,7 +13,7 @@ This inventory includes the preserved-source import, typed data trees, curve-que
 | Parametric engine | 112 managed / 102 JavaScript definitions, typed ports, persistent trees/paths, bounded matching, cycle rejection, cached execution plans/results, batched edit notifications, cancellation and stale-solve rejection | Complete Grasshopper catalog, clusters, scripting/plugin compatibility and all matching/conversion rules |
 | Documents | Cached immutable snapshot views, layers, locking, selection, undo/redo, atomic editing and explicit invalid-input errors | Full Rhino object types, blocks, history, reference files, annotations and large-project qualification |
 | Interchange | Managed exact `.nscene`; separate JS workspace dialect; OBJ/STL display export | `.3dm`, `.gh`, `.ghx`, STEP/IGES and plugin interchange. Display STL is not a watertight-solid certificate |
-| Uno UI | Desktop/browser source, four viewports, graph search/typed wiring, inspectors, commands, baking and workspace pickers | Identical Rhino/Grasshopper visuals/behavior, complete docking/toolbars/accessibility/input-device coverage |
+| Uno UI | Compact tabbed toolbars/panels, authored vector icons, viewport activation/maximization, right/bottom definition docking, component shelves, command recall and world-aligned grid/ortho/endpoint construction; existing graph wiring, baking and file pickers | Identical Rhino/Grasshopper visuals/behavior, complete docking/toolbars/accessibility/input-device coverage |
 | Rendering | GL/WebGL2 depth rendering, shared-state restoration, knot-aware surface sampling, origin re-encoding, hierarchical picking and clip-aware selection; separate JS WebGPU source | Direct Uno WebGPU, certified adaptive surface tessellation, production materials/lighting/transparency, full clipping and hardware/performance matrix |
 | Other Rhino systems | Not implemented | SubD, full meshing, rendering plugins, layouts/printing, scripting ecosystem and remaining product features |
 
@@ -32,3 +32,9 @@ The Uno browser hook adds seven checks for real managed sections, overlaps, comp
 The offline JavaScript suite is separate. Historical alpha evidence is preserved as history, not rewritten to imply checks that were never run.
 
 The area/native milestone adds 27 managed/native analysis checks and seven Uno browser checks (29 browser checks total). It does not add second/product moments, inertia, solid volume or arbitrary-trim area integration. Native allocation improvements apply to the optional C ABI adapter, not the default browser evaluator or GPU rendering. See `SURFACE-ANALYSIS.md`.
+
+The compact workspace adds the reusable Presentation package, 25 presentation/input
+contracts and real pointer/keyboard browser scenarios. Graph metadata/path reuse,
+layer-row retention and view/layout behavior have dedicated checks. This is not
+pixel-identical UI, full docking/Osnap/CPlane/gumball or desktop-runtime parity.
+The existing GL renderer and numerical kernel are retained. See `CLASSIC-WORKSPACE.md`.

@@ -97,4 +97,24 @@ Test("interactive command anchor rejects invalid points and clears on cancel",()
     using var w=new WorkspaceController();var notifications=0;w.Changed+=()=>notifications++;w.Execute("Line");Check(notifications==1&&w.CommandAnchor is null);
     Throws<ArgumentException>(()=>w.AcceptPoint(new(double.NaN,0,0)));Check(w.CommandAnchor is null);w.AcceptPoint(new(2,3,0));Check(w.CommandAnchor==new Vec3(2,3,0));w.CancelCommand();Check(w.CommandAnchor is null&&w.PendingCommand=="");
 });
+Test("aspect-aware zoom extents contains every control-hull corner",()=>{
+    var bounds=new Bounds3(new(-30,-20,-10),new(30,20,45));
+    foreach(var name in new[]{"Perspective","Top","Front","Right"})foreach(var size in new[]{(160,900),(1000,150),(500,500)})
+    {
+        var camera=new Camera(name);ViewportNavigation.Fit(camera,bounds,size.Item1,size.Item2);
+        for(var i=0;i<8;i++)
+        {
+            var p=new Vec3((i&1)==0?bounds.Min.X:bounds.Max.X,(i&2)==0?bounds.Min.Y:bounds.Max.Y,(i&4)==0?bounds.Min.Z:bounds.Max.Z);
+            var projected=camera.Project(p,size.Item1,size.Item2);
+            Check(projected.X>=0&&projected.X<=size.Item1&&projected.Y>=0&&projected.Y<=size.Item2&&projected.Depth>camera.NearClip&&projected.Depth<camera.FarClip,$"{name} {size}: {projected}");
+        }
+    }
+});
+Test("invalid camera fitting is atomic and empty bounds are a no-op",()=>{
+    var camera=new Camera();var target=camera.Target;var distance=camera.Distance;var scale=camera.Scale;
+    Throws<ArgumentOutOfRangeException>(()=>ViewportNavigation.Fit(camera,new(Vec3.Zero,Vec3.UnitX),0,200));
+    Throws<ArgumentException>(()=>ViewportNavigation.Fit(camera,new(Vec3.Zero,new(double.PositiveInfinity,1,1)),200,200));
+    ViewportNavigation.Fit(camera,Bounds3.Empty,200,200);
+    Check(camera.Target==target&&camera.Distance==distance&&camera.Scale==scale);
+});
 int failed=0;foreach(var(name,test)in tests)try{test();Console.WriteLine("PASS "+name);}catch(Exception e){failed++;Console.WriteLine("FAIL "+name+"\n"+e);}Console.WriteLine(JsonSerializer.Serialize(new{suite="presentation",total=tests.Count,passed=tests.Count-failed,failed}));return failed==0?0:1;

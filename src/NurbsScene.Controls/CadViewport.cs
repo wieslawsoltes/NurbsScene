@@ -55,7 +55,12 @@ public sealed class CadViewport : GLCanvasElement
     }
     public void Maximize(string name){if(!Cameras.ContainsKey(name))throw new ArgumentException("Unknown viewport.");ActiveViewport=name;Maximized=Maximized==name?null:name;LayoutChanged?.Invoke();ViewChanged?.Invoke();Invalidate();}
     public void RestoreFourViews(){Maximized=null;LayoutChanged?.Invoke();ViewChanged?.Invoke();Invalidate();}
-    public void Fit(){foreach(var camera in Cameras.Values)camera.Fit(Scene.Bounds);if(!Scene.Bounds.IsEmpty)Scene.Rebase(Scene.Bounds.Center);ViewChanged?.Invoke();Invalidate();}
+    public void Fit()
+    {
+        foreach(var view in ViewportLayout.Create(Math.Max(1,(int)ActualWidth),Math.Max(1,(int)ActualHeight),Cameras,Maximized))
+            if(view.Width>0&&view.Height>0)ViewportNavigation.Fit(view.Camera,Scene.Bounds,view.Width,view.Height);
+        if(!Scene.Bounds.IsEmpty)Scene.Rebase(Scene.Bounds.Center);ViewChanged?.Invoke();Invalidate();
+    }
     private void Report(string text){LastError=text;System.Console.Error.WriteLine("NURBSSCENE_GL: "+text);DiagnosticsChanged?.Invoke(text);}
     protected override void Init(GL gl)
     {
@@ -144,7 +149,11 @@ public sealed class ViewportControl : Grid
             var drop=ClassicChrome.IconButton("Viewport options","Dropdown",()=>{},"ViewportOptions_"+name);drop.Width=17;drop.Height=22;
             var menu=new MenuFlyout();
             void Item(string text,Action action){var item=new MenuFlyoutItem{Text=text};item.Click+=(_,_)=>action();menu.Items.Add(item);}
-            Item("Maximize / restore",()=>Canvas.Maximize(name));Item("Zoom extents",()=>{Canvas.Cameras[name].Fit(Canvas.Scene.Bounds);Canvas.Invalidate();_overlay.Invalidate();});
+            Item("Maximize / restore",()=>Canvas.Maximize(name));Item("Zoom extents",()=>{
+                var view=ViewportLayout.Create(Math.Max(1,(int)ActualWidth),Math.Max(1,(int)ActualHeight),Canvas.Cameras,Canvas.Maximized).Single(v=>v.Name==name);
+                if(view.Width>0&&view.Height>0)ViewportNavigation.Fit(view.Camera,Canvas.Scene.Bounds,view.Width,view.Height);
+                Canvas.Invalidate();_overlay.Invalidate();
+            });
             foreach(var mode in Enum.GetValues<DisplayMode>())Item(mode.ToString(),()=>{Canvas.Scene.Mode=mode;Canvas.Invalidate();});
             drop.Flyout=menu;var group=new StackPanel{Orientation=Orientation.Horizontal,Background=ClassicChrome.Background};group.Children.Add(title);group.Children.Add(drop);_titleGroups[name]=group;_headers.Children.Add(group);
         }

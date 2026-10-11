@@ -34,7 +34,8 @@ public sealed class WorkspaceView : UserControl,IDisposable
     private readonly ColumnDefinition _inspectorColumn=new(){Width=new GridLength(250)};
     private readonly Border _graphGrip=new(){Background=ClassicChrome.Brush(165,168,169)};
     private readonly Dictionary<string,Button> _viewportTabs=[];
-    private bool _disposed,_graphVisible=true,_ownsController;
+    private bool _disposed,_graphVisible=true,_ownsController,_fitAfterLayout;
+    private bool? _effectiveRight;
     private long _savedDocument=-1,_savedGraph=-1;
     private const string PreferenceKey="NurbsScene.Workspace.Layout.v1";
     public WorkspaceView(WorkspaceController? controller=null)
@@ -78,6 +79,7 @@ public sealed class WorkspaceView : UserControl,IDisposable
         Viewport.Canvas.ConstructionPointPicked+=p=>{try{Controller.AcceptPoint(p);}catch(Exception error){Console.WriteLine(error.Message);Controller.CancelCommand();}};
         Viewport.Canvas.CursorMoved+=hit=>_coordinates.Text=hit is null?"World":FormattableString.Invariant($"World  x {hit.Point.X:0.000}  y {hit.Point.Y:0.000}  z {hit.Point.Z:0.000}  {hit.Snap}");
         Viewport.Canvas.DiagnosticsChanged+=text=>{Console.WriteLine(text);Refresh();};Viewport.Canvas.LayoutChanged+=Refresh;
+        GraphEditor.Canvas.SizeChanged+=(_,_)=>{if(_fitAfterLayout&&GraphEditor.Canvas.ActualWidth>120&&GraphEditor.Canvas.ActualHeight>80){_fitAfterLayout=false;GraphEditor.Canvas.Fit();}};
         SizeChanged+=(_,_)=>ApplyLayout();Loaded+=(_,_)=>{ApplyLayout();GraphEditor.Canvas.Fit();Viewport.Canvas.Fit();};
         var save=new KeyboardAccelerator{Key=VirtualKey.S,Modifiers=VirtualKeyModifiers.Control};save.Invoked+=(sender,e)=>{_ =SafeAsync(SaveAsync);e.Handled=true;};KeyboardAccelerators.Add(save);
         foreach(var key in new[]{VirtualKey.F2,VirtualKey.F7,VirtualKey.F8,VirtualKey.F9}){var accelerator=new KeyboardAccelerator{Key=key};accelerator.Invoked+=(_,e)=>{if(key==VirtualKey.F2)Console.BeginCommand("");else if(key==VirtualKey.F7){Controller.Scene.ShowGrid=!Controller.Scene.ShowGrid;Refresh();}else if(key==VirtualKey.F8){Aids.Ortho=!Aids.Ortho;UpdateAids();}else{Aids.GridSnap=!Aids.GridSnap;UpdateAids();}e.Handled=true;};KeyboardAccelerators.Add(accelerator);}
@@ -91,8 +93,11 @@ public sealed class WorkspaceView : UserControl,IDisposable
     private void ApplyLayout()
     {
         _graphVisible=Preferences.DefinitionVisible;GraphEditor.Visibility=_graphVisible?Visibility.Visible:Visibility.Collapsed;_graphGrip.Visibility=GraphEditor.Visibility;
-        _inspectorColumn.Width=Preferences.InspectorVisible&&ActualWidth>=1050?new GridLength(250):new GridLength(0);
+        var showInspector=Preferences.InspectorVisible&&ActualWidth>=1050;
+        _inspectorColumn.Width=showInspector?new GridLength(250):new GridLength(0);
+        Inspector.Visibility=showInspector?Visibility.Visible:Visibility.Collapsed;
         var right=Preferences.Dock=="Right"&&ActualWidth>=1100;
+        if(_effectiveRight!=right){_effectiveRight=right;_fitAfterLayout=true;}
         for(var i=0;i<3;i++){_workspace.ColumnDefinitions[i].Width=new GridLength(i==0?1:0,GridUnitType.Star);_workspace.RowDefinitions[i].Height=new GridLength(i==0?1:0,GridUnitType.Star);}
         Grid.SetRow(_graphGrip,right?0:1);Grid.SetColumn(_graphGrip,right?1:0);Grid.SetRow(GraphEditor,right?0:2);Grid.SetColumn(GraphEditor,right?2:0);
         if(_graphVisible)

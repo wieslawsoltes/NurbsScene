@@ -63,7 +63,7 @@ public sealed class GraphEditorControl : Grid,IDisposable
         _search.TextChanged+=(_,_)=>{if(Session is null)return;var query=_search.Text.Trim();_search.ItemsSource=Session.Graph.Registry.Definitions.Where(d=>d.Id.Contains(query,StringComparison.OrdinalIgnoreCase)||d.Category.Contains(query,StringComparison.OrdinalIgnoreCase)).Take(30).Select(d=>d.Id).ToArray();};
         _search.QuerySubmitted+=(_,e)=>{var id=e.ChosenSuggestion?.ToString()??_search.Text.Trim();AddComponent(id);};
         Shelf.ComponentRequested+=AddComponent;
-        Canvas.SelectionChanged+=RefreshInspector;Canvas.SearchRequested+=()=>_search.Focus(FocusState.Programmatic);Canvas.Message+=Report;Canvas.ViewChanged+=UpdateStatus;
+        Canvas.SelectionChanged+=()=>{RefreshInspector();UpdateStatus();};Canvas.SearchRequested+=()=>_search.Focus(FocusState.Programmatic);Canvas.Message+=Report;Canvas.ViewChanged+=UpdateStatus;
         SizeChanged+=(_,_)=>SizeInspector();
     }
     private void AddComponent(string id)
