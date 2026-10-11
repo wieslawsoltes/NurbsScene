@@ -165,5 +165,17 @@ Test("port hit-test rejects nonfinite inputs without fabricated hits",()=>{
     Throws<ArgumentOutOfRangeException>(()=>GraphHitTesting.PortAt(d,new(0,0),double.PositiveInfinity));
     Check(GraphHitTesting.PortAt(d,new(0,0),9) is null);
 });
+Test("selection windows enclose complete nodes in either vertical direction",()=>{
+    var(g,a,b,c)=Chain();var drawing=new GraphPresentation().Get(g);
+    foreach(var pair in new[]{(new CanvasPoint(-20,-20),new CanvasPoint(900,400)),(new CanvasPoint(-20,400),new CanvasPoint(900,-20))})
+        Check(GraphSelection.InRectangle(drawing,pair.Item1,pair.Item2).SequenceEqual(new[]{a.Id,b.Id,c.Id}));
+    Check(GraphSelection.InRectangle(drawing,new(15,35),new(201,79)).SequenceEqual(new[]{a.Id}));
+});
+Test("crossing selection intersects while window selection requires containment",()=>{
+    var(g,a,b,c)=Chain();var drawing=new GraphPresentation().Get(g);
+    Check(GraphSelection.InRectangle(drawing,new(30,45),new(40,50)).IsEmpty);
+    Check(GraphSelection.InRectangle(drawing,new(40,45),new(30,50)).SequenceEqual(new[]{a.Id}));
+    Throws<ArgumentException>(()=>GraphSelection.InRectangle(drawing,new(double.NaN,0),new(10,10)));
+});
 var failed=0;foreach(var(name,run)in tests)try{run();Console.WriteLine("PASS "+name);}catch(Exception error){failed++;Console.WriteLine("FAIL "+name+"\n"+error);}
 Console.WriteLine(JsonSerializer.Serialize(new{suite="editing",total=tests.Count,passed=tests.Count-failed,failed}));return failed==0?0:1;

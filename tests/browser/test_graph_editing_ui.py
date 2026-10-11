@@ -31,6 +31,7 @@ async def verify_graph_editing_ui(page):
     def check(value,name):
         if not value:raise AssertionError(name)
         checks.append(name)
+        print("EDIT CHECK "+name,flush=True)
     await click('GraphDockBottom');await click('GraphFit');await page.wait_for_timeout(250)
     baseline=await read();count=baseline['state']['nodeCount'];wires=baseline['state']['wireCount']
     old_ids={n['id'] for n in baseline['nodes']}
@@ -63,6 +64,7 @@ async def verify_graph_editing_ui(page):
     checks.append('Native Arrange menu aligns the real node positions')
     await click('GraphUndo');await click('GraphFit')
     data=await read();box=data['controls']['GraphCanvas']
+    (ROOT/'evidence/marquee-before.json').write_text(json.dumps(data,indent=2))
     await drag((box['x']+6,box['y']+6),(box['x']+box['width']-6,box['y']+box['height']-6))
     await wait(f'globalThis.nurbsSceneUi.state.graphSelected.length==={count}')
     checks.append('Left-drag window selection selects enclosed components')

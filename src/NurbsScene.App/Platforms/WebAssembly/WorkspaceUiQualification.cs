@@ -24,6 +24,7 @@ public partial class App
         var watch=Stopwatch.StartNew();var drawing=new GraphPresentation();
         try
         {
+            view.GraphEditor.Canvas.ObservePointerEvents=true;
             view.SetPreferences(new(),false);controller.Scene.ShowGrid=true;controller.Scene.ShowIsocurves=true;
             view.Viewport.Canvas.RestoreFourViews();view.Viewport.Canvas.Fit();view.GraphEditor.Canvas.Fit();
             view.Console.ClearHistory();view.Console.WriteLine("NurbsScene — independent NURBS modeling and visual programming");
@@ -76,6 +77,7 @@ public partial class App
                     selected=controller.Document.Selection.Count,documentRevision=controller.Document.Revision,
                     nodeCount=controller.Graph.Nodes.Count,wireCount=controller.Graph.Wires.Count,graphRevision=controller.Graph.Revision,
                     graphFocus=graph.FocusState.ToString(),focusedElement=Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(view.XamlRoot)?.GetType().FullName,
+                    pointerObservations=graph.PointerObservations,
                     graphSelected=graph.Selection.ToArray(),graphUndo=controller.GraphSession.CanUndo,graphRedo=controller.GraphSession.CanRedo,
                     graphErrors=controller.Graph.LastResult?.ErrorCount??0,graphLayoutBuilds=graph.LayoutBuilds,graphPathBuilds=graph.PathBuilds,
                     meshBuilds=controller.Scene.MeshBuildCount,layerStructureChanges=view.Inspector.LayerStructureChanges,
@@ -87,6 +89,7 @@ public partial class App
                     gpuError=cad.LastError,workspaceWidth=view.ActualWidth,workspaceHeight=view.ActualHeight}};
                 PublishUi(snapshot);await Task.Delay(120);
             }
+            view.GraphEditor.Canvas.ObservePointerEvents=false;
             controller.Load(source);controller.Scene.ShowGrid=true;controller.Scene.ShowIsocurves=true;
             view.SetPreferences(preferences,false);view.Aids.GridSnap=false;view.Aids.Ortho=false;view.Aids.EndSnap=false;
             view.Viewport.Canvas.RestoreFourViews();view.Viewport.Canvas.Fit();view.GraphEditor.Canvas.Fit();

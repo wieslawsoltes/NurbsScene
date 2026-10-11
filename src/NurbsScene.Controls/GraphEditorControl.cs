@@ -158,7 +158,7 @@ public sealed partial class GraphEditorControl : Grid,IDisposable
     }
     private void RefreshResult()
     {
-        if(_inspectorNode is null||Session?.Graph.LastResult?.Nodes.TryGetValue(_inspectorNode,out var result)!=true||ReferenceEquals(_shownResult,result))return;
+        if(_inspectorNode is null||Session?.Graph.LastResult is not{} last||!last.Nodes.TryGetValue(_inspectorNode,out var result)||ReferenceEquals(_shownResult,result))return;
         _shownResult=result;_resultPanel.Children.Clear();
         void ResultLine(string text)=>_resultPanel.Children.Add(new TextBlock{Text=text,FontSize=11,TextWrapping=TextWrapping.Wrap});
         ResultLine($"{result.Status} · {result.Milliseconds:F3} ms");
