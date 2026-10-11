@@ -19,3 +19,6 @@ test-results/
 /section-benchmark.json
 /tests/fixtures/areas-scipy.json
 /analysis-benchmark.json
+
+/presentation-benchmark.json
+/drawing-cache.json

@@ -1,0 +1,31 @@
+name: Workspace presentation and input contracts
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  presentation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      DOTNET_TieredCompilation: '0'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Presentation, construction and input regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/presentation
+          dotnet run --project tests/dotnet/NurbsScene.PresentationContracts -c Release 2>&1 | tee artifacts/presentation/contracts.log
+          dotnet run --project tests/presentation-performance -c Release -- artifacts/presentation/drawing-cache.json
+          git rev-parse HEAD HEAD^{tree} > artifacts/presentation/tested-revision.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: presentation-${{ github.run_id }}
+          path: artifacts/presentation/

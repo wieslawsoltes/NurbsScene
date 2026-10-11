@@ -8,6 +8,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../NurbsScene.Workbench/NurbsScene.Workbench.csproj" />
+    <ProjectReference Include="../NurbsScene.Presentation/NurbsScene.Presentation.csproj" />
     <PackageReference Include="Uno.WinUI.Graphics3DGL" Version="6.7.135" Condition="'$(TargetFramework)'=='net10.0-browserwasm'" />
   </ItemGroup>
 </Project>

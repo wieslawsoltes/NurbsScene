@@ -5,6 +5,7 @@ No GPU mocks or skip-on-unavailable behavior. Browser logs are retained on failu
 import argparse,asyncio,json,os
 from pathlib import Path
 from playwright.async_api import async_playwright
+from test_workspace_ui import verify_workspace_ui
 ROOT=Path(__file__).resolve().parents[2]
 async def main(url):
  (ROOT/'evidence').mkdir(exist_ok=True)
@@ -24,6 +25,8 @@ async def main(url):
    if report.get('application')!='Uno Platform' or report.get('status')!='passed' or errors:
     raise AssertionError(json.dumps(report,indent=2))
    print(json.dumps(report,indent=2))
+   await verify_workspace_ui(page)
+   if errors: raise AssertionError(errors)
   finally:
    await page.screenshot(path=str(ROOT/'evidence/uno-browser.png'))
    (ROOT/'evidence/uno-console.json').write_text(json.dumps({'errors':errors,'console':logs},indent=2))
