@@ -1,0 +1,52 @@
+name: Geometry query and performance contracts
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      DOTNET_TieredCompilation: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Generate independent closest-point references
+        run: |
+          python -m pip install 'numpy>=1.26,<3' 'scipy>=1.12,<2'
+          mkdir -p tests/fixtures artifacts/performance
+          python tools/generate-length-oracle.py
+          python tools/generate-query-oracle.py
+      - name: Run correctness and structural performance contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet run --project tests/dotnet/NurbsScene.PerformanceContracts -c Release 2>&1 | tee artifacts/performance/contracts.log
+          dotnet run --project tests/dotnet/NurbsScene.QueryContracts -c Release 2>&1 | tee artifacts/performance/queries.log
+      - name: Measure identical harness on baseline and candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          baseline="$RUNNER_TEMP/nurbsscene-baseline"
+          git worktree add --detach "$baseline" f0bd8e33f4a70c52a6865697baae126d2bc9ee9e
+          mkdir -p "$baseline/tests/performance"
+          cp tests/performance/*.cs tests/performance/*.csproj "$baseline/tests/performance/"
+          dotnet run --project "$baseline/tests/performance" -c Release -- "$GITHUB_WORKSPACE/artifacts/performance/baseline.json"
+          dotnet run --project tests/performance -c Release -- "$GITHUB_WORKSPACE/artifacts/performance/candidate.json"
+          git rev-parse HEAD HEAD^{tree} > artifacts/performance/tested-revision.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: geometry-performance-${{ github.run_id }}
+          path: artifacts/performance/
