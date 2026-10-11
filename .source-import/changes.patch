@@ -1,0 +1,161 @@
+diff --git a/NurbsScene.slnx b/NurbsScene.slnx
+index e9e83034c5c77c7cf9d989caec592abcccdfde14..566be15dcd8949c4a9ddedc35fd6b244d5e1253c 100644
+--- a/NurbsScene.slnx
++++ b/NurbsScene.slnx
+@@ -10,4 +10,7 @@
+   <Project Path="src/NurbsScene.Workbench/NurbsScene.Workbench.csproj" />
+   <Project Path="tests/dotnet/NurbsScene.CoreTests/NurbsScene.CoreTests.csproj" />
+   <Project Path="tests/dotnet/NurbsScene.IntegrationTests/NurbsScene.IntegrationTests.csproj" />
++  <Project Path="tests/dotnet/NurbsScene.MeasurementTests/NurbsScene.MeasurementTests.csproj" />
++  <Project Path="tests/dotnet/NurbsScene.WorkbenchTests/NurbsScene.WorkbenchTests.csproj" />
++  <Project Path="tests/dotnet/NurbsScene.SurfaceContracts/NurbsScene.SurfaceContracts.csproj" />
+ </Solution>
+diff --git a/src/NurbsScene.App/Platforms/WebAssembly/BrowserQualification.cs b/src/NurbsScene.App/Platforms/WebAssembly/BrowserQualification.cs
+index e29994775dad7c130b66e274563a90a1ec5df3c0..93be79e98dddf762202dd519e79e9e0fc190f760 100644
+--- a/src/NurbsScene.App/Platforms/WebAssembly/BrowserQualification.cs
++++ b/src/NurbsScene.App/Platforms/WebAssembly/BrowserQualification.cs
+@@ -37,7 +37,8 @@ public partial class App
+         {
+             var controller=view.Controller;var canvas=view.Viewport.Canvas;
+             await Wait(()=>canvas.Frames>0||canvas.LastError is not null,"Uno GPU canvas did not initialize.");
+-            Check(canvas.LastError is null&&canvas.Frames>0,"Uno created a GPU context and submitted a frame");
++            report["gpuBackend"]=canvas.Backend;report["lastGpuError"]=canvas.LastError;
++            Check(canvas.LastError is null&&canvas.Frames>0,"Uno created a GPU context and submitted a frame: "+canvas.LastError);
+             await Wait(()=>controller.Graph.LastResult is {Stale:false} r&&r.Revision==controller.Graph.Revision,"Parametric solution did not settle.");
+             Check(controller.Graph.LastResult!.ErrorCount==0,"Managed pavilion graph solved without errors");
+             var count=controller.Document.Objects.Count;
+diff --git a/src/NurbsScene.Controls/CadViewport.cs b/src/NurbsScene.Controls/CadViewport.cs
+index 9d11d3d77e223e1812518d328748665d148b0f55..ad971e9df1187e5b40a51c40a57f983c1293aa6a 100644
+--- a/src/NurbsScene.Controls/CadViewport.cs
++++ b/src/NurbsScene.Controls/CadViewport.cs
+@@ -35,15 +35,15 @@ public sealed class CadViewport : GLCanvasElement
+         IsTabStop=true;SizeChanged+=(_,_)=>Invalidate();
+         PointerPressed+=Pressed;PointerMoved+=Moved;PointerReleased+=Released;PointerCanceled+=(_,e)=>{_gesture="";ReleasePointerCapture(e.Pointer);};
+         PointerWheelChanged+=Wheel;DoubleTapped+=(_,e)=>{var view=At(e.GetPosition(this));if(view is not null)Maximize(view.Name);e.Handled=true;};
+-        RegisterPropertyChangedCallback(IsGLInitializedProperty,(_,_)=>{if(IsLoaded&&IsGLInitialized==false)Report("Uno could not initialize a GPU context. No substitute renderer is active.");});
++        RegisterPropertyChangedCallback(IsGLInitializedProperty,(_,_)=>{if(IsLoaded&&IsGLInitialized==false&&LastError is null)Report("Uno could not initialize a GPU context. No substitute renderer is active.");});
+     }
+     public ViewportRectangle[] Viewports=>ViewportLayout.Create(_pixelWidth,_pixelHeight,Cameras,Maximized);
+     public void Maximize(string name){Maximized=Maximized==name?null:name;LayoutChanged?.Invoke();Invalidate();}
+     public void Fit(){foreach(var camera in Cameras.Values)camera.Fit(Scene.Bounds);if(!Scene.Bounds.IsEmpty)Scene.Rebase(Scene.Bounds.Center);Invalidate();}
+-    private void Report(string text){LastError=text;DiagnosticsChanged?.Invoke(text);}
++    private void Report(string text){LastError=text;System.Console.Error.WriteLine("NURBSSCENE_GL: "+text);DiagnosticsChanged?.Invoke(text);}
+     protected override void Init(GL gl)
+     {
+-        try{_renderer=new(gl);LastError=null;DiagnosticsChanged?.Invoke(_renderer.Backend);}
++        try{UnoGlReadback.Configure(this);_renderer=new(gl);LastError=null;DiagnosticsChanged?.Invoke(_renderer.Backend);}
+         catch(Exception error){Report(error.Message);throw;}
+     }
+     protected override unsafe void RenderOverride(GL gl)
+diff --git a/src/NurbsScene.Controls/UnoGlReadback.cs b/src/NurbsScene.Controls/UnoGlReadback.cs
+new file mode 100644
+index 0000000000000000000000000000000000000000..ab8e8c8d7e24918f123ad7edf045b5679e0bf2f5
+--- /dev/null
++++ b/src/NurbsScene.Controls/UnoGlReadback.cs
+@@ -0,0 +1,26 @@
++using System.Diagnostics.CodeAnalysis;
++using System.Reflection;
++using Uno.WinUI.Graphics3DGL;
++
++namespace NurbsScene.Controls;
++
++/// <summary>Compatibility boundary for the pinned Uno 6.7.135 browser package.
++/// Native GLES resolution does not implement Uno's JavaScript BGRA translation.
++/// Use Uno's existing RGBA readback and explicit channel-conversion path instead.
++/// No GPU drawing, shader, or context fallback is substituted.</summary>
++internal static class UnoGlReadback
++{
++    [DynamicDependency(DynamicallyAccessedMemberTypes.NonPublicFields, typeof(GLCanvasElement))]
++    public static void Configure(GLCanvasElement canvas)
++    {
++        if (!OperatingSystem.IsBrowser()) return;
++        // Called from Init, after Uno chooses its default and also on reload or
++        // deferred initial layout. A Loaded-only hook misses deferred Init.
++        var field = typeof(GLCanvasElement).GetField("_readbackAsRgbaWithSwap",
++            BindingFlags.Instance | BindingFlags.NonPublic);
++        if (field?.FieldType != typeof(bool))
++            throw new NotSupportedException("Uno's pinned readback contract changed; requalify the RGBA adapter before updating the package.");
++        field.SetValue(canvas, true);
++        Console.WriteLine("NURBSSCENE_READBACK: RGBA with framework red/blue conversion");
++    }
++}
+diff --git a/src/NurbsScene.Rendering/GlRenderer.cs b/src/NurbsScene.Rendering/GlRenderer.cs
+index b58b0f07f2a116ee673a08748cacaacc4889b30b..c1d3e9cc76946cb24b42bffb3c31c6a357232ca4 100644
+--- a/src/NurbsScene.Rendering/GlRenderer.cs
++++ b/src/NurbsScene.Rendering/GlRenderer.cs
+@@ -21,6 +21,7 @@ public sealed unsafe class GlRenderer : IDisposable
+     private int _width, _height;
+     private bool _disposed;
+     public long Frames { get; private set; }
++    public int InheritedErrorCount { get; private set; }
+     public string Backend { get; }
+     public int TriangleCount { get; private set; }
+     public int LineCount { get; private set; }
+@@ -32,8 +33,12 @@ public sealed unsafe class GlRenderer : IDisposable
+     public GlRenderer(GL gl)
+     {
+         _gl = gl;
+-        _es = gl.GetStringS(StringName.ShadingLanguageVersion).Contains("OpenGL ES", StringComparison.OrdinalIgnoreCase);
+-        Backend = $"{gl.GetStringS(StringName.Version)} / {gl.GetStringS(StringName.Renderer)}";
++        ObserveInheritedErrors("initialization");
++        var shadingVersion = gl.GetStringS(StringName.ShadingLanguageVersion);
++        _es = OperatingSystem.IsBrowser() || shadingVersion.Contains("GLSL ES", StringComparison.OrdinalIgnoreCase) || shadingVersion.Contains("OpenGL ES", StringComparison.OrdinalIgnoreCase);
++        // Some GLES/WASM resolvers translate GL_RENDERER to an unmasked query.
++        // Do not demand the optional debug extension for normal drawing.
++        Backend = OperatingSystem.IsBrowser() ? $"WebGL2 / {shadingVersion}" : $"{gl.GetStringS(StringName.Version)} / {gl.GetStringS(StringName.Renderer)}";
+         using var state = new HostState(gl, _es);
+         try
+         {
+@@ -52,6 +57,19 @@ public sealed unsafe class GlRenderer : IDisposable
+         }
+     }
+ 
++    private void ObserveInheritedErrors(string boundary)
++    {
++        // GL error flags belong to the shared context, not a canvas instance.
++        // Attribute pre-existing host errors before issuing our own commands.
++        for (var i = 0; i < 8; i++)
++        {
++            var error = _gl.GetError(); if (error == GLEnum.NoError) return;
++            InheritedErrorCount++;
++            if (InheritedErrorCount <= 8) Console.Error.WriteLine($"NURBSSCENE_GL_HOST: {error} before {boundary}.");
++            if ((uint)error == 0x0507) throw new InvalidOperationException("The host GL context was lost.");
++        }
++        throw new InvalidOperationException("Host GL errors did not drain within the boundary budget.");
++    }
+     private static string Resource(string name)
+     {
+         var assembly = typeof(GlRenderer).Assembly;
+@@ -159,6 +177,7 @@ public sealed unsafe class GlRenderer : IDisposable
+     {
+         ObjectDisposedException.ThrowIf(_disposed, this);
+         if (width < 1 || height < 1) return;
++        ObserveInheritedErrors("frame submission");
+         using var host = new HostState(_gl, _es);
+         Resize(width, height); Synchronize(scene); TriangleCount = 0; LineCount = 0;
+         _gl.BindFramebuffer(FramebufferTarget.Framebuffer, _framebuffer);
+@@ -206,6 +225,7 @@ public sealed unsafe class GlRenderer : IDisposable
+         _gl.ActiveTexture(TextureUnit.Texture0); _gl.BindTexture(TextureTarget.Texture2D, _colorTexture);
+         _gl.BindSampler(0, 0);
+         _gl.Uniform1(_gl.GetUniformLocation(_compose.Id, "scene"), 0); _gl.BindVertexArray(_composeVao); _gl.DrawArrays(PrimitiveType.Triangles, 0, 3);
++        host.Dispose();
+         var error = _gl.GetError(); if (error != GLEnum.NoError) throw new InvalidOperationException($"GPU submission failed: {error}.");
+         Frames++;
+     }
+@@ -230,7 +250,7 @@ public sealed unsafe class GlRenderer : IDisposable
+     }
+     private sealed class HostState : IDisposable
+     {
+-        private readonly GL _gl; private readonly bool _es;
++        private readonly GL _gl; private readonly bool _es; private bool _restored;
+         private readonly Dictionary<GetPName, int> _integers = [];
+         private readonly Dictionary<EnableCap, bool> _enabled = [];
+         private readonly float[] _clear = new float[4]; private readonly int[] _colorMask = new int[4]; private readonly int[] _scissor = new int[4];
+@@ -247,6 +267,7 @@ public sealed unsafe class GlRenderer : IDisposable
+         }
+         public void Dispose()
+         {
++            if (_restored) return; _restored = true;
+             _gl.BindFramebuffer(FramebufferTarget.ReadFramebuffer, (uint)_integers[GetPName.ReadFramebufferBinding]); _gl.BindFramebuffer(FramebufferTarget.DrawFramebuffer, (uint)DrawFramebuffer);
+             _gl.BindRenderbuffer(RenderbufferTarget.Renderbuffer, (uint)_integers[GetPName.RenderbufferBinding]); _gl.BindVertexArray((uint)_integers[GetPName.VertexArrayBinding]); _gl.BindBuffer(BufferTargetARB.ArrayBuffer, (uint)_integers[GetPName.ArrayBufferBinding]); _gl.UseProgram((uint)_integers[GetPName.CurrentProgram]);
+             _gl.ActiveTexture(TextureUnit.Texture0); _gl.BindTexture(TextureTarget.Texture2D, (uint)_texture0); _gl.BindSampler(0, (uint)_sampler0); _gl.ActiveTexture((TextureUnit)_integers[GetPName.ActiveTexture]);

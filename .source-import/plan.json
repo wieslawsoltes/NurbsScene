@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "baseCommit": "5b582b12e1e7a031fba1ed55d120f7619fda7206",
+  "patchSha256": "259deeeff0afc8191f7e58ea5b238ffab64848d71bee4e34ecae92364a0a6512",
+  "newFiles": {},
+  "changedFiles": {
+    "src/NurbsScene.Controls/CadViewport.cs": {"before":"6c7676b1d922f5722a1cebed13fde852f41e19472b38516a2cd534b04dcb659c","after":"bf0668b5748635aadee28abed8039e74ff1d59903def593cb0f811a6b2d9b0f0"},
+    "src/NurbsScene.Rendering/GlRenderer.cs": {"before":"6eafd82b3cdb3ad3f94116e99f031ef25299af86a5a17c81ec5feb6160965ef9","after":"e76ae4e27a6bb53e1aed6988c9752fa770ae73eb0a95ad4641a28d50424a34d9"},
+    "src/NurbsScene.App/Platforms/WebAssembly/BrowserQualification.cs": {"before":"70644eacfd1fa75be2e95657b77f7899c3c93537ca58b835a51335b4b06c80db","after":"4b53238c5e4bf7c8faa82ac7ee834b8d4b986e32bf5bdd2c12611c494b9f2e0d"},
+    "NurbsScene.slnx": {"before":"7ce2b031a7a81e16e4fb6582ab512462f7401286b05f77ea51e6329813d7b342","after":"98813981e7ea978c1c3d9f10041129c08c874da6ac0855e233298ad86cdc8933"},
+    "src/NurbsScene.Controls/UnoGlReadback.cs": {"before":null,"after":"c226f1cdefc897e7cab7c2e032e6107120fbfd40f4b0e4e9ab204de43fc20381"}
+  }
+}
