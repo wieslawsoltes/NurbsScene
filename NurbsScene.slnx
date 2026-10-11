@@ -13,4 +13,5 @@
   <Project Path="tests/dotnet/NurbsScene.MeasurementTests/NurbsScene.MeasurementTests.csproj" />
   <Project Path="tests/dotnet/NurbsScene.WorkbenchTests/NurbsScene.WorkbenchTests.csproj" />
   <Project Path="tests/dotnet/NurbsScene.SurfaceContracts/NurbsScene.SurfaceContracts.csproj" />
+  <Project Path="tests/dotnet/NurbsScene.GraphContracts/NurbsScene.GraphContracts.csproj" />
 </Solution>

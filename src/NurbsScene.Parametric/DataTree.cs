@@ -2,7 +2,7 @@ using System.Collections.Immutable;
 
 namespace NurbsScene.Parametric;
 
-public sealed class DataPath : IComparable<DataPath>,IEquatable<DataPath>
+public sealed partial class DataPath : IComparable<DataPath>,IEquatable<DataPath>
 {
     public ImmutableArray<int> Indices { get; }
     public static DataPath Root { get; }=new([0]);
@@ -16,7 +16,7 @@ public sealed class DataPath : IComparable<DataPath>,IEquatable<DataPath>
 }
 public sealed record DataBranch(DataPath Path,ImmutableArray<object?> Items);
 /// <summary>Immutable branches with numeric lexicographic path ordering. Branch matching is explicitly defined by Graph, not claimed to match all Grasshopper cases.</summary>
-public sealed class DataTree
+public sealed partial class DataTree
 {
     public ImmutableArray<DataBranch> Branches { get; }
     public int ItemCount { get; }
@@ -24,7 +24,7 @@ public sealed class DataTree
     public DataTree(IEnumerable<DataBranch> branches)
     {
         var map=new SortedDictionary<DataPath,List<object?>>();var count=0;
-        foreach(var branch in branches){if(!map.TryGetValue(branch.Path,out var items))map.Add(branch.Path,items=[]);items.AddRange(branch.Items);count+=branch.Items.Length;if(count>1_000_000)throw new ArgumentException("Data tree item budget exceeded.");}
+        foreach(var branch in branches){ArgumentNullException.ThrowIfNull(branch);ArgumentNullException.ThrowIfNull(branch.Path);if(!map.TryGetValue(branch.Path,out var items)){if(map.Count>=100_000)throw new ArgumentException("Data tree branch budget exceeded.");map.Add(branch.Path,items=[]);}items.AddRange(branch.Items);count+=branch.Items.Length;if(count>1_000_000)throw new ArgumentException("Data tree item budget exceeded.");}
         Branches=map.Select(kv=>new DataBranch(kv.Key,kv.Value.ToImmutableArray())).ToImmutableArray();ItemCount=count;
     }
     public static DataTree Item(object? value,DataPath? path=null)=>new([new(path??DataPath.Root,[value])]);

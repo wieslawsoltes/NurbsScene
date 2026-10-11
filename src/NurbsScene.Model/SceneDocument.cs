@@ -53,7 +53,7 @@ public sealed class SceneDocument
     {
         var objects=ids.Distinct().Select(GetObject).ToArray();if(objects.Length==0)return;if(objects.Any(o=>o.Locked||GetLayer(o.LayerId).Locked))throw new InvalidOperationException("Locked objects cannot be deleted.");foreach(var o in objects){_objects.Remove(o.Id);_selection.Remove(o.Id);}Notify("delete");
     }
-    public void Select(IEnumerable<string> ids,bool add=false){var objects=ids.Select(GetObject).ToArray();if(!add)_selection.Clear();foreach(var o in objects.Where(CanEdit))_selection.Add(o.Id);Changed?.Invoke(new("selection",Revision));}
+    public void Select(IEnumerable<string> ids,bool add=false){var objects=ids.Select(GetObject).ToArray();if(!add)_selection.Clear();foreach(var o in objects.Where(CanEdit))_selection.Add(o.Id);if(!_inTransaction)Changed?.Invoke(new("selection",Revision));}
     public SceneObject[] Transform(IEnumerable<string> ids,Transform3 transform,bool copy=false)
     {
         var objects=ids.Distinct().Select(GetObject).ToArray();if(copy&&(long)_objects.Count+objects.Length>100000)throw new InvalidOperationException("Object budget exceeded.");if(objects.Any(o=>!CanEdit(o)))throw new InvalidOperationException("Some selected objects are locked or hidden.");var prepared=objects.Select(o=>(Object:o,Geometry:o.Geometry.Transform(transform))).ToArray();var result=new List<SceneObject>();foreach(var(o,geometry)in prepared){var next=o with{Geometry=geometry};if(copy)next=Add(geometry,o.Name,o.LayerId,color:o.Color,source:o.Source);else Update(next);result.Add(next);}return result.ToArray();

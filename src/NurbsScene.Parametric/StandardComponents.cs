@@ -71,6 +71,7 @@ public static class StandardComponents
         Add("BoundingBox","Display",[P("G",ValueKind.Geometry)],[P("Min",ValueKind.Point),P("Max",ValueKind.Point),P("Center",ValueKind.Point)],c=>{var b=c.Get<IGeometry>("G").Bounds;return Out(("Min",b.Min),("Max",b.Max),("Center",b.Center));});
         Add("Preview","Display",[P("G",access:PortAccess.Tree)],[P("G",access:PortAccess.Tree)],c=>Out(("G",c.Get<DataTree>("G"))));
         GeometryComponents.Register(registry);
+        TreeComponents.Register(registry);
         return registry;
     }
 }

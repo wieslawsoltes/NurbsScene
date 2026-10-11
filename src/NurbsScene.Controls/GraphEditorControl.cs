@@ -71,6 +71,14 @@ public sealed class GraphEditorControl : Grid,IDisposable
             {
                 var p=value is Vec3 vector?vector:Vec3.Zero;var text=new TextBox{Text=string.Join(',',p.ToArray().Select(x=>x.ToString("R",CultureInfo.InvariantCulture))),FontSize=12};text.LostFocus+=(_,_)=>Edit("Set vector input",g=>{var a=text.Text.Split(',').Select(s=>double.Parse(s,CultureInfo.InvariantCulture)).ToArray();if(a.Length!=3)throw new ArgumentException("Enter x,y,z.");var n=g.GetNode(node.Id);g.Update(n with{Parameters=n.Parameters.SetItem(key,new Vec3(a[0],a[1],a[2]))});});_inspector.Children.Add(text);
             }
+            else if(port.Kind==ValueKind.Path&&port.Access==PortAccess.Item)
+            {
+                var text=new TextBox{Text=(value as DataPath??DataPath.Root).ToString(),PlaceholderText="{0;2;10}",FontSize=12};
+                AutomationProperties.SetName(text,$"{port.Name} data path");
+                AutomationProperties.SetAutomationId(text,$"PathInput_{port.Name}");
+                text.LostFocus+=(_,_)=>Edit("Set path input",g=>{var path=DataPath.Parse(text.Text);var n=g.GetNode(node.Id);g.Update(n with{Parameters=n.Parameters.SetItem(key,path)});});
+                _inspector.Children.Add(text);
+            }
             else Label("Connect a compatible component output.");
         }
         if(Session.Graph.LastResult?.Nodes.TryGetValue(node.Id,out var result)==true){Label($"{result.Status} · {result.Milliseconds:F3} ms");foreach(var message in result.Messages)Label(message);foreach(var (port,tree) in result.Outputs)Label($"{port}: {tree.ItemCount} items in {tree.Branches.Length} branches");}

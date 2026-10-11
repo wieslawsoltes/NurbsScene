@@ -18,7 +18,7 @@ public static class ParameterValues
             case double d when double.IsFinite(d):return d;
             case string text when text.Length<=1_000_000:return text;
             case Vec3 vector when vector.IsFinite:return vector;
-            case NurbsCurve or NurbsSurface or IImmutableGraphValue:return value;
+            case NurbsCurve or NurbsSurface or DataPath or IImmutableGraphValue:return value;
             case DataTree tree:return new DataTree(tree.Branches.Select(b=>new DataBranch(b.Path,b.Items.Select(v=>FreezeValue(v,depth+1)).ToImmutableArray())));
             case IReadOnlyDictionary<string,object?> map:return map.ToImmutableDictionary(kv=>kv.Key,kv=>FreezeValue(kv.Value,depth+1));
             case System.Collections.IEnumerable sequence:

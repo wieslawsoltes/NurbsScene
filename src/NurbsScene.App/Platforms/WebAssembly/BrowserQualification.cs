@@ -5,6 +5,9 @@ using System.Text.Json;
 using NurbsScene.Controls;
 using NurbsScene.Geometry;
 using NurbsScene.Rendering;
+using NurbsScene.Parametric;
+using NurbsScene.IO;
+using NurbsScene.Model;
 
 namespace NurbsScene.App;
 
@@ -56,6 +59,18 @@ public partial class App
             var json=controller.Save();controller.Load(json);
             Check(controller.Document.Objects.Count==count,"Exact managed workspace round trip");
             await Wait(()=>controller.Graph.LastResult is {Stale:false} r&&r.Revision==controller.Graph.Revision,"Reloaded definition did not settle.");
+            // Exercise typed path editing and persistent tree/empty branch handling
+            // on the real managed WebAssembly runtime, independently of native tests.
+            var paths=new Graph(controller.Registry);
+            var tree=new DataTree([new(DataPath.Parse("{2;3}"),[1d,null,2d]),new(DataPath.Parse("{9}"),[])]);
+            var clean=paths.Add("CleanTree",parameters:new Dictionary<string,object?>{{"input:T",tree}});
+            var pick=paths.Add("TreeBranch",parameters:new Dictionary<string,object?>{{"input:P",DataPath.Parse("{2;3}")}});
+            paths.Connect(new(clean.Id,"T"),new(pick.Id,"T"));
+            var pathResult=await paths.SolveAsync();
+            Check(pathResult.ErrorCount==0&&pathResult.Nodes[pick.Id].Outputs["T"].ItemCount==2,"Typed path components preserve sparse branches and clean explicit null items");
+            var loadedPaths=WorkspaceFormat.Deserialize(controller.Kernel.Evaluator,controller.Registry,WorkspaceFormat.Serialize(new SceneDocument(),paths)).Graph;
+            Check(loadedPaths.GetNode(pick.Id).Parameters["input:P"] is DataPath persisted&&persisted.Equals(DataPath.Parse("{2;3}")),"Typed path workspace round trip on WebAssembly");
+            Check((await loadedPaths.SolveAsync()).ErrorCount==0,"Reloaded tree definition solves on WebAssembly");
             canvas.Fit();controller.Scene.ShowGrid=false;controller.Scene.ShowIsocurves=false;
             var scene=controller.Scene;var items=scene.Items.ToArray();
             // Differential readback proves modeled surfaces, not only a grid, produced pixels.

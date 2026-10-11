@@ -46,6 +46,7 @@ public static class WorkspaceFormat
         object? encoded = value switch {
             null or bool or string or int => value,
             double d when double.IsFinite(d) => d,
+            DataPath path => new { valueType="path", value=path.Indices.ToArray() },
             Vec3 v when v.IsFinite => new { valueType="vector", value=v.ToArray() },
             IGeometry geometry => new { valueType="geometry", value=EncodeGeometry(geometry) },
             DataTree tree => new { valueType="tree", branches=tree.Branches.Select(b=>new{path=b.Path.Indices.ToArray(),items=b.Items.Select(EncodeValue).ToArray()}).ToArray() },
@@ -67,6 +68,7 @@ public static class WorkspaceFormat
             case JsonValueKind.Array:return value.EnumerateArray().Select(v=>DecodeValue(evaluator,v)).ToImmutableArray();
             case JsonValueKind.Object:
                 var type=value.GetProperty("valueType").GetString();
+                if(type=="path")return new DataPath(value.GetProperty("value").EnumerateArray().Select(x=>x.GetInt32()));
                 if(type=="vector"){var a=value.GetProperty("value").EnumerateArray().Select(x=>x.GetDouble()).ToArray();if(a.Length!=3)throw new FormatException("Expected XYZ.");var p=new Vec3(a[0],a[1],a[2]);if(!p.IsFinite)throw new FormatException("Invalid vector.");return p;}
                 if(type=="geometry")return DecodeGeometry(evaluator,value.GetProperty("value").Deserialize<GeometryData>(Options)??throw new FormatException("Missing geometry."));
                 if(type=="tree")return new DataTree(value.GetProperty("branches").EnumerateArray().Select(b=>new DataBranch(new DataPath(b.GetProperty("path").EnumerateArray().Select(x=>x.GetInt32())),b.GetProperty("items").EnumerateArray().Select(x=>DecodeValue(evaluator,x)).ToImmutableArray())));
@@ -77,9 +79,9 @@ public static class WorkspaceFormat
     }
     public static string Serialize(SceneDocument document,Graph graph)
     {
-        var d=document.Snapshot();
+        var d=document.Snapshot();var snapshot=graph.Snapshot();
         var data=new WorkspaceData(Format,1,new(d.Name,d.Units,d.AbsoluteTolerance,d.AngleTolerance,d.ActiveLayer,d.Layers,d.Objects.Select(o=>new ObjectData(o.Id,o.Name,o.LayerId,o.Color,o.Visible,o.Locked,o.Source,EncodeGeometry(o.Geometry))).ToArray(),d.Selection),
-            new(graph.Nodes.Select(n=>new NodeData(n.Id,n.Component,n.X,n.Y,n.Parameters.ToDictionary(kv=>kv.Key,kv=>EncodeValue(kv.Value)),n.Name,n.Enabled,n.Preview,n.Matching)).ToArray(),graph.Wires.ToArray()));
+            new(snapshot.Nodes.Select(n=>new NodeData(n.Id,n.Component,n.X,n.Y,n.Parameters.ToDictionary(kv=>kv.Key,kv=>EncodeValue(kv.Value)),n.Name,n.Enabled,n.Preview,n.Matching)).ToArray(),snapshot.Wires));
         var json=JsonSerializer.Serialize(data,Options);if(Encoding.UTF8.GetByteCount(json)>MaximumBytes)throw new InvalidOperationException("Workspace exceeds the export budget.");return json;
     }
     public static Workspace Deserialize(INurbsEvaluator evaluator,ComponentRegistry registry,string json)

@@ -5,7 +5,7 @@ using NurbsScene.Geometry;
 namespace NurbsScene.Parametric;
 
 public enum PortAccess { Item,List,Tree }
-public enum ValueKind { Any,Number,Integer,Boolean,Text,Point,Vector,Curve,Surface,Geometry }
+public enum ValueKind { Any,Number,Integer,Boolean,Text,Point,Vector,Curve,Surface,Geometry,Path }
 public sealed record PortDefinition(string Name,ValueKind Kind=ValueKind.Any,PortAccess Access=PortAccess.Item,object? Default=null,bool Optional=false);
 public sealed record ComponentContext(IReadOnlyDictionary<string,object?> Inputs,IReadOnlyDictionary<string,object?> Parameters,DataPath Path,CancellationToken CancellationToken)
 {
@@ -18,7 +18,7 @@ public sealed class ComponentRegistry
 {
     private readonly Dictionary<string,ComponentDefinition> _definitions=[];
     public IReadOnlyList<ComponentDefinition> Definitions=>_definitions.Values.ToArray();
-    public void Register(ComponentDefinition definition){if(definition.Inputs.Select(p=>p.Name).Distinct().Count()!=definition.Inputs.Length||definition.Outputs.Select(p=>p.Name).Distinct().Count()!=definition.Outputs.Length)throw new ArgumentException("Duplicate port names.");_definitions.Add(definition.Id,definition);}
+    public void Register(ComponentDefinition definition){if(definition.Inputs.Select(p=>p.Name).Distinct().Count()!=definition.Inputs.Length||definition.Outputs.Select(p=>p.Name).Distinct().Count()!=definition.Outputs.Length)throw new ArgumentException("Duplicate port names.");_definitions.Add(definition.Id,definition with { Inputs=definition.Inputs.Select(p=>p with {Default=ParameterValues.FreezeValue(p.Default)}).ToImmutableArray() });}
     public ComponentDefinition Get(string id)=>_definitions.TryGetValue(id,out var d)?d:throw new NotSupportedException($"Missing component implementation: {id}.");
 }
 public sealed record GraphNode(string Id,string Component,double X,double Y,ImmutableDictionary<string,object?> Parameters,string? Name=null,bool Enabled=true,bool Preview=true,string Matching="longest");
@@ -35,6 +35,19 @@ public sealed record GraphSnapshot(GraphNode[] Nodes,Wire[] Wires);
 public sealed class Graph(ComponentRegistry registry)
 {
     private readonly Dictionary<string,GraphNode> _nodes=[];private readonly Dictionary<string,Wire> _wires=[];private Dictionary<string,NodeResult> _cache=[];private readonly HashSet<string> _dirty=[];private readonly object _gate=new();private long _generation;
+    private readonly Dictionary<string, Dictionary<string,int>> _outgoing=[];
+    private const int MaximumWires=100_000;
+    private void Link(Wire wire)
+    {
+        if(!_outgoing.TryGetValue(wire.From.Node,out var children))_outgoing.Add(wire.From.Node,children=[]);
+        children[wire.To.Node]=children.GetValueOrDefault(wire.To.Node)+1;
+    }
+    private void Unlink(Wire wire)
+    {
+        var children=_outgoing[wire.From.Node];
+        if(--children[wire.To.Node]==0)children.Remove(wire.To.Node);
+        if(children.Count==0)_outgoing.Remove(wire.From.Node);
+    }
     public ComponentRegistry Registry { get; }=registry;
     public event Action? Changed;public event Action<GraphResult>? Solved;
     public long Revision { get; private set; }
@@ -42,7 +55,7 @@ public sealed class Graph(ComponentRegistry registry)
     public IReadOnlyList<GraphNode> Nodes { get {lock(_gate)return _nodes.Values.ToArray();} }
     public IReadOnlyList<Wire> Wires { get {lock(_gate)return _wires.Values.ToArray();} }
     public GraphNode GetNode(string id){lock(_gate)return _nodes.TryGetValue(id,out var n)?n:throw new KeyNotFoundException(id);}
-    private void Invalidate(string id){var queue=new Queue<string>();var seen=new HashSet<string>();queue.Enqueue(id);while(queue.TryDequeue(out var n)){if(!seen.Add(n))continue;_dirty.Add(n);foreach(var wire in _wires.Values.Where(w=>w.From.Node==n))queue.Enqueue(wire.To.Node);}}
+    private void Invalidate(string id){var queue=new Queue<string>();var seen=new HashSet<string>();queue.Enqueue(id);while(queue.TryDequeue(out var n)){if(!seen.Add(n))continue;_dirty.Add(n);if(_outgoing.TryGetValue(n,out var children))foreach(var child in children.Keys)queue.Enqueue(child);}}
     public GraphNode Add(string component,double x=0,double y=0,IReadOnlyDictionary<string,object?>? parameters=null,string? name=null,string? id=null)
     {
         Registry.Get(component);if(!double.IsFinite(x)||!double.IsFinite(y))throw new ArgumentException("Node position must be finite.");var node=new GraphNode(id??Guid.NewGuid().ToString("N"),component,x,y,ParameterValues.Freeze(parameters),name);
@@ -53,27 +66,39 @@ public sealed class Graph(ComponentRegistry registry)
         if(!double.IsFinite(node.X)||!double.IsFinite(node.Y)||node.Matching is not("longest" or "shortest" or "cross"))throw new ArgumentException("Invalid node position or matching mode.");
         lock(_gate){var previous=GetNode(node.Id);if(previous.Parameters!=node.Parameters)node=node with{Parameters=ParameterValues.Freeze(node.Parameters)};if(previous.Component!=node.Component)throw new InvalidOperationException("Cannot replace a component type in place.");_nodes[node.Id]=node;if(previous.Parameters!=node.Parameters||previous.Enabled!=node.Enabled||previous.Matching!=node.Matching)Invalidate(node.Id);Revision++;}Changed?.Invoke();
     }
-    public void Remove(string id){lock(_gate){GetNode(id);foreach(var w in _wires.Values.Where(w=>w.From.Node==id||w.To.Node==id).ToArray()){_wires.Remove(w.Id);Invalidate(w.To.Node);}_nodes.Remove(id);_cache.Remove(id);_dirty.Remove(id);Revision++;}Changed?.Invoke();}
-    private bool WouldCycle(string from,string to){var stack=new Stack<string>();var seen=new HashSet<string>();stack.Push(to);while(stack.TryPop(out var id)){if(id==from)return true;if(!seen.Add(id))continue;foreach(var wire in _wires.Values.Where(w=>w.From.Node==id))stack.Push(wire.To.Node);}return false;}
+    public void Remove(string id)
+    {
+        lock(_gate)
+        {
+            GetNode(id);
+            var successors=_outgoing.TryGetValue(id,out var children)?children.Keys.ToArray():[];
+            foreach(var wire in _wires.Values.Where(w=>w.From.Node==id||w.To.Node==id).ToArray()){_wires.Remove(wire.Id);Unlink(wire);}
+            foreach(var next in successors)Invalidate(next);
+            _nodes.Remove(id);_cache.Remove(id);_dirty.Remove(id);Revision++;
+        }
+        Changed?.Invoke();
+    }
+    private bool WouldCycle(string from,string to){var stack=new Stack<string>();var seen=new HashSet<string>();stack.Push(to);while(stack.TryPop(out var id)){if(id==from)return true;if(!seen.Add(id))continue;if(_outgoing.TryGetValue(id,out var children))foreach(var child in children.Keys)stack.Push(child);}return false;}
     public Wire Connect(PortAddress from,PortAddress to,bool replace=false,string transform="none",string? id=null)
     {
-        Wire wire;lock(_gate){var a=Registry.Get(GetNode(from.Node).Component).Outputs.SingleOrDefault(p=>p.Name==from.Port)??throw new ArgumentException("Source port is missing.");var b=Registry.Get(GetNode(to.Node).Component).Inputs.SingleOrDefault(p=>p.Name==to.Port)??throw new ArgumentException("Target port is missing.");if(!Compatible(a.Kind,b.Kind))throw new ArgumentException("Incompatible port types.");if(WouldCycle(from.Node,to.Node))throw new InvalidOperationException("Connection would introduce a cycle.");if(transform is not("none" or "flatten" or "graft" or "simplify"))throw new ArgumentException("Unknown wire transform.");if(_wires.Values.Any(w=>w.From==from&&w.To==to))throw new ArgumentException("Duplicate wire.");if(id is not null&&_wires.ContainsKey(id))throw new ArgumentException("Duplicate wire identity.");if(replace)foreach(var old in _wires.Values.Where(w=>w.To==to).ToArray())_wires.Remove(old.Id);wire=new(id??Guid.NewGuid().ToString("N"),from,to,transform);_wires.Add(wire.Id,wire);Invalidate(to.Node);Revision++;}Changed?.Invoke();return wire;
+        Wire wire;lock(_gate){var a=Registry.Get(GetNode(from.Node).Component).Outputs.SingleOrDefault(p=>p.Name==from.Port)??throw new ArgumentException("Source port is missing.");var b=Registry.Get(GetNode(to.Node).Component).Inputs.SingleOrDefault(p=>p.Name==to.Port)??throw new ArgumentException("Target port is missing.");if(!Compatible(a.Kind,b.Kind))throw new ArgumentException("Incompatible port types.");if(WouldCycle(from.Node,to.Node))throw new InvalidOperationException("Connection would introduce a cycle.");if(transform is not("none" or "flatten" or "graft" or "simplify"))throw new ArgumentException("Unknown wire transform.");if(_wires.Values.Any(w=>w.From==from&&w.To==to))throw new ArgumentException("Duplicate wire.");if(id is not null&&_wires.ContainsKey(id))throw new ArgumentException("Duplicate wire identity.");var replaced=replace?_wires.Values.Where(w=>w.To==to).ToArray():[];if(_wires.Count-replaced.Length>=MaximumWires)throw new InvalidOperationException("Wire budget exceeded.");foreach(var old in replaced){_wires.Remove(old.Id);Unlink(old);}wire=new(id??Guid.NewGuid().ToString("N"),from,to,transform);_wires.Add(wire.Id,wire);Link(wire);Invalidate(to.Node);Revision++;}Changed?.Invoke();return wire;
     }
-    public void Disconnect(string id){lock(_gate){var w=_wires[id];_wires.Remove(id);Invalidate(w.To.Node);Revision++;}Changed?.Invoke();}
+    public void Disconnect(string id){lock(_gate){var w=_wires[id];_wires.Remove(id);Unlink(w);Invalidate(w.To.Node);Revision++;}Changed?.Invoke();}
     private static bool Compatible(ValueKind a,ValueKind b)=>a==ValueKind.Any||b==ValueKind.Any||a==b||(a==ValueKind.Integer&&b==ValueKind.Number)||((a is ValueKind.Point or ValueKind.Vector)&&(b is ValueKind.Point or ValueKind.Vector))||(b==ValueKind.Geometry&&(a is ValueKind.Curve or ValueKind.Surface));
     private static void Validate(object? value,PortDefinition port)
     {
-        var valid=port.Kind switch{ValueKind.Any=>true,ValueKind.Number=>value is double d&&double.IsFinite(d)||value is int,ValueKind.Integer=>value is int,ValueKind.Boolean=>value is bool,ValueKind.Text=>value is string,ValueKind.Point or ValueKind.Vector=>value is Vec3 p&&p.IsFinite,ValueKind.Curve=>value is NurbsCurve,ValueKind.Surface=>value is NurbsSurface,ValueKind.Geometry=>value is IGeometry,_=>false};if(!valid)throw new ArgumentException($"Port {port.Name} requires {port.Kind}.");
+        var valid=port.Kind switch{ValueKind.Any=>true,ValueKind.Number=>value is double d&&double.IsFinite(d)||value is int,ValueKind.Integer=>value is int,ValueKind.Boolean=>value is bool,ValueKind.Text=>value is string,ValueKind.Point or ValueKind.Vector=>value is Vec3 p&&p.IsFinite,ValueKind.Curve=>value is NurbsCurve,ValueKind.Surface=>value is NurbsSurface,ValueKind.Geometry=>value is IGeometry,ValueKind.Path=>value is DataPath,_=>false};if(!valid)throw new ArgumentException($"Port {port.Name} requires {port.Kind}.");
     }
-    private static string[] Topological(Dictionary<string,GraphNode> nodes,Wire[] wires)
+    private static string[] Topological(Dictionary<string,GraphNode> nodes,Wire[] wires,ILookup<string,Wire> outgoing)
     {
-        var degree=nodes.Keys.ToDictionary(k=>k,_=>0);foreach(var wire in wires)degree[wire.To.Node]++;var ready=new Queue<string>(degree.Where(kv=>kv.Value==0).Select(kv=>kv.Key));var result=new List<string>();while(ready.TryDequeue(out var id)){result.Add(id);foreach(var wire in wires.Where(w=>w.From.Node==id))if(--degree[wire.To.Node]==0)ready.Enqueue(wire.To.Node);}if(result.Count!=nodes.Count)throw new InvalidOperationException("Graph contains a cycle.");return result.ToArray();
+        var degree=nodes.Keys.ToDictionary(k=>k,_=>0);foreach(var wire in wires)degree[wire.To.Node]++;var ready=new Queue<string>(degree.Where(kv=>kv.Value==0).Select(kv=>kv.Key));var result=new List<string>();while(ready.TryDequeue(out var id)){result.Add(id);foreach(var wire in outgoing[id])if(--degree[wire.To.Node]==0)ready.Enqueue(wire.To.Node);}if(result.Count!=nodes.Count)throw new InvalidOperationException("Graph contains a cycle.");return result.ToArray();
     }
     public async Task<GraphResult> SolveAsync(CancellationToken cancellationToken=default)
     {
         Dictionary<string,GraphNode> nodes;Wire[] wires;HashSet<string> dirty;Dictionary<string,NodeResult> cache;long revision,generation;lock(_gate){nodes=new(_nodes);wires=_wires.Values.ToArray();dirty=new(_dirty);cache=new(_cache);revision=Revision;generation=++_generation;}
+        var outgoing=wires.ToLookup(w=>w.From.Node);var incomingByPort=wires.ToLookup(w=>w.To);
         var stopwatch=Stopwatch.StartNew();var results=new Dictionary<string,NodeResult>();var evaluated=0;var cached=0;
-        foreach(var id in Topological(nodes,wires))
+        foreach(var id in Topological(nodes,wires,outgoing))
         {
             cancellationToken.ThrowIfCancellationRequested();lock(_gate)if(generation!=_generation)throw new OperationCanceledException("Superseded graph solve.");
             if(!dirty.Contains(id)&&cache.TryGetValue(id,out var previous)){results[id]=previous;cached++;continue;}
@@ -86,9 +111,9 @@ public sealed class Graph(ComponentRegistry registry)
                     var inputs=new Dictionary<string,DataTree>();
                     foreach(var port in definition.Inputs)
                     {
-                        var incoming=wires.Where(w=>w.To==new PortAddress(id,port.Name)).ToArray();var tree=DataTree.Empty;
+                        var incoming=incomingByPort[new PortAddress(id,port.Name)].ToArray();var tree=DataTree.Empty;
                         foreach(var wire in incoming){var upstream=results[wire.From.Node];if(upstream.Status is "error" or "blocked")throw new UpstreamException("An upstream component failed.");var t=upstream.Outputs[wire.From.Port];tree=tree.Merge(wire.Transform switch{"flatten"=>t.Flatten(),"graft"=>t.Graft(),"simplify"=>t.Simplify(),_=>t});}
-                        if(incoming.Length==0){var key="input:"+port.Name;var value=node.Parameters.TryGetValue(key,out var v)?v:port.Default;if(value is null&&!port.Optional)throw new ArgumentException($"Required input {port.Name} is not connected.");if(value is not null)tree=port.Access==PortAccess.List&&value is System.Collections.IEnumerable list&&value is not string?DataTree.List(list.Cast<object?>()):DataTree.Item(value);}
+                        if(incoming.Length==0){var key="input:"+port.Name;var value=node.Parameters.TryGetValue(key,out var v)?v:port.Default;if(value is null&&!port.Optional)throw new ArgumentException($"Required input {port.Name} is not connected.");if(value is not null)tree=value is DataTree persistent?persistent:port.Access==PortAccess.List&&value is System.Collections.IEnumerable list&&value is not string?DataTree.List(list.Cast<object?>()):DataTree.Item(value);}
                         foreach(var value in tree.AllItems)Validate(value,port);inputs.Add(port.Name,tree);
                     }
                     output=await EvaluateDefinition(definition,node,inputs,cancellationToken);
@@ -103,7 +128,12 @@ public sealed class Graph(ComponentRegistry registry)
     private static async ValueTask<ImmutableDictionary<string,DataTree>> EvaluateDefinition(ComponentDefinition definition,GraphNode node,Dictionary<string,DataTree> inputs,CancellationToken cancellationToken)
     {
         var branches=definition.Outputs.ToDictionary(p=>p.Name,_=>new SortedDictionary<DataPath,List<object?>>());
-        var paths=definition.Inputs.Where(p=>p.Access!=PortAccess.Tree).SelectMany(p=>inputs[p.Name].Branches.Select(b=>b.Path)).Distinct().Order().ToArray();if(paths.Length==0)paths=[DataPath.Root];
+        var nonTreeInputs=definition.Inputs.Where(p=>p.Access!=PortAccess.Tree).Select(p=>inputs[p.Name]).ToArray();
+        var structural=nonTreeInputs.Where(t=>t.Branches.Length>1).ToArray();
+        // Single-branch inputs broadcast into structural branches; their own
+        // path must not fabricate an extra result branch when a list is empty.
+        var paths=(structural.Length>0?structural:nonTreeInputs).SelectMany(t=>t.Branches.Select(b=>b.Path)).Distinct().Order().ToArray();
+        if(paths.Length==0)paths=[DataPath.Root];
         var count=0;
         void Add(PortDefinition port,DataPath path,object? value){if(!branches[port.Name].TryGetValue(path,out var list))branches[port.Name].Add(path,list=[]);Validate(value,port);list.Add(ParameterValues.FreezeValue(value));if(++count>100000)throw new InvalidOperationException("Component output budget exceeded.");}
         foreach(var path in paths)
@@ -120,7 +150,7 @@ public sealed class Graph(ComponentRegistry registry)
         }
         return branches.ToImmutableDictionary(kv=>kv.Key,kv=>new DataTree(kv.Value.Select(b=>new DataBranch(b.Key,b.Value.ToImmutableArray()))));
     }
-    public GraphSnapshot Snapshot()=>new(Nodes.ToArray(),Wires.ToArray());
+    public GraphSnapshot Snapshot(){lock(_gate)return new(_nodes.Values.ToArray(),_wires.Values.ToArray());}
     public static Graph FromSnapshot(ComponentRegistry registry,GraphSnapshot snapshot){var graph=new Graph(registry);foreach(var node in snapshot.Nodes){graph.Add(node.Component,node.X,node.Y,node.Parameters,node.Name,node.Id);graph.Update(node);}foreach(var wire in snapshot.Wires)graph.Connect(wire.From,wire.To,transform:wire.Transform,id:wire.Id);return graph;}
     private sealed class UpstreamException(string message):Exception(message);
 }
