@@ -141,5 +141,29 @@ Test("arrangement rejects stale selections and no-ops remain history-free",()=>{
     GraphArrangement.Apply(session,[a.Id],GraphArrangementMode.Left);GraphArrangement.Apply(session,[a.Id,b.Id],GraphArrangementMode.DistributeVertical);
     Check(!session.CanUndo&&g.Revision==revision);
 });
+Test("low-zoom port hits choose nearest row rather than first input",()=>{
+    var g=new Graph(Registry());g.Add("Circle");var d=new GraphPresentation().Get(g);var circle=d.Nodes.Single();
+    for(var i=0;i<circle.Definition.Inputs.Length;i++)
+    {
+        var point=circle.Port(false,i);
+        foreach(var zoom in new[]{.15,.3,.42,.8,2.0})
+        {
+            var hit=GraphHitTesting.PortAt(d,point,9/zoom);
+            Check(hit is not null&&!hit.Output&&hit.Port==circle.Definition.Inputs[i].Name,$"Wrong port at zoom {zoom}: {hit}");
+        }
+    }
+});
+Test("equal-distance port hits prefer frontmost node and radial misses remain misses",()=>{
+    var g=new Graph(Registry());g.Add("Circle");var front=g.Add("Circle");var d=new GraphPresentation().Get(g);var point=d.Nodes[1].Port(false,0);
+    Check(GraphHitTesting.PortAt(d,point,9)?.Node==front.Id);
+    Check(GraphHitTesting.PortAt(d,new(point.X-9,point.Y-9),9) is null);
+    Check(GraphHitTesting.PortAt(d,point,0)?.Node==front.Id);
+});
+Test("port hit-test rejects nonfinite inputs without fabricated hits",()=>{
+    var d=new GraphPresentation().Get(new Graph(Registry()));
+    Throws<ArgumentOutOfRangeException>(()=>GraphHitTesting.PortAt(d,new(double.NaN,0),9));
+    Throws<ArgumentOutOfRangeException>(()=>GraphHitTesting.PortAt(d,new(0,0),double.PositiveInfinity));
+    Check(GraphHitTesting.PortAt(d,new(0,0),9) is null);
+});
 var failed=0;foreach(var(name,run)in tests)try{run();Console.WriteLine("PASS "+name);}catch(Exception error){failed++;Console.WriteLine("FAIL "+name+"\n"+error);}
 Console.WriteLine(JsonSerializer.Serialize(new{suite="editing",total=tests.Count,passed=tests.Count-failed,failed}));return failed==0?0:1;

@@ -4,6 +4,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Input;
 using NurbsScene.Parametric;
 using NurbsScene.Presentation;
+using PortHit = NurbsScene.Presentation.GraphPortHit;
 using SkiaSharp;
 using Uno.WinUI.Graphics2DSK;
 using Windows.Foundation;
@@ -92,7 +93,6 @@ public sealed partial class GraphCanvas : SKCanvasElement,IDisposable
         foreach(var id in selected)_session.Graph.GetNode(id);
         _selection.Clear();_selection.UnionWith(selected);SelectionChanged?.Invoke();Invalidate();
     }
-    private sealed record PortHit(string Node,string Port,bool Output);
     public GraphCanvas()
     {
         IsTabStop=true;
@@ -130,15 +130,7 @@ public sealed partial class GraphCanvas : SKCanvasElement,IDisposable
         for(var i=nodes.Length-1;i>=0;i--)if(nodes[i].Bounds.Contains(new(point.X,point.Y)))return nodes[i].Node;return null;
     }
     private PortHit? PortAt(Point point)
-    {
-        if(_session is null)return null;var tolerance=9/_zoom;var nodes=Drawing().Nodes;
-        for(var n=nodes.Length-1;n>=0;n--)
-        {
-            var node=nodes[n];
-            for(var side=0;side<2;side++){var ports=side==1?node.Definition.Outputs:node.Definition.Inputs;for(var i=0;i<ports.Length;i++){var p=node.Port(side==1,i);if(Math.Abs(p.X-point.X)<=tolerance&&Math.Abs(p.Y-point.Y)<=tolerance)return new(node.Node.Id,ports[i].Name,side==1);}}
-        }
-        return null;
-    }
+        =>_session is null?null:GraphHitTesting.PortAt(Drawing(),new(point.X,point.Y),9/_zoom);
     private void Fill(SKCanvas canvas,SKRect rect,SKColor color,float radius=0){_paint.Style=SKPaintStyle.Fill;_paint.Color=color;if(radius>0)canvas.DrawRoundRect(rect,radius,radius,_paint);else canvas.DrawRect(rect,_paint);}
     private void Stroke(SKCanvas canvas,SKRect rect,SKColor color,float width=1,float radius=0){_paint.Style=SKPaintStyle.Stroke;_paint.StrokeWidth=width;_paint.Color=color;if(radius>0)canvas.DrawRoundRect(rect,radius,radius,_paint);else canvas.DrawRect(rect,_paint);}
     private void Text(SKCanvas canvas,string text,float x,float y,SKColor color,float size=12){_font.Size=size;_paint.Style=SKPaintStyle.Fill;_paint.Color=color;canvas.DrawText(text,x,y,_font,_paint);}
