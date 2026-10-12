@@ -65,7 +65,7 @@ public sealed partial class GraphEditorControl : Grid,IDisposable
         _inspectorScroll.Content=_inspector;SetColumn(_inspectorScroll,1);body.Children.Add(_inspectorScroll);SetRow(body,4);Children.Add(body);SetRow(_status,5);_status.Margin=new(7,0,7,0);Children.Add(_status);
         AutomationProperties.SetAutomationId(_search,"ComponentSearch");AutomationProperties.SetName(_search,"Search components");AutomationProperties.SetAutomationId(Canvas,"ParametricCanvas");AutomationProperties.SetAutomationId(_resultPanel,"GraphResultPreview");AutomationProperties.SetAutomationId(_inspectorScroll,"GraphInspector");
         _search.TextChanged+=(_,_)=>{if(Session is null)return;var query=_search.Text.Trim();_search.ItemsSource=_toolbarSearchIndex.Search(Session.Graph.Registry,query);};
-        _search.QuerySubmitted+=(_,e)=>{var query=e.ChosenSuggestion?.ToString()??_search.Text;CreateFromQuery(query,Canvas.InsertionPoint);};
+        _search.QuerySubmitted+=(_,e)=>{var query=e.ChosenSuggestion?.ToString()??e.QueryText;CreateFromQuery(query,Canvas.InsertionPoint);};
         Shelf.ComponentRequested+=AddComponent;
         Canvas.SliderEditRequested+=id=>{if(Session is{} session)QueueNumberSliderEdit(session.Graph,id);};
         Canvas.SelectionChanged+=()=>{RefreshInspector();UpdateStatus();};Canvas.SearchRequested+=ShowCanvasSearch;Canvas.Message+=Report;Canvas.ViewChanged+=UpdateStatus;
