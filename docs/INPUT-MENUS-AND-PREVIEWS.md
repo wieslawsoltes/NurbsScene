@@ -56,7 +56,7 @@ capture-lost callback from restoring an old graph over the new one.
 
 ## Qualification
 
-`NurbsScene.InputContracts` adds twenty contracts for all transform modes, fan-in
+`NurbsScene.InputContracts` adds twenty-one contracts for all transform modes, fan-in
 ordering, immutable snapshots and in-flight plans, invalid atomic batches, indexed
 allocation, clipboard/undo/redo, bounded previews, exact metadata, culture/escaping,
 UTF-16 handling and no-op history. Existing suites remain enabled.
@@ -83,3 +83,9 @@ observer's previous four-minute cleanup limit during the first new menu action.
 The observer now allows a bounded ten-minute lifetime for the three full campaigns
 and reports expiration as a failure instead of silently reporting restoration.
 Per-action 20-second timeouts and all state/visibility assertions remain unchanged.
+
+Large transform batches share one downstream invalidation traversal. Overlapping
+destination chains are not walked separately for each changed input; each node
+is processed at most once in that batch. A 1,200-component chain regression checks
+correct dirty results, unchanged topology/execution-order plan and subsequent cache
+reuse. This is separate from the measured incoming-wire lookup benchmark.

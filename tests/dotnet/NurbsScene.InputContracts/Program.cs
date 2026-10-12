@@ -146,6 +146,18 @@ Test("returning a drag to its start does not add an empty undo record",()=>{
     session.Edit("Add",x=>x.Add("Number"));session.Undo();var redoBefore=session.Graph.Snapshot();
     session.Record("Unchanged",redoBefore);Check(session.CanRedo);
 });
+Test("large transform batches invalidate a shared downstream chain once",()=>{
+    var g=new Graph(StandardComponents.Create(factory));var source=g.Add("Number");var previous=source;var port="N";
+    for(var i=0;i<1200;i++){var node=g.Add("Add");g.Connect(new(previous.Id,port),new(node.Id,"A"));previous=node;port="R";}
+    Solve(g);var plans=g.ExecutionPlanBuilds;var topology=g.TopologyRevision;
+    var ids=g.Wires.Select(w=>w.Id).ToArray();var before=GC.GetAllocatedBytesForCurrentThread();
+    g.SetWireTransforms(ids,"flatten");var bytes=GC.GetAllocatedBytesForCurrentThread()-before;
+    Console.WriteLine($"METRIC 1200-wire transform batch: {bytes} bytes");Check(bytes<2_000_000);
+    var changed=Solve(g);
+    Check(changed.ErrorCount==0&&changed.Evaluated==1200&&changed.Cached==1);
+    Check(g.ExecutionPlanBuilds==plans&&g.TopologyRevision==topology&&g.Wires.All(w=>w.Transform=="flatten"));
+    Check(Solve(g).Evaluated==0);
+});
 var failed=0;foreach(var(name,run)in tests)try{await run();Console.WriteLine("PASS "+name);}catch(Exception e){failed++;Console.WriteLine("FAIL "+name+"\n"+e);}
 Console.WriteLine(JsonSerializer.Serialize(new{suite="input-contracts",total=tests.Count,passed=tests.Count-failed,failed}));return failed==0?0:1;
 sealed class HostileFormat{public override string ToString()=>throw new Exception("Formatting must not execute plugin code.");}

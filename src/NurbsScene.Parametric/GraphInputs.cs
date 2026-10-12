@@ -57,7 +57,17 @@ public sealed partial class Graph
                 foreach(var target in targets)inputs[target]=_inputWires[target].ToArray();
                 _plan=new(plan.Order,inputs);
             }
-            foreach(var node in targets.Select(t=>t.Node).Distinct())Invalidate(node);
+            // One traversal for the entire batch: shared downstream components
+            // must not be revisited once for every transformed destination.
+            var pending=new Queue<string>(targets.Select(t=>t.Node));
+            var visited=new HashSet<string>();
+            while(pending.TryDequeue(out var node))
+            {
+                if(!visited.Add(node))continue;
+                _dirty.Add(node);
+                if(_outgoing.TryGetValue(node,out var children))
+                    foreach(var child in children.Keys)pending.Enqueue(child);
+            }
             WireRevision++;Revision++;
         }
         NotifyChanged();
