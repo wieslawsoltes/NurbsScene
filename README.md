@@ -13,7 +13,7 @@ The application lives in `src/NurbsScene.App`. The separate `validation-harness`
 | `NurbsScene.Geometry` | Immutable binary64 geometry, cached control bounds, planes and optional span/grid evaluator contracts |
 | `NurbsScene.Kernel` | Managed/native evaluators, exact curve/surface editing, numerical arc length and bounded curve queries |
 | `NurbsScene.Model` | Documents, cached immutable snapshot views, layers, locking, selection and atomic undoable transactions |
-| `NurbsScene.Parametric` | Typed data trees/paths, indexed dependency graph, incremental solving and 113 executable components |
+| `NurbsScene.Parametric` | Typed data trees/paths, indexed dependency graph, incremental solving and 114 executable components |
 | `NurbsScene.Rendering` | Knot-aware display tessellation, cameras, two-level spatial picking and a depth-enabled GL renderer |
 | `NurbsScene.IO` | Versioned exact `.nscene` workspaces and display-only OBJ/STL export |
 | `NurbsScene.Workbench` | Reusable application commands, graph preview and baking |
@@ -60,10 +60,19 @@ anchored opposite edges, port previews and atomic position/size history. It also
 preserves large-panel text readability, cached input connections and bounded
 grid rendering, and fixes the isolated input-campaign startup handoff.
 See [reconciliation, edge controls and verification boundaries](docs/RECONCILED-PANEL-REVIEW.md).
-The new Uno UI still requires final-head browser qualification; local source and
-managed-library tests are not a new deployed application.
+The recovered panel implementation is published and qualified by PR #10. Historical
+offline reports retain the limitations of their own revisions. The current
+[ellipse primitive and shared loft factors](docs/ELLIPSE-AND-LOFT.md) add exact
+elliptical curves and avoid factoring the same loft matrix for every U column;
+new revisions still require their own final-head Uno qualification.
 
 ## Modeling and visual programming
+
+The Curve toolbar and command console expose `Ellipse centerX,centerY,centerZ radiusX radiusY`.
+The Ellipse component also accepts orthogonal plane axes. Its positive-weight
+quadratic curve uses the same exact geometry, derivative and baking APIs as other
+curves. Lofting retains existing section interpolation while reusing one shared
+factorization and RHS buffer. See [contracts and measurements](docs/ELLIPSE-AND-LOFT.md).
 
 Curves and surfaces retain their weighted control points and expanded knot vectors. Display triangles never become the authoritative modeling representation. Surface editing includes U/V knot insertion/refinement, elevation, reversal, reparameterization, splitting, rectangular UV extraction, control-point/weight editing, boundary curves and rational Bezier patches. Curve measurement integrates analytic speed and reports a **numerical error estimate**, not a certified bound.
 

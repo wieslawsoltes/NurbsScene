@@ -5,12 +5,12 @@ This inventory includes the preserved-source import, typed data trees, curve-que
 | Area | Implemented | Remaining boundary |
 |---|---|---|
 | Exact geometry | Positive-weight rational curves and tensor-product surfaces; expanded knots; analytic derivatives; optional span/grid evaluators and cached bounds | Negative/zero projective weights, full periodic/disconnected editing coverage and every extreme-conditioning case |
-| Curve modeling | Lines, polylines, arcs/circles, interpolation, insertion, split/trim, elevation, control/weight editing, closest-point and numerical curve-plane queries, balanced multi-splitting | Full joining, curve/curve and surface intersections, offsets, blending, fitting and Rhino command behavior; query distance gaps are numerical estimates |
+| Curve modeling | Lines, polylines, arcs/circles, exact planar ellipses, interpolation, insertion, split/trim, elevation, control/weight editing, closest-point and numerical curve-plane queries, balanced multi-splitting | Full joining, curve/curve and surface intersections, offsets, blending, fitting and Rhino command behavior; query distance gaps are numerical estimates |
 | Surface modeling | Extrusion, revolution, loft, exact isocurves; U/V refinement/elevation/split/reversal; rectangular extraction; control/weight edits; Bezier patches | Arbitrary trimming loops, robust surface intersections, sweep/network/patch variants and full editing semantics |
 | Transforms | Translation, rotation, scale, affine plane projection and reflection of authoritative controls | Complete transform tools, gumball constraints, construction planes and command semantics |
 | Solids | No integrated solid-modeling backend | B-rep topology, booleans, fillets/chamfers, healing, sewing, shells and production robust predicates. OCCT is not integrated |
 | Measurements | Analytic surface area/centroid with work limits and numerical estimates; analytic-speed adaptive Gauss-Kronrod length, inverse arc length and equal-distance division with cancellation/work limits | Error estimates are not certified bounds; disconnected full-multiplicity length requests fail explicitly |
-| Parametric engine | 113 managed / 102 JavaScript definitions, typed ports, persistent trees/paths, bounded matching, cycle rejection, cached execution plans/results, batched edit notifications, cancellation and stale-solve rejection | Complete Grasshopper catalog, clusters, scripting/plugin compatibility and all matching/conversion rules |
+| Parametric engine | 114 managed / 102 JavaScript definitions, typed ports, persistent trees/paths, bounded matching, cycle rejection, cached execution plans/results, batched edit notifications, cancellation and stale-solve rejection | Complete Grasshopper catalog, clusters, scripting/plugin compatibility and all matching/conversion rules |
 | Documents | Cached immutable snapshot views, layers, locking, selection, undo/redo, atomic editing and explicit invalid-input errors | Full Rhino object types, blocks, history, reference files, annotations and large-project qualification |
 | Interchange | Managed exact `.nscene`; separate JS workspace dialect; OBJ/STL display export | `.3dm`, `.gh`, `.ghx`, STEP/IGES and plugin interchange. Display STL is not a watertight-solid certificate |
 | Uno UI | Compact tabbed toolbars/panels, authored vector icons, viewport activation/maximization, right/bottom definition docking, component shelves, command recall and world-aligned grid/ortho/endpoint construction; existing graph wiring, baking and file pickers | Identical Rhino/Grasshopper visuals/behavior, complete docking/toolbars/accessibility/input-device coverage |
@@ -73,3 +73,10 @@ The startup observation race is covered by seventeen unit contracts, and additio
 all-edge pointer campaigns are mandatory in the Uno workflow. New platform UI
 qualification and remote publication remain pending; see
 `RECONCILED-PANEL-REVIEW.md`. This does not imply identical original UI behavior.
+
+The ellipse/loft continuation adds an exact planar rational Ellipse primitive,
+typed component and world-XY command/toolbar action. The existing loft matrix is
+factored once per call and reused for every homogeneous U column, with cancellation
+and explicit work limits. It does not add the other Rhino loft styles, automatic
+seam alignment, closed/periodic lofting, arbitrary trim or solid support. See
+`ELLIPSE-AND-LOFT.md` for current evidence and numerical boundaries.
