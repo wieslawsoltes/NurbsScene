@@ -122,7 +122,7 @@ public sealed partial class WorkspaceController : IDisposable
     }
     private static double Number(string value)=>double.TryParse(value,NumberStyles.Float,CultureInfo.InvariantCulture,out var n)&&double.IsFinite(n)?n:throw new ArgumentException($"Not a finite number: {value}.");
     private static Vec3 Point(string value){var a=value.Split(',').Select(Number).ToArray();return a.Length==3?new(a[0],a[1],a[2]):throw new ArgumentException("Use an x,y,z coordinate triple.");}
-    private SceneObject[] Selected()=>Document.Selection.Select(Document.GetObject).ToArray();
+    private SceneObject[] Selected()=>Document.SelectionOrder.Select(Document.GetObject).ToArray();
     public void Execute(string input)
     {
         var tokens=input.Trim().Split(' ',StringSplitOptions.RemoveEmptyEntries);if(tokens.Length==0)return;var command=tokens[0].TrimStart('_').ToLowerInvariant();var a=tokens.Skip(1).ToArray();

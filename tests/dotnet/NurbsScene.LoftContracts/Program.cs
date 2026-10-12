@@ -216,5 +216,6 @@ NurbsSurface ReferenceLoft(NurbsCurve[] sections,int degree)
     }
     return new(kernel.Evaluator,compatible[0].Degree,degree,compatible[0].Count,count,compatible[0].Knots.ToArray(),knots,points);
 }
+DocumentOrderContracts.Register(tests,kernel);
 var failed=0;foreach(var(name,run)in tests)try{run();Console.WriteLine("PASS "+name);}catch(Exception error){failed++;Console.WriteLine("FAIL "+name+"\n"+error);}
 Console.WriteLine(JsonSerializer.Serialize(new{suite="loft-ellipse",total=tests.Count,passed=tests.Count-failed,failed}));return failed==0?0:1;
