@@ -33,7 +33,9 @@ public sealed partial class GraphCanvas
     private void DrawDataPanel(SKCanvas canvas, GraphNode node, SKRect rect, NodeResult? result)
     {
         if (!_panelPreviews.TryGetValue(node.Id, out var cache)) _panelPreviews[node.Id] = cache = new();
-        var builds = cache.BuildCount; var preview = cache.Get(node, result); ValuePreviewBuilds += cache.BuildCount - builds;
+        var rows = Math.Clamp((int)((rect.Height - 48) / 13), 1, PanelPreviewCache.MaximumRows);
+        var columns = Math.Clamp((int)((rect.Width - 16) / 6), 1, PanelPreviewCache.MaximumColumns);
+        var builds = cache.BuildCount; var preview = cache.Get(node, result, rows, columns); ValuePreviewBuilds += cache.BuildCount - builds;
         Text(canvas, node.Name ?? (node.Component == "Text" ? "Text" : "Panel"), rect.Left + 8, rect.Top + 15, new(94,92,54), 10);
         var count = Math.Min(preview.Lines.Length, Math.Max(0, (int)((rect.Height - 48) / 13)));
         for (var i = 0; i < count; i++) Text(canvas, preview.Lines[i], rect.Left + 8, rect.Top + 32 + i * 13, new(62,60,40), 10);
@@ -49,6 +51,7 @@ public sealed partial class GraphEditorControl
     private TextPanelDialog? _textPanelDialog;
     private bool _valueEditorDisposed;
     public FrameworkElement? ValueEditor => _textPanelDialog;
+    public string? ValueDraftText => _textPanelDialog?.DraftText;
     public bool ValueEditorIsOpen => _textPanelDialog?.IsLoaded == true;
     public string LastCreationError { get; private set; } = "";
     private void CreationError(string text) { LastCreationError = text; _creationInfo.Text = text; Report(text); }

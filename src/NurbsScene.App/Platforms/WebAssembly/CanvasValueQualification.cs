@@ -19,7 +19,7 @@ public partial class App
                 items=output?.AllItems.Take(8).Select(x=>x is string s?(s.Length>200?s[..200]:s):"<non-text>").ToArray(),
                 lines=new PanelPreviewCache().Get(n,result).Lines};
         }).ToArray();
-        return new{editorOpen=view.GraphEditor.ValueEditorIsOpen,error=view.GraphEditor.LastCreationError,
+        return new{editorOpen=view.GraphEditor.ValueEditorIsOpen,editorText=view.GraphEditor.ValueDraftText,resizeBounds=view.GraphEditor.Canvas.PanelResizeBounds,error=view.GraphEditor.LastCreationError,
             previewBuilds=view.GraphEditor.Canvas.ValuePreviewBuilds,panels};
     }
 }

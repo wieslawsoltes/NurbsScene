@@ -4,6 +4,7 @@ from pathlib import Path
 from ui_observation import settle
 from test_sliders_ui import verify_sliders_ui
 from test_canvas_values_ui import verify_canvas_values_ui
+from test_panel_layout_ui import verify_panel_layout_ui
 ROOT=Path(__file__).resolve().parents[2]
 
 async def verify_graph_inputs_ui(page):
@@ -85,4 +86,5 @@ async def verify_graph_inputs_ui(page):
     (ROOT/'evidence/uno-inputs-ui.json').write_text(json.dumps({'status':'passed','checks':checks,'final':final['state']},indent=2))
     checks.extend(await verify_sliders_ui(page))
     checks.extend(await verify_canvas_values_ui(page))
+    checks.extend(await verify_panel_layout_ui(page))
     return checks

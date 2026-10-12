@@ -160,11 +160,7 @@ public sealed partial class GraphEditorControl : Grid,IDisposable
             else Label(error!);
             _inspector.Children.Add(ClassicChrome.Button("Edit slider…",()=>{_ =EditNumberSliderAsync(node.Id);},"InspectorEditSlider"));
         }
-        if(node.Component is "Panel" or "Boolean")AddValueInspector(node);
-        if(node.Component=="Text")
-        {
-            var text=new TextBox{Header="Text",Text=node.Parameters.GetValueOrDefault("text")?.ToString()??"",AcceptsReturn=true,TextWrapping=TextWrapping.Wrap,FontSize=12};text.LostFocus+=(_,_)=>EditLive(text,"Edit text",g=>{var n=g.GetNode(node.Id);g.Update(n with{Parameters=n.Parameters.SetItem("text",text.Text)});});_inspector.Children.Add(text);
-        }
+        if(node.Component is "Panel" or "Boolean" or "Text")AddValueInspector(node);
         foreach(var port in definition.Inputs)
         {
             var wires=Session.Graph.Incoming(new PortAddress(node.Id,port.Name));Label($"{port.Name} · {port.Kind} / {port.Access}");
