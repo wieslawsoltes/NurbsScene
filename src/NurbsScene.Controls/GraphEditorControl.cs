@@ -64,13 +64,13 @@ public sealed partial class GraphEditorControl : Grid,IDisposable
         var body=new Grid();body.ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star)});body.ColumnDefinitions.Add(_inspectorColumn);body.Children.Add(Canvas);
         _inspectorScroll.Content=_inspector;SetColumn(_inspectorScroll,1);body.Children.Add(_inspectorScroll);SetRow(body,4);Children.Add(body);SetRow(_status,5);_status.Margin=new(7,0,7,0);Children.Add(_status);
         AutomationProperties.SetAutomationId(_search,"ComponentSearch");AutomationProperties.SetName(_search,"Search components");AutomationProperties.SetAutomationId(Canvas,"ParametricCanvas");AutomationProperties.SetAutomationId(_resultPanel,"GraphResultPreview");AutomationProperties.SetAutomationId(_inspectorScroll,"GraphInspector");
-        _search.TextChanged+=(_,_)=>{if(Session is null)return;var query=_search.Text.Trim();_search.ItemsSource=Session.Graph.Registry.Definitions.Where(d=>d.Id.Contains(query,StringComparison.OrdinalIgnoreCase)||d.Category.Contains(query,StringComparison.OrdinalIgnoreCase)).Take(30).Select(d=>d.Id).ToArray();};
-        _search.QuerySubmitted+=(_,e)=>{var id=e.ChosenSuggestion?.ToString()??_search.Text.Trim();AddComponent(id);};
+        _search.TextChanged+=(_,_)=>{if(Session is null)return;var query=_search.Text.Trim();_search.ItemsSource=_toolbarSearchIndex.Search(Session.Graph.Registry,query);};
+        _search.QuerySubmitted+=(_,e)=>{var query=e.ChosenSuggestion?.ToString()??_search.Text;CreateFromQuery(query,Canvas.InsertionPoint);};
         Shelf.ComponentRequested+=AddComponent;
         Canvas.SliderEditRequested+=id=>{if(Session is{} session)QueueNumberSliderEdit(session.Graph,id);};
         Canvas.SelectionChanged+=()=>{RefreshInspector();UpdateStatus();};Canvas.SearchRequested+=ShowCanvasSearch;Canvas.Message+=Report;Canvas.ViewChanged+=UpdateStatus;
         SizeChanged+=(_,_)=>SizeInspector();
-        InitializeActions();
+        InitializeActions();InitializeValueEditing();
     }
     private void AddComponent(string id)
     {
@@ -160,6 +160,7 @@ public sealed partial class GraphEditorControl : Grid,IDisposable
             else Label(error!);
             _inspector.Children.Add(ClassicChrome.Button("Edit slider…",()=>{_ =EditNumberSliderAsync(node.Id);},"InspectorEditSlider"));
         }
+        if(node.Component is "Panel" or "Boolean")AddValueInspector(node);
         if(node.Component=="Text")
         {
             var text=new TextBox{Header="Text",Text=node.Parameters.GetValueOrDefault("text")?.ToString()??"",AcceptsReturn=true,TextWrapping=TextWrapping.Wrap,FontSize=12};text.LostFocus+=(_,_)=>EditLive(text,"Edit text",g=>{var n=g.GetNode(node.Id);g.Update(n with{Parameters=n.Parameters.SetItem("text",text.Text)});});_inspector.Children.Add(text);
@@ -209,5 +210,5 @@ public sealed partial class GraphEditorControl : Grid,IDisposable
             if(preview.OmittedBranches>0)ResultLine($"… {preview.OmittedBranches} more branches");
         }
     }
-    public void Dispose(){DisposeSliderEditor();if(Session is{} session)session.Replaced-=OnReplaced;DetachGraph();CloseActionPopups();Canvas.Dispose();}
+    public void Dispose(){DisposeValueEditor();DisposeSliderEditor();if(Session is{} session)session.Replaced-=OnReplaced;DetachGraph();CloseActionPopups();Canvas.Dispose();}
 }

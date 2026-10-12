@@ -3,12 +3,17 @@ using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Windows.Foundation;
+using NurbsScene.Presentation;
+using NurbsScene.Parametric;
 
 namespace NurbsScene.Controls;
 
 public sealed partial class GraphEditorControl
 {
     private StackPanel? _searchPanel;
+    private Graph? _searchOwner;
+    private CanvasPoint _searchInsertion;
+    private readonly CanvasSearchIndex _canvasSearchIndex=new();
     private void ShowCanvasSearch()
     {
         if(Session is null||XamlRoot is null)return;
@@ -18,7 +23,7 @@ public sealed partial class GraphEditorControl
             AutomationProperties.SetAutomationId(_popupSearch,"CanvasComponentSearch");
             _searchPanel=new StackPanel{Spacing=5};AutomationProperties.SetAutomationId(_searchPanel,"CanvasSearchPanel");
             _searchPanel.Children.Add(ClassicChrome.Label("Search",11));_searchPanel.Children.Add(_popupSearch);
-            _searchPanel.Children.Add(new TextBlock{Text="Enter adds a component at the canvas cursor",FontSize=10,TextWrapping=TextWrapping.Wrap});
+            _searchPanel.Children.Add(_creationInfo);
             _canvasSearch=new Flyout{Content=_searchPanel,Placement=FlyoutPlacementMode.Bottom};
             // Uno 6.7.135 defers FlyoutBase.Opened to dispatcher Idle. A rendered
             // flyout can therefore be open before that event is delivered. Read
@@ -35,19 +40,18 @@ public sealed partial class GraphEditorControl
             };
             _popupSearch.TextChanged+=(_,_)=>{
                 if(Session is null)return;
-                var query=_popupSearch.Text.Trim();
-                _popupSearch.ItemsSource=query.Length==0?Array.Empty<string>():Session.Graph.Registry.Definitions
-                    .Where(d=>d.Id.Contains(query,StringComparison.OrdinalIgnoreCase)||d.Category.Contains(query,StringComparison.OrdinalIgnoreCase))
-                    .Take(20).Select(d=>d.Id).ToArray();
+                _popupSearch.ItemsSource=_canvasSearchIndex.Search(Session.Graph.Registry,_popupSearch.Text);
+                _creationInfo.Text=CreationHint;LastCreationError="";
             };
             _popupSearch.QuerySubmitted+=(_,e)=>{
-                var name=e.ChosenSuggestion?.ToString()??_popupSearch.Text.Trim();
-                if(Session?.Graph.Registry.Definitions.Any(d=>d.Id==name)!=true){Report("No executable component named "+name);return;}
-                _popupSearch.IsSuggestionListOpen=false;_canvasSearch.Hide();AddComponent(name);
+                var query=e.ChosenSuggestion?.ToString()??_popupSearch.Text;
+                if(!ReferenceEquals(Session?.Graph,_searchOwner)){CreationError("Definition changed. Reopen search.");return;}
+                if(CreateFromQuery(query,_searchInsertion)){_popupSearch.IsSuggestionListOpen=false;_canvasSearch.Hide();}
             };
         }
         _popupSearch!.Text="";_popupSearch.ItemsSource=Array.Empty<string>();_popupSearch.IsSuggestionListOpen=false;
-        var at=Canvas.InsertionPoint;var center=Canvas.ViewCenter;
+        _searchOwner=Session.Graph;_searchInsertion=Canvas.InsertionPoint;
+        var at=_searchInsertion;var center=Canvas.ViewCenter;
         var x=Canvas.ActualWidth/2+(at.X-center.X)*Canvas.Zoom;var y=Canvas.ActualHeight/2+(at.Y-center.Y)*Canvas.Zoom;
         var origin=Canvas.TransformToVisual(XamlRoot.Content).TransformPoint(new(0,0));
         var rootWidth=XamlRoot.Size.Width;var rootHeight=XamlRoot.Size.Height;
