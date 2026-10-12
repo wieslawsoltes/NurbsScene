@@ -46,8 +46,19 @@ public static class IconArtwork
         void Arrow(float x,float y,float a,float b,SKColor? color=null){Line(x,y,a,b,color);var dx=a-x;var dy=b-y;var l=MathF.Sqrt(dx*dx+dy*dy);dx/=l;dy/=l;Line(a,b,a-4*dx+2.5f*dy,b-4*dy-2.5f*dx,color);Line(a,b,a-4*dx-2.5f*dy,b-4*dy+2.5f*dx,color);}
         void Curve(){using var path=new SKPath();path.MoveTo(3,19);path.CubicTo(7,1,15,24,21,4);p.Style=SKPaintStyle.Stroke;p.Color=blue;p.StrokeWidth=2;c.DrawPath(path,p);p.StrokeWidth=1.25f;}
         void Patch(){Poly(pale,3,8,15,3,21,16,8,21);Line(7,6,12,19,blue);Line(11,5,16,18,blue);Line(5,12,17,7,blue);Line(6,16,19,12,blue);}
+        if(key.StartsWith("op:",StringComparison.Ordinal))
+        {
+            Rect(2,3,20,18,new(236,234,220));
+            var label=key[3..];using var font=new SKFont(SKTypeface.Default,label.Length<=2?16:label.Length<=3?11:8);
+            p.Style=SKPaintStyle.Fill;p.Color=ink;
+            c.DrawText(label,12-font.MeasureText(label)/2,16,font,p);return;
+        }
         switch(key)
         {
+            case "Panel":Rect(2,3,20,18,new(249,245,163));Line(5,8,18,8);Line(5,12,18,12);Line(5,16,13,16);break;
+            case "Flatten":Rect(2,3,7,3,pale);Rect(2,8,10,3,pale);Rect(2,13,7,3,pale);Arrow(18,3,18,16,green);Line(2,21,22,21,blue);break;
+            case "Graft":Line(12,2,12,8,green);Line(4,8,20,8,green);Line(4,8,4,15,green);Line(12,8,12,15,green);Line(20,8,20,15,green);Rect(2,16,5,5,pale);Rect(10,16,5,5,pale);Rect(18,16,5,5,pale);break;
+            case "Simplify":Rect(2,3,4,17,pale);Line(2,3,6,20,new(181,61,45));Arrow(9,12,21,12,green);break;
             case "Dropdown":Poly(ink,6,9,18,9,12,15);break;
             case "New":Poly(SKColors.White,5,2,15,2,20,7,20,22,5,22);Line(15,2,15,7);Line(15,7,20,7);break;
             case "Open":Poly(gold,2,7,2,20,20,20,22,9,10,9,8,6);Line(3,11,20,11);break;

@@ -6,6 +6,7 @@ session. No DOM replacement, mock GPU, or direct command invocation is used.
 import asyncio,json,math
 from ui_observation import settle
 from test_graph_editing_ui import verify_graph_editing_ui
+from test_graph_inputs_ui import verify_graph_inputs_ui
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[2]
 
@@ -129,6 +130,7 @@ async def verify_workspace_ui(page):
         check(data['state']['gpuError'] is None and data['state']['graphErrors']==0,'No GPU submission or component errors after pointer interactions')
         await page.screenshot(path=str(ROOT/'evidence/uno-ui-final.png'))
         checks.extend(await verify_graph_editing_ui(page))
+        checks.extend(await verify_graph_inputs_ui(page))
         data=await observe()
         (ROOT/'evidence/uno-ui.json').write_text(json.dumps({'status':'passed','checks':checks,'final':data['state']},indent=2))
     except Exception as error:

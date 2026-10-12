@@ -45,7 +45,7 @@ public sealed partial class GraphEditorControl
         var arrange=Menu("Arrange");
         foreach(var mode in Enum.GetValues<GraphArrangementMode>())arrange.Items.Add(ArrangeItem(mode,_menuElements));
         var view=Menu("View");view.Items.Add(ActionItem("Fit","Zoom extents",_menuElements));view.Items.Add(ActionItem("Search","Search components…",_menuElements));view.Items.Add(ActionItem("Properties","Component properties",_menuElements));
-        foreach(var level in new[]{50,100,200}){var value=level;var item=new MenuFlyoutItem{Text=$"Zoom {value}%"};item.Click+=(_,_)=>Canvas.SetZoom(value/100f);view.Items.Add(item);}
+        foreach(var level in new[]{50,100,200}){var value=level;var item=new MenuFlyoutItem{FontSize=11,MinHeight=24,Padding=new(8,2,8,2),Text=$"Zoom {value}%"};item.Click+=(_,_)=>Canvas.SetZoom(value/100f);view.Items.Add(item);}
         var solution=Menu("Solution");
         foreach(var(id,text)in new[]{("Enable","Enable selected"),("Disable","Disable selected"),("PreviewOn","Preview on"),("PreviewOff","Preview off"),("Bake","Bake selected")})solution.Items.Add(ActionItem(id,text,_menuElements));
         Children.Add(bar);SetRow(bar,1);
@@ -63,13 +63,13 @@ public sealed partial class GraphEditorControl
     }
     private MenuFlyoutItem ActionItem(string id,string text,List<FrameworkElement> tracking)
     {
-        var item=new MenuFlyoutItem{Text=text};AutomationProperties.SetAutomationId(item,"GraphAction_"+id);tracking.Add(item);
+        var item=new MenuFlyoutItem{FontSize=11,MinHeight=24,Padding=new(8,2,8,2),Text=text};AutomationProperties.SetAutomationId(item,"GraphAction_"+id);tracking.Add(item);
         item.Click+=(sender,e)=>{_ =RunActionAsync(id);};return item;
     }
     private MenuFlyoutItem ArrangeItem(GraphArrangementMode mode,List<FrameworkElement> tracking)
     {
         var name=mode switch{GraphArrangementMode.HorizontalCenter=>"Align horizontal centers",GraphArrangementMode.VerticalCenter=>"Align vertical centers",GraphArrangementMode.DistributeHorizontal=>"Distribute horizontally",GraphArrangementMode.DistributeVertical=>"Distribute vertically",_=>"Align "+mode.ToString().ToLowerInvariant()};
-        var item=new MenuFlyoutItem{Text=name};AutomationProperties.SetAutomationId(item,"GraphArrange_"+mode);tracking.Add(item);
+        var item=new MenuFlyoutItem{FontSize=11,MinHeight=24,Padding=new(8,2,8,2),Text=name};AutomationProperties.SetAutomationId(item,"GraphArrange_"+mode);tracking.Add(item);
         item.Click+=(_,_)=>{try{if(Session is not null)GraphArrangement.Apply(Session,Canvas.Selection,mode);UpdateStatus();}catch(Exception error){Report(error.Message);}};return item;
     }
     private void ShowContextMenu(Point point)
@@ -80,26 +80,16 @@ public sealed partial class GraphEditorControl
         var graph=Session.Graph;var ids=Canvas.Selection;var selected=graph.Nodes.Where(n=>ids.Contains(n.Id)).ToArray();
         if(selected.Length>0)
         {
-            var heading=new MenuFlyoutItem{Text=selected.Length==1?selected[0].Name??selected[0].Component:$"{selected.Length} components",IsEnabled=false};menu.Items.Add(heading);menu.Items.Add(new MenuFlyoutSeparator());
+            var heading=new MenuFlyoutItem{FontSize=11,MinHeight=24,Padding=new(8,2,8,2),Text=selected.Length==1?selected[0].Name??selected[0].Component:$"{selected.Length} components",IsEnabled=false};menu.Items.Add(heading);menu.Items.Add(new MenuFlyoutSeparator());
             var enabled=selected.All(n=>n.Enabled);var preview=selected.All(n=>n.Preview);
-            var enabledItem=new ToggleMenuFlyoutItem{Text="Enabled",IsChecked=enabled};AutomationProperties.SetAutomationId(enabledItem,"GraphToggle_Enabled");_contextElements.Add(enabledItem);
+            var enabledItem=new ToggleMenuFlyoutItem{FontSize=11,MinHeight=24,Padding=new(8,2,8,2),Text="Enabled",IsChecked=enabled};AutomationProperties.SetAutomationId(enabledItem,"GraphToggle_Enabled");_contextElements.Add(enabledItem);
             enabledItem.Click+=(_,_)=>ChangeFlags(graph,ids,enabled:!enabled);menu.Items.Add(enabledItem);
-            var previewItem=new ToggleMenuFlyoutItem{Text="Preview",IsChecked=preview};AutomationProperties.SetAutomationId(previewItem,"GraphToggle_Preview");_contextElements.Add(previewItem);
+            var previewItem=new ToggleMenuFlyoutItem{FontSize=11,MinHeight=24,Padding=new(8,2,8,2),Text="Preview",IsChecked=preview};AutomationProperties.SetAutomationId(previewItem,"GraphToggle_Preview");_contextElements.Add(previewItem);
             previewItem.Click+=(_,_)=>ChangeFlags(graph,ids,preview:!preview);menu.Items.Add(previewItem);
             foreach(var(id,text)in new[]{("Copy","Copy"),("Cut","Cut"),("Duplicate","Duplicate"),("Delete","Delete"),("Bake","Bake…"),("Properties","Properties…")})menu.Items.Add(ActionItem(id,text,_contextElements));
-            var arrange=new MenuFlyoutSubItem{Text="Align / distribute",IsEnabled=selected.Length>1};
+            var arrange=new MenuFlyoutSubItem{FontSize=11,MinHeight=24,Padding=new(8,2,8,2),Text="Align / distribute",IsEnabled=selected.Length>1};
             foreach(var mode in Enum.GetValues<GraphArrangementMode>())arrange.Items.Add(ArrangeItem(mode,_contextElements));menu.Items.Add(arrange);
-            if(selected.Length==1)
-            {
-                var node=selected[0];var inputMenu=new MenuFlyoutSubItem{Text="Inputs"};
-                foreach(var port in graph.Registry.Get(node.Component).Inputs)
-                {
-                    var wires=graph.Wires.Where(w=>w.To==new PortAddress(node.Id,port.Name)).ToArray();
-                    var item=new MenuFlyoutItem{Text=$"Disconnect {port.Name} ({wires.Length})",IsEnabled=wires.Length>0};AutomationProperties.SetAutomationId(item,"GraphDisconnect_"+port.Name);_contextElements.Add(item);
-                    item.Click+=(_,_)=>{if(!ReferenceEquals(Session?.Graph,graph))return;try{Session.Edit("Disconnect input",g=>{foreach(var wire in wires)g.Disconnect(wire.Id);});}catch(Exception error){Report(error.Message);}};inputMenu.Items.Add(item);
-                }
-                if(inputMenu.Items.Count>0)menu.Items.Add(inputMenu);
-            }
+            if(selected.Length==1)AddInputAndMatchingMenus(menu,graph,selected[0]);
         }
         else
         {

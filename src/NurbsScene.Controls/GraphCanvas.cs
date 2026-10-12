@@ -57,12 +57,13 @@ public sealed partial class GraphCanvas : SKCanvasElement,IDisposable
             foreach(var wire in next.Wires)
             {
                 live.Add(wire.Wire.Id);
-                if(!_wirePaths.TryGetValue(wire.Wire.Id,out var cached)||!ReferenceEquals(cached.Wire,wire))
+                if(!_wirePaths.TryGetValue(wire.Wire.Id,out var cached)||(cached.Wire.Start!=wire.Start||cached.Wire.End!=wire.End))
                 {
                     cached.Path?.Dispose();
                     cached=(wire,MakePath(new(wire.Start.X,wire.Start.Y),new(wire.End.X,wire.End.Y)));
                     _wirePaths[wire.Wire.Id]=cached;PathBuilds++;
                 }
+                _wirePaths[wire.Wire.Id]=(wire,cached.Path);
                 _paths.Add(cached.Path);
             }
             foreach(var id in _wirePaths.Keys.Where(id=>!live.Contains(id)).ToArray())
@@ -74,7 +75,7 @@ public sealed partial class GraphCanvas : SKCanvasElement,IDisposable
     public GraphSession? Session
     {
         get=>_session;
-        set{Unsubscribe();_session=value;Subscribe();_selection.Clear();SelectionChanged?.Invoke();Invalidate();}
+        set{CancelGesture();ReleasePointerCaptures();Unsubscribe();_session=value;Subscribe();_selection.Clear();SelectionChanged?.Invoke();Invalidate();}
     }
     public IReadOnlySet<string> Selection=>new HashSet<string>(_selection);
     public int SelectionCount=>_selection.Count;
@@ -105,7 +106,7 @@ public sealed partial class GraphCanvas : SKCanvasElement,IDisposable
     }
     private void Subscribe(){if(_subscribed||_session is null)return;_subscribed=true;_session.Replaced+=Replaced;_graph=_session.Graph;_graph.Changed+=GraphChanged;_graph.Solved+=Solved;}
     private void Unsubscribe(){if(!_subscribed)return;_subscribed=false;if(_session is not null)_session.Replaced-=Replaced;if(_graph is not null){_graph.Changed-=GraphChanged;_graph.Solved-=Solved;}_graph=null;}
-    private void Replaced(){if(_graph is not null){_graph.Changed-=GraphChanged;_graph.Solved-=Solved;}_graph=_session!.Graph;_graph.Changed+=GraphChanged;_graph.Solved+=Solved;_selection.IntersectWith(_graph.Nodes.Select(n=>n.Id));SelectionChanged?.Invoke();Invalidate();}
+    private void Replaced(){_before=null;_gesture="";_wire=null;_slider=null;_starts.Clear();ReleasePointerCaptures();if(_graph is not null){_graph.Changed-=GraphChanged;_graph.Solved-=Solved;}_graph=_session!.Graph;_graph.Changed+=GraphChanged;_graph.Solved+=Solved;_selection.IntersectWith(_graph.Nodes.Select(n=>n.Id));SelectionChanged?.Invoke();Invalidate();}
     private void GraphChanged()
     {
         if(_session is not null&&_selection.Count>0){var count=_selection.Count;_selection.IntersectWith(Drawing().Nodes.Select(n=>n.Node.Id));if(count!=_selection.Count)SelectionChanged?.Invoke();}
@@ -160,6 +161,13 @@ public sealed partial class GraphCanvas : SKCanvasElement,IDisposable
                 var tree=graph.LastResult?.Nodes.GetValueOrDefault(wire.From.Node)?.Outputs.GetValueOrDefault(wire.From.Port);
                 _paint.Style=SKPaintStyle.Stroke;_paint.StrokeWidth=tree?.ItemCount>1?2.8f:1.3f;_paint.Color=selected?new(120,171,47):new(93,91,86);
                 _paint.PathEffect=tree?.Branches.Length>1?_treeDash:null;canvas.DrawPath(_paths[i],_paint);_paint.PathEffect=null;
+                if(_zoom>.35f&&wire.Transform!="none")
+                {
+                    var tag=wire.Transform switch{"flatten"=>"F","graft"=>"G","simplify"=>"S",_=>"?"};
+                    var x=(float)w.End.X-24;var y=(float)w.End.Y;
+                    Fill(canvas,new(x-5,y-7,x+5,y+6),new(249,239,186),2);
+                    Text(canvas,tag,x-3,y+3,new(68,65,46),9);
+                }
             }
             foreach(var n in drawing.Nodes)
             {
@@ -187,7 +195,7 @@ public sealed partial class GraphCanvas : SKCanvasElement,IDisposable
                     }
                     else
                     {
-                        canvas.Save();canvas.Translate(rect.MidX-10,rect.MidY-14);canvas.Scale(.85f);IconArtwork.Draw(canvas,n.Definition.Category);canvas.Restore();
+                        canvas.Save();canvas.Translate(rect.MidX-10,rect.MidY-14);canvas.Scale(.85f);IconArtwork.Draw(canvas,n.IconKey);canvas.Restore();
                         for(var side=0;side<2;side++){var ports=side==1?n.Definition.Outputs:n.Definition.Inputs;for(var i=0;i<ports.Length;i++){var p=n.Port(side==1,i);var label=ports[i].Name;_font.Size=10;var x=side==1?(float)p.X-_font.MeasureText(label)-9:(float)p.X+9;Text(canvas,label,x,(float)p.Y+3,new(55,55,61),10);}}
                         var name=node.Name??node.Component;_font.Size=9;Text(canvas,name,rect.MidX-_font.MeasureText(name)/2,rect.Bottom-5,new(59,59,68),9);
                     }
