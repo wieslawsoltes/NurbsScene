@@ -64,3 +64,9 @@ jobs:
         with:
           name: qualified-uno-browser-${{ github.sha }}
           path: artifacts/site/
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: unqualified-uno-browser-${{ github.sha }}
+          path: artifacts/site/
+          retention-days: 3

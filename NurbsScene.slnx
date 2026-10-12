@@ -22,4 +22,5 @@
   <Project Path="src/NurbsScene.Presentation/NurbsScene.Presentation.csproj" />
   <Project Path="tests/dotnet/NurbsScene.PresentationContracts/NurbsScene.PresentationContracts.csproj" />
   <Project Path="tests/dotnet/NurbsScene.EditingContracts/NurbsScene.EditingContracts.csproj" />
+  <Project Path="tests/dotnet/NurbsScene.InputContracts/NurbsScene.InputContracts.csproj" />
 </Solution>

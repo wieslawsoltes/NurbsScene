@@ -2,6 +2,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using NurbsScene.Parametric;
+using NurbsScene.Presentation;
 
 namespace NurbsScene.Controls;
 
@@ -16,7 +17,10 @@ public sealed class ComponentShelf : Grid
     public string Category {get;private set;}="Params";
     public event Action<string>? ComponentRequested;
     public IReadOnlyDictionary<string,Button> Buttons=>_buttons;
-    private readonly Dictionary<string,Button> _buttons=[];
+    private Dictionary<string,Button> _buttons=[];
+    private readonly Dictionary<string,(UIElement[] Groups,Dictionary<string,Button> Buttons)> _pages=[];
+    public int PageBuildCount {get;private set;}
+    public int ButtonBuildCount {get;private set;}
     public IReadOnlyDictionary<string,Button> CategoryButtons=>_categoryButtons;
     private readonly Dictionary<string,Button> _categoryButtons=[];
     public ComponentShelf()
@@ -27,7 +31,7 @@ public sealed class ComponentShelf : Grid
     public void SetRegistry(ComponentRegistry registry)
     {
         if(ReferenceEquals(_registry,registry)&&_definitions.Length==registry.Definitions.Count)return;
-        _registry=registry;_definitions=registry.Definitions.ToArray();_tabs.Children.Clear();_categoryButtons.Clear();
+        _registry=registry;_definitions=registry.Definitions.ToArray();_tabs.Children.Clear();_categoryButtons.Clear();_groups.Children.Clear();_pages.Clear();
         var preferred=new[]{"Params","Maths","Sets","Vector","Curve","Surface","Mesh","Intersect","Transform","Display"};
         foreach(var category in _definitions.Select(d=>d.Category).Distinct().OrderBy(c=>{var i=Array.IndexOf(preferred,c);return i<0?100:i;}))
         {
@@ -38,8 +42,14 @@ public sealed class ComponentShelf : Grid
     public void SelectCategory(string category)
     {
         if(!_categoryButtons.ContainsKey(category))throw new ArgumentException("Unknown component category.");
-        Category=category;_groups.Children.Clear();_buttons.Clear();
+        if(Category==category&&_groups.Children.Count>0)return;
+        Category=category;_groups.Children.Clear();
         foreach(var (name,b) in _categoryButtons)b.Background=name==category?ClassicChrome.Brush(255,255,255):ClassicChrome.Background;
+        if(_pages.TryGetValue(category,out var page))
+        {
+            _buttons=page.Buttons;foreach(var group in page.Groups)_groups.Children.Add(group);return;
+        }
+        _buttons=[];PageBuildCount++;
         string Group(ComponentDefinition d)=>d.Id.Contains("Info")||d.Id.Contains("Area")||d.Id.Contains("Length")||d.Id.Contains("Centroid")||d.Id.Contains("Curvature")?"Analysis":d.Id.Contains("Split")||d.Id.Contains("Reverse")||d.Id.Contains("Trim")||d.Id.Contains("Knot")||d.Id.Contains("Elevate")||d.Id.Contains("Control")?"Modify":"Components";
         foreach(var group in _definitions.Where(d=>d.Category==category).GroupBy(Group))
         {
@@ -49,12 +59,13 @@ public sealed class ComponentShelf : Grid
             icons.RowDefinitions.Add(new(){Height=new GridLength(27)});icons.RowDefinitions.Add(new(){Height=new GridLength(27)});
             for(var i=0;i<definitions.Length;i++)
             {
-                var d=definitions[i];var icon=d.Id.Contains("Area")?"Area":d.Id.Contains("Centroid")?"Centroid":d.Id.Contains("Circle")?"Circle":d.Id.Contains("Line")?"Line":d.Id.Contains("Split")||d.Id.Contains("Shatter")?"Split":d.Id.Contains("Loft")?"Loft":d.Category;
+                var d=definitions[i];var icon=ComponentGlyphs.IconKey(d.Id,d.Category);
                 var button=ClassicChrome.IconButton(d.Id+"\n"+d.Description,icon,()=>ComponentRequested?.Invoke(d.Id),"Component_"+d.Id);
-                _buttons[d.Id]=button;SetColumn(button,i/2);SetRow(button,i%2);icons.Children.Add(button);
+                _buttons[d.Id]=button;ButtonBuildCount++;SetColumn(button,i/2);SetRow(button,i%2);icons.Children.Add(button);
             }
             container.Children.Add(icons);var label=ClassicChrome.Label(group.Key,9);label.Foreground=ClassicChrome.Brush(255,255,255);label.HorizontalAlignment=HorizontalAlignment.Center;
             var strip=new Border{Background=ClassicChrome.Brush(60,60,60),Child=label,CornerRadius=new(0,0,3,3)};container.Children.Add(strip);SetRow(strip,1);_groups.Children.Add(container);
         }
+        _pages[category]=(_groups.Children.ToArray(),_buttons);
     }
 }

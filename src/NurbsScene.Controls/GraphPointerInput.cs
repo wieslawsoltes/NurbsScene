@@ -25,8 +25,8 @@ public sealed partial class GraphCanvas
         else if(node is not null)
         {
             if(shift&&_selection.Remove(node.Id)){SelectionChanged?.Invoke();_gesture="";ReleasePointerCapture(e.Pointer);Invalidate();e.Handled=true;return;}
-            if(!_selection.Contains(node.Id))Select(node.Id,shift);_before=_session.Graph.Snapshot();
-            if((node.Component is "Number" or "Integer")&&_worldStart.Y>Rect(node).Bottom-22){_gesture="slider";_slider=node.Id;Scrub(node,_worldStart.X);}
+            if(!_selection.Contains(node.Id))Select(node.Id,shift);
+            if((node.Component is "Number" or "Integer")&&_worldStart.Y>Rect(node).Bottom-22){_before=_session.Graph.Snapshot();_gesture="slider";_slider=node.Id;Scrub(node,_worldStart.X);}
             else{_gesture="nodes";_starts.Clear();foreach(var n in _session.Graph.Nodes.Where(n=>_selection.Contains(n.Id)))_starts[n.Id]=(n.X,n.Y);}
         }
         else{if(!shift){_selection.Clear();SelectionChanged?.Invoke();}_gesture="marquee";}
@@ -40,7 +40,7 @@ public sealed partial class GraphCanvas
     {
         var point=e.GetCurrentPoint(this).Position;_worldLast=World(point);if(_gesture==""||_session is null)return;_moved|=Math.Abs(point.X-_start.X)+Math.Abs(point.Y-_start.Y)>2;
         if(_gesture=="pan"){_panX+=(float)(point.X-_last.X);_panY+=(float)(point.Y-_last.Y);}
-        else if(_gesture=="nodes")_session.Graph.MoveNodes(_starts.Select(p=>new NodePosition(p.Key,p.Value.X+(point.X-_start.X)/_zoom,p.Value.Y+(point.Y-_start.Y)/_zoom)).ToArray());
+        else if(_gesture=="nodes"&&_moved){_before??=_session.Graph.Snapshot();_session.Graph.MoveNodes(_starts.Select(p=>new NodePosition(p.Key,p.Value.X+(point.X-_start.X)/_zoom,p.Value.Y+(point.Y-_start.Y)/_zoom)).ToArray());}
         else if(_gesture=="slider"&&_slider is not null)Scrub(_session.Graph.GetNode(_slider),_worldLast.X);
         _last=point;Observe("Moved",point);Invalidate();e.Handled=true;
     }

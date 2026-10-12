@@ -1,0 +1,43 @@
+name: Graph input and preview contracts
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  inputs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      DOTNET_TieredCompilation: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Input transform, data preview and history contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/inputs
+          dotnet run --project tests/dotnet/NurbsScene.InputContracts -c Release 2>&1 | tee artifacts/inputs/contracts.log
+      - name: Compare former inspector scan with indexed input snapshots
+        shell: bash
+        run: |
+          set -euo pipefail
+          baseline="$RUNNER_TEMP/nurbsscene-input-baseline"
+          git worktree add --detach "$baseline" 37fd94a29c5e4c681c81e6cf3a5349f8c9d46c6e
+          mkdir -p "$baseline/tests/input-performance"
+          cp tests/input-performance/*.cs tests/input-performance/*.csproj "$baseline/tests/input-performance/"
+          dotnet run --project "$baseline/tests/input-performance" -c Release -- "$GITHUB_WORKSPACE/artifacts/inputs/baseline.json"
+          dotnet run --project tests/input-performance -c Release -- "$GITHUB_WORKSPACE/artifacts/inputs/candidate.json"
+          git rev-parse HEAD HEAD^{tree} > artifacts/inputs/tested-revision.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: inputs-${{ github.run_id }}
+          path: artifacts/inputs/

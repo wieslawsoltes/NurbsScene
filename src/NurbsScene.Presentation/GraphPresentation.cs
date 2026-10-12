@@ -11,6 +11,7 @@ public readonly record struct CanvasBox(double X,double Y,double Width,double He
 }
 public sealed record PresentedNode(GraphNode Node,ComponentDefinition Definition,CanvasBox Bounds)
 {
+    public string IconKey {get;}=ComponentGlyphs.IconKey(Node.Component,Definition.Category);
     public bool Slider=>Node.Component is "Number" or "Integer";
     public CanvasPoint Port(bool output,int index)=>new(Bounds.X+(output?Bounds.Width:0),Bounds.Y+(Slider?19:19+index*19));
 }
@@ -23,7 +24,7 @@ public sealed record GraphDrawing(ImmutableArray<PresentedNode> Nodes,ImmutableA
 public sealed class GraphPresentation
 {
     private Graph? _graph;
-    private long _revision=-1,_topology=-1;
+    private long _revision=-1,_topology=-1,_wires=-1;
     private GraphDrawing _drawing=new([],[]);
     private readonly Dictionary<string,int> _nodeIndex=[];
     private readonly Dictionary<string,List<int>> _incident=[];
@@ -36,9 +37,9 @@ public sealed class GraphPresentation
     {
         ArgumentNullException.ThrowIfNull(graph);
         if(ReferenceEquals(graph,_graph)&&graph.Revision==_revision)return _drawing;
-        if(!ReferenceEquals(graph,_graph)||graph.TopologyRevision!=_topology)Rebuild(graph);
+        if(!ReferenceEquals(graph,_graph)||graph.TopologyRevision!=_topology||graph.WireRevision!=_wires)Rebuild(graph);
         else UpdateNodes(graph);
-        _graph=graph;_revision=graph.Revision;_topology=graph.TopologyRevision;BuildCount++;
+        _graph=graph;_revision=graph.Revision;_topology=graph.TopologyRevision;_wires=graph.WireRevision;BuildCount++;
         return _drawing;
     }
     public static CanvasBox Bounds(GraphNode node,ComponentDefinition definition)
@@ -85,9 +86,9 @@ public sealed class GraphPresentation
         {
             void Index(string id){if(!_incident.TryGetValue(id,out var list))_incident.Add(id,list=[]);list.Add(wires.Count);}
             Index(wire.From.Node);Index(wire.To.Node);
-            if(oldWires.TryGetValue(wire.Id,out var previous)&&previous.Wire==wire&&
+            if(oldWires.TryGetValue(wire.Id,out var previous)&&previous.Wire.From==wire.From&&previous.Wire.To==wire.To&&
                 oldNodes.TryGetValue(wire.From.Node,out var from)&&from.Bounds==n[_nodeIndex[wire.From.Node]].Bounds&&
-                oldNodes.TryGetValue(wire.To.Node,out var to)&&to.Bounds==n[_nodeIndex[wire.To.Node]].Bounds)wires.Add(previous);
+                oldNodes.TryGetValue(wire.To.Node,out var to)&&to.Bounds==n[_nodeIndex[wire.To.Node]].Bounds)wires.Add(previous.Wire==wire?previous:previous with{Wire=wire});
             else wires.Add(Present(wire,n));
         }
         _drawing=new(n,wires.MoveToImmutable());TopologyBuilds++;

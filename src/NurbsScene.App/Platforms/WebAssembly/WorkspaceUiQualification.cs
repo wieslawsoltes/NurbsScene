@@ -29,7 +29,9 @@ public partial class App
             view.Viewport.Canvas.RestoreFourViews();view.Viewport.Canvas.Fit();view.GraphEditor.Canvas.Fit();
             view.Console.ClearHistory();view.Console.WriteLine("NurbsScene — independent NURBS modeling and visual programming");
             await Task.Delay(250);
-            while(watch.Elapsed<TimeSpan.FromMinutes(4))
+            // The expanded suite contains three complete input campaigns. Keep a
+            // bounded observer lifetime without restoring the document mid-campaign.
+            while(watch.Elapsed<TimeSpan.FromMinutes(10))
             {
                 if(Uno.Foundation.WebAssemblyRuntime.InvokeJS("globalThis.nurbsSceneUiFinish === true ? 'yes' : 'no'")=="yes")break;
                 var controls=new Dictionary<string,object>();
@@ -67,12 +69,28 @@ public partial class App
                         var p=graph.ScreenPoint(n.Node.Id,output,i);return(object)new{name=port.Name,x=graphOffset.X+p.X,y=graphOffset.Y+p.Y};
                     }).ToArray();
                     return new{id=n.Node.Id,name=n.Node.Name,component=n.Node.Component,modelX=n.Node.X,modelY=n.Node.Y,
-                        value=n.Node.Parameters.GetValueOrDefault("value"),enabled=n.Node.Enabled,preview=n.Node.Preview,x,y,width=n.Bounds.Width*graph.Zoom,height=n.Bounds.Height*graph.Zoom,
+                        value=n.Node.Parameters.GetValueOrDefault("value"),enabled=n.Node.Enabled,preview=n.Node.Preview,matching=n.Node.Matching,x,y,width=n.Bounds.Width*graph.Zoom,height=n.Bounds.Height*graph.Zoom,
                         inputs=Ports(false),outputs=Ports(true)};
                 }).ToArray();
                 var last=controller.Document.Objects.LastOrDefault();
                 var lastPoints=last?.Geometry is NurbsCurve curve?new[]{curve.PointAt(curve.Domain.Min).ToArray(),curve.PointAt(curve.Domain.Max).ToArray()}:null;
-                var snapshot=new{status="ready",sample=++sample,controls,views,nodes,state=new{
+                var wires=controller.Graph.Wires.Select(w=>new{id=w.Id,from=w.From.Node,fromPort=w.From.Port,to=w.To.Node,toPort=w.To.Port,transform=w.Transform}).ToArray();
+                var previewLines=new List<string>();
+                void Preview(DependencyObject value)
+                {
+                    if(value is TextBlock text)previewLines.Add(text.Text);
+                    for(var i=0;i<VisualTreeHelper.GetChildrenCount(value);i++)Preview(VisualTreeHelper.GetChild(value,i));
+                }
+                if(controls.ContainsKey("GraphResultPreview"))
+                {
+                    void FindPreview(DependencyObject value)
+                    {
+                        if(value is FrameworkElement e&&AutomationProperties.GetAutomationId(e)=="GraphResultPreview"){Preview(e);return;}
+                        for(var i=0;i<VisualTreeHelper.GetChildrenCount(value);i++)FindPreview(VisualTreeHelper.GetChild(value,i));
+                    }
+                    FindPreview(view.GraphEditor);
+                }
+                var snapshot=new{status="ready",sample=++sample,controls,views,nodes,wires,previewLines,state=new{
                     objects=controller.Document.Objects.Count,layers=controller.Document.Layers.Count,
                     selected=controller.Document.Selection.Count,documentRevision=controller.Document.Revision,
                     nodeCount=controller.Graph.Nodes.Count,wireCount=controller.Graph.Wires.Count,graphRevision=controller.Graph.Revision,
@@ -82,6 +100,7 @@ public partial class App
                     graphErrors=controller.Graph.LastResult?.ErrorCount??0,graphLayoutBuilds=graph.LayoutBuilds,graphPathBuilds=graph.PathBuilds,
                     meshBuilds=controller.Scene.MeshBuildCount,layerStructureChanges=view.Inspector.LayerStructureChanges,
                     contextMenuOpen=view.GraphEditor.ContextMenuIsOpen,searchOpen=view.GraphEditor.SearchIsOpen,
+                    shelfPageBuilds=view.GraphEditor.Shelf.PageBuildCount,shelfButtonBuilds=view.GraphEditor.Shelf.ButtonBuildCount,
                     toolbar=view.Toolbar.Category,category=view.GraphEditor.Shelf.Category,inspector=view.Inspector.ActiveTab,
                     dock=view.Preferences.Dock,definitionVisible=view.Preferences.DefinitionVisible,inspectorVisible=view.Preferences.InspectorVisible,
                     activeViewport=cad.ActiveViewport,maximized=cad.Maximized,gridSnap=view.Aids.GridSnap,ortho=view.Aids.Ortho,endSnap=view.Aids.EndSnap,
@@ -93,7 +112,9 @@ public partial class App
             controller.Load(source);controller.Scene.ShowGrid=true;controller.Scene.ShowIsocurves=true;
             view.SetPreferences(preferences,false);view.Aids.GridSnap=false;view.Aids.Ortho=false;view.Aids.EndSnap=false;
             view.Viewport.Canvas.RestoreFourViews();view.Viewport.Canvas.Fit();view.GraphEditor.Canvas.Fit();
-            PublishUi(new{status="restored"});
+            if(watch.Elapsed>=TimeSpan.FromMinutes(10))
+                PublishUi(new{status="failed",error="The qualification observation lifetime expired before the test finished."});
+            else PublishUi(new{status="restored"});
         }
         catch(Exception error){PublishUi(new{status="failed",error=error.ToString()});}
     }

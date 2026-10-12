@@ -5,6 +5,7 @@ using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using NurbsScene.Geometry;
 using NurbsScene.Parametric;
+using NurbsScene.Presentation;
 
 namespace NurbsScene.Controls;
 
@@ -58,11 +59,11 @@ public sealed partial class GraphEditorControl : Grid,IDisposable
         tools.Children.Add(ClassicChrome.IconButton("Zoom out","ZoomOut",()=>Canvas.SetZoom(Canvas.Zoom/1.2f)));tools.Children.Add(_zoom);tools.Children.Add(ClassicChrome.IconButton("Zoom in","ZoomIn",()=>Canvas.SetZoom(Canvas.Zoom*1.2f)));
         tools.Children.Add(ClassicChrome.IconButton("Bake selected geometry","Bake",()=>BakeRequested?.Invoke(Canvas.Selection),"GraphBake"));
         tools.Children.Add(ClassicChrome.IconButton("Delete selected components","Delete",()=>Canvas.DeleteSelected(),"GraphDelete"));
-        tools.Children.Add(ClassicChrome.IconButton("Component properties","Properties",()=>{_inspectorVisible=!_inspectorVisible;SizeInspector();}));tools.Children.Add(_search);
+        tools.Children.Add(ClassicChrome.IconButton("Component properties","Properties",()=>{_inspectorVisible=!_inspectorVisible;SizeInspector();},"GraphProperties"));tools.Children.Add(_search);
         var toolScroll=ClassicChrome.Horizontal(tools);Children.Add(toolScroll);SetRow(toolScroll,3);
         var body=new Grid();body.ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star)});body.ColumnDefinitions.Add(_inspectorColumn);body.Children.Add(Canvas);
         _inspectorScroll.Content=_inspector;SetColumn(_inspectorScroll,1);body.Children.Add(_inspectorScroll);SetRow(body,4);Children.Add(body);SetRow(_status,5);_status.Margin=new(7,0,7,0);Children.Add(_status);
-        AutomationProperties.SetAutomationId(_search,"ComponentSearch");AutomationProperties.SetName(_search,"Search components");AutomationProperties.SetAutomationId(Canvas,"ParametricCanvas");
+        AutomationProperties.SetAutomationId(_search,"ComponentSearch");AutomationProperties.SetName(_search,"Search components");AutomationProperties.SetAutomationId(Canvas,"ParametricCanvas");AutomationProperties.SetAutomationId(_resultPanel,"GraphResultPreview");AutomationProperties.SetAutomationId(_inspectorScroll,"GraphInspector");
         _search.TextChanged+=(_,_)=>{if(Session is null)return;var query=_search.Text.Trim();_search.ItemsSource=Session.Graph.Registry.Definitions.Where(d=>d.Id.Contains(query,StringComparison.OrdinalIgnoreCase)||d.Category.Contains(query,StringComparison.OrdinalIgnoreCase)).Take(30).Select(d=>d.Id).ToArray();};
         _search.QuerySubmitted+=(_,e)=>{var id=e.ChosenSuggestion?.ToString()??_search.Text.Trim();AddComponent(id);};
         Shelf.ComponentRequested+=AddComponent;
@@ -104,7 +105,12 @@ public sealed partial class GraphEditorControl : Grid,IDisposable
     {
         if(_rebuilding)return;
         _rebuilding=true;
-        try{BuildInspector();}
+        try
+        {
+            BuildInspector();
+            foreach(var field in _inspector.Children.OfType<TextBox>())
+                InspectorScrolling.Attach(field,_inspectorScroll);
+        }
         finally{_rebuilding=false;}
     }
     private void BuildInspector()
@@ -133,8 +139,8 @@ public sealed partial class GraphEditorControl : Grid,IDisposable
         }
         foreach(var port in definition.Inputs)
         {
-            var wires=Session.Graph.Wires.Where(w=>w.To==new PortAddress(node.Id,port.Name)).ToArray();Label($"{port.Name} · {port.Kind} / {port.Access}");
-            if(wires.Length>0){_inspector.Children.Add(Button($"Disconnect {wires.Length} wire(s)",()=>{Edit("Disconnect input",g=>{foreach(var w in wires)g.Disconnect(w.Id);});RefreshInspector();}));continue;}
+            var wires=Session.Graph.Incoming(new PortAddress(node.Id,port.Name));Label($"{port.Name} · {port.Kind} / {port.Access}");
+            if(wires.Count>0){_inspector.Children.Add(Button($"Disconnect {wires.Count} wire(s)",()=>{Edit("Disconnect input",g=>{foreach(var w in wires)g.Disconnect(w.Id);});RefreshInspector();}));continue;}
             var key="input:"+port.Name;var value=node.Parameters.GetValueOrDefault(key,port.Default);
             if((port.Kind is ValueKind.Number or ValueKind.Integer)&&port.Access==PortAccess.Item)
             {
@@ -163,7 +169,18 @@ public sealed partial class GraphEditorControl : Grid,IDisposable
         void ResultLine(string text)=>_resultPanel.Children.Add(new TextBlock{Text=text,FontSize=11,TextWrapping=TextWrapping.Wrap});
         ResultLine($"{result.Status} · {result.Milliseconds:F3} ms");
         foreach(var message in result.Messages)ResultLine(message);
-        foreach(var (name,tree) in result.Outputs)ResultLine($"{name}: {tree.ItemCount} items in {tree.Branches.Length} branches");
+        foreach(var (name,tree) in result.Outputs)
+        {
+            var preview=TreePreview.Create(tree);
+            ResultLine($"{name}: {preview.ItemCount} items in {preview.BranchCount} branches");
+            foreach(var branch in preview.Branches)
+            {
+                ResultLine($"{branch.Path} · {branch.ItemCount} items");
+                foreach(var item in branch.Items)ResultLine("  "+item);
+                if(branch.ItemCount>branch.Items.Length)ResultLine($"  … {branch.ItemCount-branch.Items.Length} more items");
+            }
+            if(preview.OmittedBranches>0)ResultLine($"… {preview.OmittedBranches} more branches");
+        }
     }
     public void Dispose(){if(Session is{} session)session.Replaced-=OnReplaced;DetachGraph();CloseActionPopups();Canvas.Dispose();}
 }
