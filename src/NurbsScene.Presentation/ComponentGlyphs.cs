@@ -25,6 +25,7 @@ public static class ComponentGlyphs
         if(id.Contains("Knot",StringComparison.Ordinal))return "Knot";
         if(id.Contains("Elevate",StringComparison.Ordinal))return "Elevate";
         if(id.Contains("Split",StringComparison.Ordinal)||id.Contains("Shatter",StringComparison.Ordinal))return "Split";
+        if(id.Contains("Ellipse",StringComparison.Ordinal))return "Ellipse";
         if(id.Contains("Circle",StringComparison.Ordinal))return "Circle";
         if(id.Contains("Line",StringComparison.Ordinal))return "Line";
         if(id.Contains("Extrude",StringComparison.Ordinal))return "Extrude";

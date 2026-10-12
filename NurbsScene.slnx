@@ -30,4 +30,5 @@
   <Project Path="tests/dotnet/NurbsScene.TextDraftContracts/NurbsScene.TextDraftContracts.csproj" />
   <Project Path="tests/dotnet/NurbsScene.CanvasReviewContracts/NurbsScene.CanvasReviewContracts.csproj" />
   <Project Path="tests/dotnet/NurbsScene.PanelEdgeContracts/NurbsScene.PanelEdgeContracts.csproj" />
+  <Project Path="tests/dotnet/NurbsScene.LoftContracts/NurbsScene.LoftContracts.csproj" />
 </Solution>

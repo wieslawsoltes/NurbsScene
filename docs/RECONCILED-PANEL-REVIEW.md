@@ -1,3 +1,5 @@
+> Publication update: this source was recovered, published and merged by PR #10 (`d768ea5`), with 153 actual Uno input checks passing. The local-only restrictions below describe the earlier saved review, not current GitHub status. See `ELLIPSE-AND-LOFT.md` for the continuation.
+
 # Reconciled panel-edge and qualification review
 
 ## Preserved history
