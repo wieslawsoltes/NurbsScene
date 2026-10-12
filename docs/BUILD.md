@@ -113,3 +113,29 @@ DOTNET_TieredCompilation=0 dotnet run --project tests/dotnet/NurbsScene.TextDraf
 commit/cancel, history, no-op multiline Apply and legacy Text inspector reopening.
 Native wire-cache pass counters verify that slider changes skip unchanged wires;
 the numerical allocation contracts do not measure full canvas or GPU frame cost.
+
+## Panel layout and canvas review
+
+```sh
+dotnet run --project tests/dotnet/NurbsScene.PanelLayoutContracts -c Release
+dotnet run --project tests/dotnet/NurbsScene.CanvasReviewContracts -c Release
+dotnet run --project tests/panel-review-performance -c Release -- panel-review.json
+```
+
+The `panel-layout.yml` workflow compares the same benchmark against PR9 and the
+candidate. `test_panel_layout_ui.py` runs in the actual Uno input campaign, not
+the standalone JavaScript harness. See `PANEL-LAYOUT-AND-CANVAS-REVIEW.md` for
+source recovery, measurement limits and the local browser-policy block.
+
+## Reconciled panel-edge review
+
+```sh
+dotnet run --project tests/dotnet/NurbsScene.PanelEdgeContracts -c Release
+python -m unittest discover -s tests/browser -p 'test_observation*contracts.py' -v
+```
+
+The waiter unit contracts also require Node 22. They execute JS predicates, not
+the Uno app. The actual published Uno artifact is qualified separately using
+`test_uno.py`: workspace, inputs/sliders, panels and panel-edges are four mandatory
+isolated campaigns. None is an optional fallback or a retry of another campaign.
+See `RECONCILED-PANEL-REVIEW.md` for local evidence and publication limitations.

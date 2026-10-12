@@ -27,7 +27,7 @@ jobs:
           path: artifacts/uno-desktop/
   browser:
     runs-on: ubuntu-latest
-    # Compile once, then run all three isolated mandatory input campaigns.
+    # Compile once, then run all four isolated mandatory input campaigns.
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
@@ -45,6 +45,11 @@ jobs:
           mkdir -p evidence
           dotnet publish src/NurbsScene.App -c Release -f net10.0-browserwasm -p:NurbsSceneQualification=true 2>&1 | tee evidence/uno-build.log
           python tools/stage-uno-site.py
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Observation handoff unit contracts
+        run: python -m unittest discover -s tests/browser -p 'test_observation*contracts.py' -v
       - run: python -m pip install playwright
       - run: python -m playwright install --with-deps chromium
       - name: Real Uno browser and framebuffer regressions

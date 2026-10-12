@@ -57,6 +57,19 @@ Panel component and draft-only multiline editing. Connected empty trees override
 stored text rather than displaying stale data. PR #10 adds resize handles with
 isolated drafts, exact optional canvas dimensions, low-zoom panel readability and
 preview/wire-cache work avoidance. Native text normalization preserves unchanged
-original line endings; edited text uses LF. Only the bottom-right resize handle is
-implemented, not every original border/handle, font/alignment option or scrolling
-behavior. See `PANEL-LAYOUT-REVIEW.md` for tests and remaining boundaries.
+original line endings; edited text uses LF. The original PR #10 revision implemented only the bottom-right resize handle;
+font/alignment options and scrolling behavior remained incomplete. See `PANEL-LAYOUT-REVIEW.md` for tests and remaining boundaries.
+
+The panel-layout continuation adds resizable Text/Panel bounds, display-only resize
+drafts, size interchange, retained text previews, bounded screen-space grid generation
+and cached connection-name snapshots. It is not an identical panel UI or a full
+large-coordinate renderer. The new Uno scenarios have not run in the current local
+environment; see `PANEL-LAYOUT-AND-CANVAS-REVIEW.md` for the qualification boundary.
+
+The reconciled local review adds four edge/four corner resizing with anchored
+position/size changes and previewed incoming/outgoing ports. It preserves the
+current PR #10 changes and prior local grid/lifetime/connection-cache fixes.
+The startup observation race is covered by seventeen unit contracts, and additional
+all-edge pointer campaigns are mandatory in the Uno workflow. New platform UI
+qualification and remote publication remain pending; see
+`RECONCILED-PANEL-REVIEW.md`. This does not imply identical original UI behavior.

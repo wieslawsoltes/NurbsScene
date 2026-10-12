@@ -1,18 +1,15 @@
 """Real panel resizing, draft isolation and multiline editor reopening."""
 import json
 from pathlib import Path
-from ui_observation import settle
+from ui_observation import settle, wait_for_ui, read_ui
 ROOT=Path(__file__).resolve().parents[2]
 
 async def verify_panel_layout_ui(page):
     checks=[]
     async def read():
-        data=await page.evaluate('globalThis.nurbsSceneUi')
-        if data.get('status')!='ready':raise AssertionError(data)
-        return data
+        return await read_ui(page)
     async def wait(expression):
-        await page.wait_for_function('globalThis.nurbsSceneUi?.status!=="ready" || ('+expression+')',timeout=20000)
-        return await read()
+        return await wait_for_ui(page, expression)
     async def click(identity):
         d=await wait('!!globalThis.nurbsSceneUi.controls['+json.dumps(identity)+']');b=d['controls'][identity]
         if not b['enabled']:raise AssertionError('Disabled '+identity)

@@ -54,12 +54,14 @@ adds atomic range/value/precision editing, label and context-menu entry points,
 validated rounded scrubbing, retained read-only graph/registry views and
 wire-metadata updates that do not rebuild drawing adjacency.
 
-Panels support native multiline editing, typed connected data, and a bottom-right
-resize grip. Resizing previews its layout without modifying the definition until
-release; Escape discards the draft. Exact canvas dimensions survive workspace and
-clipboard round trips. Large zoomed-out panels keep a readable text floor, and
-unchanged slider wires skip native-cache reconciliation. See [panel layout and
-review contracts](docs/PANEL-LAYOUT-REVIEW.md).
+Panels support native multiline editing, typed connected data and draft-only
+resizing. The reconciled review adds all four borders and four corners, with
+anchored opposite edges, port previews and atomic position/size history. It also
+preserves large-panel text readability, cached input connections and bounded
+grid rendering, and fixes the isolated input-campaign startup handoff.
+See [reconciliation, edge controls and verification boundaries](docs/RECONCILED-PANEL-REVIEW.md).
+The new Uno UI still requires final-head browser qualification; local source and
+managed-library tests are not a new deployed application.
 
 ## Modeling and visual programming
 
