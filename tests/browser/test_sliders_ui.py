@@ -4,7 +4,7 @@ The qualification hook is observation-only.
 """
 import json
 from pathlib import Path
-from ui_observation import settle, wait_for_ui, read_ui
+from ui_observation import settle, wait_for_ui, read_ui, text_editor_point
 ROOT=Path(__file__).resolve().parents[2]
 
 async def verify_sliders_ui(page):
@@ -19,7 +19,15 @@ async def verify_sliders_ui(page):
         if not b['enabled']:raise AssertionError('Disabled '+identity)
         await page.mouse.click(b['x']+b['width']/2,b['y']+b['height']/2);await settle(page)
     async def text(identity,value):
-        await click(identity);await page.keyboard.press('Control+A');await page.keyboard.insert_text(value);await settle(page)
+        key=json.dumps(identity)
+        data=await wait('!!globalThis.nurbsSceneUi.controls['+key+']')
+        b=data['controls'][identity]
+        if not b['enabled']:raise AssertionError('Disabled '+identity)
+        await page.mouse.click(*text_editor_point(b))
+        await wait('globalThis.nurbsSceneUi.controls['+key+'].focused')
+        await page.keyboard.press('Control+A');await page.keyboard.insert_text(value)
+        await wait('globalThis.nurbsSceneUi.controls['+key+'].text==='+json.dumps(value))
+        await settle(page)
     async def node(identity):return next(n for n in (await read())['nodes'] if n['id']==identity)
     def check(ok,name):
         if not ok:raise AssertionError(name)
@@ -35,6 +43,9 @@ async def verify_sliders_ui(page):
     data=await wait('globalThis.nurbsSceneUi.state.sliderValidation.length>0')
     check(data['state']['sliderEditorOpen'] and data['state']['graphRevision']==revision,'Invalid range stays in the dialog with no partial graph edit')
     await text('SliderMinimum','-20');await text('SliderMaximum','80');await text('SliderValue','15.126');await text('SliderName','Rise edited')
+    draft=(await read())['controls']
+    check(all(draft[k]['text']==v for k,v in {'SliderMinimum':'-20','SliderMaximum':'80','SliderValue':'15.126','SliderName':'Rise edited'}.items()),
+          'Native draft observation confirms every corrected field before Apply')
     await click('SliderPrecision');await page.keyboard.press('Home')
     for _ in range(3):await page.keyboard.press('ArrowDown')
     await page.keyboard.press('Enter');await settle(page)

@@ -79,3 +79,21 @@ Every campaign also runs the same managed modeling and differential framebuffer
 checks. No mock GPU, retry-to-pass, skipped scenario or alternate harness replaces
 this qualification. Per-commit CI results determine platform qualification;
 managed contract success alone is not a passed Uno application build.
+
+## Slider input qualification correction
+
+The first formatter-head Uno run passed the workspace campaign but failed in the
+existing slider campaign before reaching the new panel scenario. Its screenshot
+showed Minimum `80` and Maximum `10`: the test intended to enter `80` into Maximum,
+but its click at the outer TextBox midpoint hit the header/editor seam and left
+Minimum focused. The control bounds include the header; validation correctly
+rejected this actual draft. This was not a changed numerical range rule or a panel
+formatter failure, and simply rerunning the same input was not used as a fix.
+
+The test now targets the lower editor area, observes that the intended control
+really has focus, and verifies its actual captured text after typing. A bounded,
+read-only slider draft/focus observation exists only in qualification-enabled
+builds. Four coordinate unit contracts cover the observed 53-pixel control and
+invalid/small bounds. The original invalid-range, rounded-value, history, wire
+reuse and inspector assertions remain, with an additional all-fields draft check.
+No programmatic focus, direct graph mutation or altered Apply validation is used.

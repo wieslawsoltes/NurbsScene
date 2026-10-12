@@ -38,7 +38,14 @@ public partial class App
                 object Box(FrameworkElement element)
                 {
                     var p=element.TransformToVisual(view).TransformPoint(new(0,0));
-                    return new{x=p.X,y=p.Y,width=element.ActualWidth,height=element.ActualHeight,enabled=element is not Control c||c.IsEnabled};
+                    // Bounds include a TextBox's header. Observe the actual
+                    // focused draft so input tests cannot silently type into a
+                    // previous field after clicking a header or template border.
+                    var draft=element is TextBox textBox&&AutomationProperties.GetAutomationId(element).StartsWith("Slider",StringComparison.Ordinal)
+                        ? textBox.Text : null;
+                    if(draft?.Length>256)draft=draft[..256];
+                    return new{x=p.X,y=p.Y,width=element.ActualWidth,height=element.ActualHeight,enabled=element is not Control c||c.IsEnabled,
+                        focused=element is Control input&&input.FocusState!=FocusState.Unfocused,text=draft};
                 }
                 void Visit(DependencyObject value)
                 {
