@@ -105,7 +105,12 @@ public sealed partial class GraphEditorControl : Grid,IDisposable
     {
         if(_rebuilding)return;
         _rebuilding=true;
-        try{BuildInspector();}
+        try
+        {
+            BuildInspector();
+            foreach(var field in _inspector.Children.OfType<TextBox>())
+                InspectorScrolling.Attach(field,_inspectorScroll);
+        }
         finally{_rebuilding=false;}
     }
     private void BuildInspector()
