@@ -31,68 +31,22 @@ public sealed class PanelPreviewCache
         var options = PanelDisplayOptions.For(node);
         if (_kind == node.Component && ReferenceEquals(result, _result) && rows == _rows && columns == _columns && options == _options) return _preview;
         _options = options; _kind = node.Component; _result = result; _rows = rows; _columns = columns; BuildCount++;
-        var lines = ImmutableArray.CreateBuilder<string>(); var truncated = false; var scanned = 0;
-        void Text(string text, string prefix = "")
-        {
-            if (lines.Count == rows || scanned == MaximumScannedCodeUnits) { truncated = true; return; }
-            var limit = Math.Min(2048, MaximumScannedCodeUnits - scanned);
-            if (text.Length > limit)
-            {
-                // This is a display prefix only; authoritative strings are intact.
-                var end = char.IsHighSurrogate(text[limit - 1]) ? limit - 1 : limit;
-                text = text[..end]; truncated = true;
-            }
-            scanned += text.Length;
-            // Only the bounded display prefix is combined with an item label.
-            if (prefix.Length > 0) text = prefix + text;
-            var elements = StringInfo.GetTextElementEnumerator(text);
-            var line = new System.Text.StringBuilder(); var count = 0; var previousCr = false;
-            var lastElementStart = 0; var clippedLine = false;
-            while (elements.MoveNext())
-            {
-                if (lines.Count == rows) { truncated = true; return; }
-                var element = elements.GetTextElement();
-                if (element is "\r\n" or "\n" or "\r")
-                {
-                    if (!(previousCr && element == "\n")) { lines.Add(line.ToString()); line.Clear(); count = 0; clippedLine = false; lastElementStart = 0; }
-                    previousCr = element == "\r"; continue;
-                }
-                previousCr = false;
-                if (count == columns)
-                {
-                    if (!options.WrapItems)
-                    {
-                        // Replace a whole final grapheme, never half a surrogate
-                        // or combining sequence. Explicit newlines still survive.
-                        if (!clippedLine) { line.Length = lastElementStart; line.Append('…'); clippedLine = true; }
-                        truncated = true; continue;
-                    }
-                    lines.Add(line.ToString()); line.Clear(); count = 0;
-                    if (lines.Count == rows) { truncated = true; return; }
-                }
-                // A single grapheme can contain arbitrarily many combining marks.
-                lastElementStart = line.Length;
-                line.Append(element.Length > 64 ? "�" : element == "\t" ? " " : element); count++;
-            }
-            if (lines.Count < rows) lines.Add(line.ToString());
-            else truncated = true; // includes an omitted trailing empty line
-        }
-        PanelPreview Finish(string footer) => _preview = new(lines.ToImmutable(), footer + (truncated ? " · …" : "")) { Truncated = truncated };
+        var text = new PanelTextRows(rows, columns, options.WrapItems);
+        PanelPreview Finish(string footer) => _preview = new(text.Snapshot(), footer + (text.Truncated ? " · …" : "")) { Truncated = text.Truncated };
         if (result is null) return Finish("Waiting for solution");
-        if (result.Status != "ok") { Text(result.Messages.FirstOrDefault() ?? result.Status); return Finish(result.Status); }
+        if (result.Status != "ok") { text.Append(result.Messages.FirstOrDefault() ?? result.Status); return Finish(result.Status); }
         if (!result.Outputs.TryGetValue("T", out var tree)) return Finish("No text output");
         // Even a malformed Text result containing many empty branches is bounded.
         var visited = 0;
         foreach (var branch in tree.Branches)
         {
-            if (lines.Count == rows || scanned == MaximumScannedCodeUnits || ++visited > MaximumRows)
-            { truncated = true; break; }
-            if (options.DrawPaths) Text(branch.Path.ToString());
+            if (text.IsFull || ++visited > MaximumRows) { text.Truncate(); break; }
+            if (options.DrawPaths) text.Append(branch.Path.ToString());
             var itemIndex = 0;
             foreach (var item in branch.Items)
             {
-                if (lines.Count == rows || scanned == MaximumScannedCodeUnits) { truncated = true; break; }
-                Text(item as string ?? "<non-text>", options.DrawIndices ? (itemIndex++).ToString(CultureInfo.InvariantCulture) + ": " : "");
+                if (text.IsFull) { text.Truncate(); break; }
+                text.Append(item as string ?? "<non-text>", options.DrawIndices ? itemIndex++ : -1);
             }
         }
         return Finish($"{tree.ItemCount} items · {tree.Branches.Length} branches");

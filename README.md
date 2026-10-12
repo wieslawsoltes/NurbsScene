@@ -66,6 +66,11 @@ offline reports retain the limitations of their own revisions. The current
 elliptical curves and avoid factoring the same loft matrix for every U column;
 new revisions still require their own final-head Uno qualification.
 
+Panels also expose persistent Draw paths, Draw indices and Wrap items menus.
+Display edits retain solved outputs and wire paths. A bounded span formatter
+preserves complete Unicode text elements while avoiding per-character strings;
+see [panel display and text review](docs/PANEL-DISPLAY-AND-TEXT-REVIEW.md).
+
 ## Modeling and visual programming
 
 The Curve toolbar and command console expose `Ellipse centerX,centerY,centerZ radiusX radiusY`.

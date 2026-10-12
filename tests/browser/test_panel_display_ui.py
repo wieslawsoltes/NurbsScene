@@ -50,6 +50,20 @@ async def verify_panel_display_ui(page):
         check(not p['wrapItems'] and p['drawnTruncated'] and any('…' in line for line in p['drawnLines']),
               'Disabling wrap clips long rendered items with a visible ellipsis')
         check(p['items']==original['items'],'Display clipping never truncates authoritative panel output')
+        n=await node(pid)
+        await page.mouse.dblclick(n['x']+n['width']/2,n['y']+8,delay=80)
+        await wait('globalThis.nurbsSceneUi.values.editorOpen')
+        await click('PanelTextInput');await page.keyboard.press('Control+A')
+        unicode_text=('👩‍💻e\u0301 '*18)+'\n🌐tail'
+        await page.keyboard.insert_text(unicode_text);await click('PanelTextApply')
+        await wait('!globalThis.nurbsSceneUi.values.editorOpen');await settle(page);p=await panel(pid)
+        check(p['items']==unicode_text.split('\n') and p['drawnTruncated'] and
+              any('e\u0301' in line for line in p['drawnLines']) and
+              all(not line.endswith('\u200d') for line in p['drawnLines']),
+              'Native Unicode editing preserves complete data and grapheme-safe clipped draw rows')
+        await click('GraphUndo');p=await panel(pid)
+        check(p['items']==original['items'] and p['drawIndices'] and not p['wrapItems'] and not p['drawPaths'],
+              'Undoing Unicode text retains independent panel display options')
         n=await node(pid);await page.mouse.click(n['x']+n['width']/2,n['y']+8);await settle(page)
         await page.keyboard.press('Control+D');await settle(page)
         d=await wait('globalThis.nurbsSceneUi.state.nodeCount==='+str(baseline+2))

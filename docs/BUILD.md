@@ -139,3 +139,15 @@ the Uno app. The actual published Uno artifact is qualified separately using
 `test_uno.py`: workspace, inputs/sliders, panels and panel-edges are four mandatory
 isolated campaigns. None is an optional fallback or a retry of another campaign.
 See `RECONCILED-PANEL-REVIEW.md` for local evidence and publication limitations.
+
+## Panel display and bounded Unicode previews
+
+```sh
+dotnet run --project tests/dotnet/NurbsScene.PanelDisplayContracts -c Release
+DOTNET_TieredCompilation=0 dotnet run --project tests/panel-display-performance -c Release -- panel-display.json
+```
+
+`panel-display.yml` retains metadata/history tests, runs the new Unicode and
+allocation contracts and compares the identical benchmark with original PR11.
+`test_panel_display_ui.py` is the sixth mandatory native-input campaign in the
+actual Uno browser runner. See `PANEL-DISPLAY-AND-TEXT-REVIEW.md`.

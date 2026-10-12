@@ -125,5 +125,6 @@ Test("warm option-aware preview reads allocate zero managed bytes",()=>{
     var before=GC.GetAllocatedBytesForCurrentThread();for(var i=0;i<10000;i++)c.Get(n,r);
     var bytes=GC.GetAllocatedBytesForCurrentThread()-before;Check(bytes==0);Console.WriteLine($"METRIC option-preview-10000={bytes} B");
 });
+PanelPreviewReviewContracts.Register(tests, StandardComponents.Create(factory));
 var failed=0;foreach(var(name,run)in tests)try{run();Console.WriteLine("PASS "+name);}catch(Exception e){failed++;Console.WriteLine("FAIL "+name+"\n"+e);}
 Console.WriteLine(JsonSerializer.Serialize(new{suite="panel-display",total=tests.Count,passed=tests.Count-failed,failed}));return failed==0?0:1;
