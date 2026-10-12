@@ -25,6 +25,7 @@ public static class CanvasCreationParser
     private static readonly IReadOnlyDictionary<string, string> Aliases = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
     {
         ["+"]="Add", ["-"]="Subtract", ["*"]="Multiply", ["/"]="Divide", ["^"]="Power",
+        ["−"]="Subtract", ["×"]="Multiply", ["÷"]="Divide",
         ["Number Slider"]="Number", ["Boolean Toggle"]="Boolean", ["Text Panel"]="Panel"
     };
     public static bool TryParse(string query, ComponentRegistry registry, out CanvasCreation? creation, out string? error)

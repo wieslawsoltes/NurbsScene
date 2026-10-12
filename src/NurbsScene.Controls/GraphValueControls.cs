@@ -116,7 +116,9 @@ public sealed partial class GraphEditorControl
     private void AddValueInspector(GraphNode node)
     {
         var expected = Session!.Graph;
-        _inspector.Children.Add(ClassicChrome.Button(node.Component == "Boolean" ? "Toggle value" : "Edit text…",
+        // Keep the component's primary editing action above generic flags and
+        // matching options, including in the short bottom-docked inspector.
+        _inspector.Children.Insert(Math.Min(2, _inspector.Children.Count), ClassicChrome.Button(node.Component == "Boolean" ? "Toggle value" : "Edit text…",
             () => { if (node.Component == "Boolean") ToggleValue(expected, node); else QueueTextEdit(expected, node.Id); }, "InspectorEditValue"));
     }
     private void DisposeValueEditor() { _valueEditorDisposed = true; _textPanelDialog?.Hide(); }

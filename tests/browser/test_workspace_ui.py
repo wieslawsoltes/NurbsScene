@@ -4,7 +4,7 @@ operation below uses mouse/keyboard input; the final flag only restores the test
 session. No DOM replacement, mock GPU, or direct command invocation is used.
 """
 import asyncio,json,math
-from ui_observation import settle
+from ui_observation import settle, wait_for_ui, read_ui
 from test_graph_editing_ui import verify_graph_editing_ui
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[2]
@@ -12,12 +12,9 @@ ROOT=Path(__file__).resolve().parents[2]
 async def verify_workspace_ui(page):
     checks=[]
     async def observe():
-        value=await page.evaluate('globalThis.nurbsSceneUi')
-        if value.get('status')!='ready': raise AssertionError(value)
-        return value
+        return await read_ui(page)
     async def wait(expression):
-        await page.wait_for_function('globalThis.nurbsSceneUi?.status === "failed" || (globalThis.nurbsSceneUi?.status === "ready" && ('+expression+'))',timeout=20000)
-        return await observe()
+        return await wait_for_ui(page, expression)
     async def click(identity,double=False):
         await wait('!!globalThis.nurbsSceneUi.controls['+json.dumps(identity)+']')
         data=await observe();box=data['controls'][identity]

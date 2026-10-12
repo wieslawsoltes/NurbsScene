@@ -12,7 +12,7 @@ public sealed record ComponentContext(IReadOnlyDictionary<string,object?> Inputs
     /// <summary>Connected ports at this solve's captured revision, including
     /// connected empty trees. Persistent/default inputs are not connections.</summary>
     public ImmutableArray<string> ConnectedInputs { get; init; } = [];
-    public bool IsConnected(string name) => ConnectedInputs.Contains(name);
+    public bool IsConnected(string name) => !ConnectedInputs.IsDefaultOrEmpty && ConnectedInputs.Contains(name);
     public double Number(string name)=>Convert.ToDouble(Inputs[name],System.Globalization.CultureInfo.InvariantCulture);
     public T Get<T>(string name)=>Inputs[name] is T value?value:throw new InvalidCastException($"Input {name} is not {typeof(T).Name}.");
     public double Parameter(string name,double fallback=0)=>Parameters.TryGetValue(name,out var v)?Convert.ToDouble(v,System.Globalization.CultureInfo.InvariantCulture):fallback;
@@ -36,7 +36,7 @@ public sealed partial class Graph(ComponentRegistry registry)
     private readonly Dictionary<PortAddress,List<Wire>> _inputWires=[];
     private const int MaximumWires=100_000;
     private ExecutionPlan? _plan;
-    private sealed record ExecutionPlan(string[] Order,Dictionary<PortAddress,Wire[]> Inputs);
+    private sealed record ExecutionPlan(string[] Order,Dictionary<PortAddress,Wire[]> Inputs,Dictionary<string,ImmutableArray<string>> ConnectedPorts);
     public long ExecutionPlanBuilds {get;private set;}
     private bool _editing,_pendingChange;
     internal void BeginEdit()
@@ -61,7 +61,16 @@ public sealed partial class Graph(ComponentRegistry registry)
         var wires=_wires.Values.ToArray();
         var order=Topological(_nodes,wires,wires.ToLookup(w=>w.From.Node));
         var inputs=wires.GroupBy(w=>w.To).ToDictionary(g=>g.Key,g=>g.ToArray());
-        _plan=new(order,inputs);ExecutionPlanBuilds++;return _plan;
+        var connections=new Dictionary<string,ImmutableArray<string>>();
+        foreach(var node in _nodes.Values)
+        {
+            ImmutableArray<string>.Builder? names=null;
+            // Preserve definition order, not the order in which wires were added.
+            foreach(var port in Registry.Get(node.Component).Inputs)
+                if(inputs.ContainsKey(new(node.Id,port.Name)))(names??=ImmutableArray.CreateBuilder<string>()).Add(port.Name);
+            if(names is not null)connections.Add(node.Id,names.ToImmutable());
+        }
+        _plan=new(order,inputs,connections);ExecutionPlanBuilds++;return _plan;
     }
 
     private void Link(Wire wire)
@@ -87,6 +96,11 @@ public sealed partial class Graph(ComponentRegistry registry)
     public int WireCount { get { lock(_gate)return _wires.Count; } }
     public GraphResult? LastResult { get; private set; }
     public GraphNode GetNode(string id){lock(_gate)return _nodes.TryGetValue(id,out var n)?n:throw new KeyNotFoundException(id);}
+    public bool TryGetNode(string id,[System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out GraphNode? node)
+    {
+        ArgumentNullException.ThrowIfNull(id);
+        lock(_gate)return _nodes.TryGetValue(id,out node);
+    }
     private void Invalidate(string id){var queue=new Queue<string>();var seen=new HashSet<string>();queue.Enqueue(id);while(queue.TryDequeue(out var n)){if(!seen.Add(n))continue;_dirty.Add(n);if(_outgoing.TryGetValue(n,out var children))foreach(var child in children.Keys)queue.Enqueue(child);}}
     public GraphNode Add(string component,double x=0,double y=0,IReadOnlyDictionary<string,object?>? parameters=null,string? name=null,string? id=null)
     {
@@ -157,11 +171,10 @@ public sealed partial class Graph(ComponentRegistry registry)
                 else
                 {
                     var inputs=new Dictionary<string,DataTree>();
-                    var connected=ImmutableArray.CreateBuilder<string>();
+                    var connected=plan.ConnectedPorts.GetValueOrDefault(id,ImmutableArray<string>.Empty);
                     foreach(var port in definition.Inputs)
                     {
                         var incoming=plan.Inputs.GetValueOrDefault(new PortAddress(id,port.Name))??[];var tree=DataTree.Empty;
-                        if(incoming.Length>0)connected.Add(port.Name);
                         DataTree Resolve(Wire wire)
                         {
                             var upstream=results[wire.From.Node];
@@ -174,7 +187,7 @@ public sealed partial class Graph(ComponentRegistry registry)
                         if(incoming.Length==0){var key="input:"+port.Name;var value=node.Parameters.TryGetValue(key,out var v)?v:port.Default;if(value is null&&!port.Optional)throw new ArgumentException($"Required input {port.Name} is not connected.");if(value is not null)tree=value is DataTree persistent?persistent:port.Access==PortAccess.List&&value is System.Collections.IEnumerable list&&value is not string?DataTree.List(list.Cast<object?>()):DataTree.Item(value);}
                         foreach(var value in tree.AllItems)Validate(value,port);inputs.Add(port.Name,tree);
                     }
-                    output=await EvaluateDefinition(definition,node,inputs,connected.ToImmutable(),cancellationToken);
+                    output=await EvaluateDefinition(definition,node,inputs,connected,cancellationToken);
                 }
             }
             catch(OperationCanceledException){throw;}

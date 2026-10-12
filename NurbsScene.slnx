@@ -28,5 +28,8 @@
   <Project Path="tests/dotnet/NurbsScene.CanvasInputContracts/NurbsScene.CanvasInputContracts.csproj" />
   <Project Path="tests/dotnet/NurbsScene.PanelLayoutContracts/NurbsScene.PanelLayoutContracts.csproj" />
   <Project Path="tests/dotnet/NurbsScene.TextDraftContracts/NurbsScene.TextDraftContracts.csproj" />
+  <Project Path="tests/dotnet/NurbsScene.CanvasReviewContracts/NurbsScene.CanvasReviewContracts.csproj" />
+  <Project Path="tests/dotnet/NurbsScene.PanelEdgeContracts/NurbsScene.PanelEdgeContracts.csproj" />
+  <Project Path="tests/dotnet/NurbsScene.LoftContracts/NurbsScene.LoftContracts.csproj" />
   <Project Path="tests/dotnet/NurbsScene.PanelDisplayContracts/NurbsScene.PanelDisplayContracts.csproj" />
 </Solution>

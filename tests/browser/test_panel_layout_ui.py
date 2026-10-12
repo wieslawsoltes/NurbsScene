@@ -1,18 +1,15 @@
 """Real panel resizing, draft isolation and multiline editor reopening."""
 import json
 from pathlib import Path
-from ui_observation import settle
+from ui_observation import settle, wait_for_ui, read_ui
 ROOT=Path(__file__).resolve().parents[2]
 
 async def verify_panel_layout_ui(page):
     checks=[]
     async def read():
-        data=await page.evaluate('globalThis.nurbsSceneUi')
-        if data.get('status')!='ready':raise AssertionError(data)
-        return data
+        return await read_ui(page)
     async def wait(expression):
-        await page.wait_for_function('globalThis.nurbsSceneUi?.status!=="ready" || ('+expression+')',timeout=20000)
-        return await read()
+        return await wait_for_ui(page, expression)
     async def click(identity):
         d=await wait('!!globalThis.nurbsSceneUi.controls['+json.dumps(identity)+']');b=d['controls'][identity]
         if not b['enabled']:raise AssertionError('Disabled '+identity)
@@ -80,8 +77,13 @@ async def verify_panel_layout_ui(page):
         # Legacy Text uses the same draft-only inspector editor instead of an
         # eagerly initialized multiline TextBox that truncated on focus loss.
         legacy=await create('Text');lid=legacy['id']
+        check(legacy['component']=='Text','Reopened search starts empty and creates Text, not a stale literal panel')
         await page.mouse.click(legacy['x']+legacy['width']/2,legacy['y']+8);await settle(page)
-        await click('GraphProperties');await click('InspectorEditValue');await wait('globalThis.nurbsSceneUi.values.editorOpen')
+        d=await click('GraphProperties');button=d['controls']['InspectorEditValue'];inspector=d['controls']['GraphInspector']
+        check(button['y']>=inspector['y'] and button['y']+button['height']<=inspector['y']+inspector['height'] and
+              button['y']+button['height']<=d['state']['workspaceHeight'],
+              'Primary text editor action is visibly inside the bottom-docked inspector')
+        await click('InspectorEditValue');await wait('globalThis.nurbsSceneUi.values.editorOpen')
         check((await read())['values']['editorText']=='NurbsScene','Legacy text inspector preserves its implicit default value')
         await edit_text('first\nsecond\n');await click('InspectorEditValue');d=await wait('globalThis.nurbsSceneUi.values.editorOpen')
         check(d['values']['editorText']=='first\nsecond\n','Legacy text inspector reopens multiline drafts without truncation')

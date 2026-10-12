@@ -55,7 +55,9 @@ public sealed partial class Graph
             {
                 var inputs=new Dictionary<PortAddress,Wire[]>(plan.Inputs);
                 foreach(var target in targets)inputs[target]=_inputWires[target].ToArray();
-                _plan=new(plan.Order,inputs);
+                // Transform-only edits cannot change which input ports are connected.
+                // Retain the ordered immutable connection snapshots as well.
+                _plan=plan with{Inputs=inputs};
             }
             // One traversal for the entire batch: shared downstream components
             // must not be revisited once for every transformed destination.

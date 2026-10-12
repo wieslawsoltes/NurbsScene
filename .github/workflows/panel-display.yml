@@ -16,13 +16,16 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           global-json-file: global.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
       - name: Display metadata, undo, exact interchange and cache budgets
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p artifacts/panel-display
           dotnet run --project tests/dotnet/NurbsScene.PanelDisplayContracts -c Release 2>&1 | tee artifacts/panel-display/contracts.log
-          python tests/browser/test_observation_contracts.py 2>&1 | tee artifacts/panel-display/observer.log
+          python -m unittest discover -s tests/browser -p 'test_observation*contracts.py' -v 2>&1 | tee artifacts/panel-display/observer.log
           git rev-parse HEAD HEAD^{tree} > artifacts/panel-display/tested-revision.txt
       - uses: actions/upload-artifact@v4
         if: always()

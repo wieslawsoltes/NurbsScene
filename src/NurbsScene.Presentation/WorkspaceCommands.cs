@@ -17,6 +17,7 @@ public static class WorkspaceCommands
         new("Ghosted","Ghosted","View","Ghosted","Ghosted"),new("Grid","Show grid","View","Grid","@Grid"),
         new("Definition","Definition panel","View","Graph","@Definition"),
         new("Line","Line: pick two points","Curve","Line","Line"),new("Circle","Circle","Curve","Circle","Circle 0,0,0 10",true),
+        new("Ellipse","Ellipse","Curve","Ellipse","Ellipse 0,0,0 10 5",true),
         new("Interpolate","Interpolate points","Curve","Curve","Interpolate -20,0,0 -8,12,3 8,-8,6 20,0,0",true),
         new("Reverse","Reverse curve","Curve","Reverse","Reverse"),new("InsertKnot","Insert knot","Curve","Knot","InsertKnot 0.5",true),
         new("ElevateDegree","Elevate degree","Curve","Elevate","ElevateDegree"),new("SplitCurve","Split curve","Curve","Split","SplitCurve .25 .5",true),

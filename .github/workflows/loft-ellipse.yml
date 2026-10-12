@@ -1,0 +1,47 @@
+name: Exact ellipse and loft factorization contracts
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  geometry:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DOTNET_TieredCompilation: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Build independent native evaluator
+        run: |
+          cmake -S native/kernel -B artifacts/native -DCMAKE_BUILD_TYPE=Release
+          cmake --build artifacts/native --parallel
+      - name: Analytic, native and former-solver comparisons
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/loft
+          LD_LIBRARY_PATH="$PWD/artifacts/native" dotnet run --project tests/dotnet/NurbsScene.LoftContracts -c Release 2>&1 | tee artifacts/loft/contracts.log
+          git rev-parse HEAD HEAD^{tree} > artifacts/loft/tested-revision.txt
+      - name: Identical baseline and candidate CPU loft workloads
+        shell: bash
+        run: |
+          set -euo pipefail
+          baseline="$RUNNER_TEMP/nurbsscene-loft-baseline"
+          git worktree add --detach "$baseline" 0f021547748501c0dcbc34d4bd014417fc691f28
+          mkdir -p "$baseline/tests/loft-performance"
+          cp tests/loft-performance/*.cs tests/loft-performance/*.csproj "$baseline/tests/loft-performance/"
+          dotnet run --project "$baseline/tests/loft-performance" -c Release -- "$GITHUB_WORKSPACE/artifacts/loft/baseline.json"
+          dotnet run --project tests/loft-performance -c Release -- "$GITHUB_WORKSPACE/artifacts/loft/candidate.json"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: loft-ellipse-${{ github.run_id }}
+          path: artifacts/loft/

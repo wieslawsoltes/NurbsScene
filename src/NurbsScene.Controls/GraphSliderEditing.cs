@@ -59,7 +59,7 @@ public sealed partial class GraphCanvas
             // including repeated clicks; opening settings must not change values.
             if(_worldLast.Y<node.Y+16){CancelGesture();ReleasePointerCaptures();SelectNode(node.Id);SliderEditRequested?.Invoke(node.Id);}
         }
-        else if(!PanelLayout.CanResize(node)||!PanelLayout.IsHandle(Layout(node).Bounds,new(_worldLast.X,_worldLast.Y),Math.Min(128,10/_zoom)))HandleValueDoubleTap(node);
+        else if(ResizeHit(node,_worldLast)==PanelResizeEdges.None)HandleValueDoubleTap(node);
         e.Handled=true;
     }
     private void DrawNumberSlider(SKCanvas canvas,GraphNode node,SKRect rect)

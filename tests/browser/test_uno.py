@@ -10,11 +10,13 @@ import json
 import os
 from pathlib import Path
 from playwright.async_api import async_playwright
+from ui_observation import wait_ready, wait_for_restored
 from test_workspace_ui import verify_workspace_ui
 from test_graph_inputs_ui import verify_graph_inputs_ui
 from test_canvas_values_ui import verify_canvas_values_ui
 from test_panel_layout_ui import verify_panel_layout_ui
-from ui_observation import wait_ready
+from test_panel_edges_ui import verify_panel_edges_ui
+from test_loft_ellipse_ui import verify_loft_ellipse_ui
 from test_panel_display_ui import verify_panel_display_ui
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -30,6 +32,8 @@ async def main(url):
     campaigns = (("workspace", verify_workspace_ui),
                  ("inputs-sliders", verify_graph_inputs_ui),
                  ("panels", verify_panels),
+                 ("panel-edges", verify_panel_edges_ui),
+                 ("ellipse-loft", verify_loft_ellipse_ui),
                  ("panel-display", verify_panel_display_ui))
     all_checks, reports, campaign_reports, errors, logs = [], [], [], [], []
     def write(name, data):
@@ -63,15 +67,14 @@ async def main(url):
                     reports.append(report)
                     if len(reports) == 1:
                         write("uno-browser.json", report)  # canonical modeling/framebuffer report
-                    # Modeling and UI observation have separate startup tasks.
-                    # Wait explicitly; undefined is not a failure or ready state.
-                    await wait_ready(page)
+                    # Modeling qualification is published before the first UI
+                    # observation. Every fresh context needs this explicit handoff.
+                    ready = await wait_ready(page, timeout=20000)
+                    record["firstSample"] = ready["sample"]
                     record["checks"] = await verify(page)
                     record["final"] = await page.evaluate("globalThis.nurbsSceneUi")
                     await page.evaluate("globalThis.nurbsSceneUiFinish=true")
-                    await page.wait_for_function('globalThis.nurbsSceneUi?.status !== "ready"', timeout=15000)
-                    if await page.evaluate("globalThis.nurbsSceneUi.status") != "restored":
-                        raise AssertionError(await page.evaluate("globalThis.nurbsSceneUi"))
+                    await wait_for_restored(page)
                     record["checks"].append("Interaction test session restored: " + name)
                     if campaign_errors:
                         raise AssertionError(campaign_errors)

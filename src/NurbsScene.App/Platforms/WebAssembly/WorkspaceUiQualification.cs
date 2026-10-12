@@ -93,7 +93,7 @@ public partial class App
                     }
                     FindPreview(view.GraphEditor);
                 }
-                var snapshot=new{status="ready",sample=++sample,controls,views,nodes,wires,previewLines,values=ObserveCanvasValues(view),state=new{
+                var snapshot=new{status="ready",sample=++sample,controls,views,nodes,wires,previewLines,values=ObserveCanvasValues(view),lastGeometry=ObserveLastGeometry(view),state=new{
                     objects=controller.Document.Objects.Count,layers=controller.Document.Layers.Count,
                     selected=controller.Document.Selection.Count,documentRevision=controller.Document.Revision,
                     nodeCount=controller.Graph.Nodes.Count,wireCount=controller.Graph.Wires.Count,graphRevision=controller.Graph.Revision,
@@ -106,7 +106,7 @@ public partial class App
                     shelfPageBuilds=view.GraphEditor.Shelf.PageBuildCount,shelfButtonBuilds=view.GraphEditor.Shelf.ButtonBuildCount,
                     toolbar=view.Toolbar.Category,category=view.GraphEditor.Shelf.Category,inspector=view.Inspector.ActiveTab,
                     dock=view.Preferences.Dock,definitionVisible=view.Preferences.DefinitionVisible,inspectorVisible=view.Preferences.InspectorVisible,
-                    activeViewport=cad.ActiveViewport,maximized=cad.Maximized,gridSnap=view.Aids.GridSnap,ortho=view.Aids.Ortho,endSnap=view.Aids.EndSnap,
+                    activeViewport=cad.ActiveViewport, maximized=cad.Maximized,gridSnap=view.Aids.GridSnap,ortho=view.Aids.Ortho,endSnap=view.Aids.EndSnap,
                     pending=controller.PendingCommand,anchor=controller.CommandAnchor?.ToArray(),lastName=last?.Name,lastPoints,
                     gpuError=cad.LastError,workspaceWidth=view.ActualWidth,workspaceHeight=view.ActualHeight}};
                 PublishUi(snapshot);await Task.Delay(120);

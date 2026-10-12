@@ -1,18 +1,15 @@
 """Display-only panel menus, retained data and actual rendered preview text."""
 import json
 from pathlib import Path
-from ui_observation import settle
+from ui_observation import settle, read_ui, wait_for_ui
 ROOT=Path(__file__).resolve().parents[2]
 
 async def verify_panel_display_ui(page):
     checks=[]
     async def read():
-        value=await page.evaluate('globalThis.nurbsSceneUi')
-        if not isinstance(value,dict) or value.get('status')!='ready':raise AssertionError(value)
-        return value
+        return await read_ui(page)
     async def wait(expression):
-        await page.wait_for_function('globalThis.nurbsSceneUi && (globalThis.nurbsSceneUi.status!=="ready" || ('+expression+'))',timeout=20000)
-        return await read()
+        return await wait_for_ui(page, expression)
     async def click(identity):
         data=await wait('!!globalThis.nurbsSceneUi.controls['+json.dumps(identity)+']');b=data['controls'][identity]
         if not b['enabled']:raise AssertionError('Disabled '+identity)

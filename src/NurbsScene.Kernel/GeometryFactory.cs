@@ -2,7 +2,7 @@ using NurbsScene.Geometry;
 
 namespace NurbsScene.Kernel;
 
-public sealed class GeometryFactory(INurbsEvaluator evaluator)
+public sealed partial class GeometryFactory(INurbsEvaluator evaluator)
 {
     public INurbsEvaluator Evaluator { get; }=evaluator;
     public NurbsCurve Line(Vec3 a,Vec3 b)=>new(Evaluator,1,[0,0,1,1],[HPoint.FromPoint(a),HPoint.FromPoint(b)]);
@@ -56,11 +56,8 @@ public sealed class GeometryFactory(INurbsEvaluator evaluator)
         return new(Evaluator,degree,knots,Enumerable.Range(0,n).Select(i=>new HPoint(rhs[i,0],rhs[i,1],rhs[i,2],1)));
     }
     public NurbsSurface Loft(IReadOnlyList<NurbsCurve> curves,int degreeV=3)
-    {
-        if(curves.Count<2||degreeV<1)throw new ArgumentException("Loft requires at least two curves.");var compatible=CurveOperations.MakeCompatible(curves);var count=compatible.Length;degreeV=Math.Min(degreeV,count-1);var times=Enumerable.Range(0,count).Select(i=>i/(count-1d)).ToArray();var knots=new double[count+degreeV+1];for(var j=1;j<count-degreeV;j++){double sum=0;for(var i=j;i<j+degreeV;i++)sum+=times[i];knots[j+degreeV]=sum/degreeV;}Array.Fill(knots,1,count,degreeV+1);var matrix=new double[count,count];for(var i=0;i<count;i++){var(span,b)=ManagedNurbsEvaluator.Basis(degreeV,count,knots,times[i],0);for(var j=0;j<=degreeV;j++)matrix[i,span-degreeV+j]=b[0,j];}
-        var points=new HPoint[compatible[0].Count*count];for(var u=0;u<compatible[0].Count;u++){var rhs=new double[count,4];for(var j=0;j<count;j++){var p=compatible[j].ControlPoints[u];rhs[j,0]=p.X;rhs[j,1]=p.Y;rhs[j,2]=p.Z;rhs[j,3]=p.W;}LinearSolver.Solve((double[,])matrix.Clone(),rhs);for(var j=0;j<count;j++)points[u*count+j]=new(rhs[j,0],rhs[j,1],rhs[j,2],rhs[j,3]);}
-        return new(Evaluator,compatible[0].Degree,degreeV,compatible[0].Count,count,compatible[0].Knots.ToArray(),knots,points);
-    }
+        =>Loft(curves,degreeV,CancellationToken.None);
+
 }
 internal static class LinearSolver
 {

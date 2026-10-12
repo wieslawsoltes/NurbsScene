@@ -45,7 +45,7 @@ public sealed partial class GraphCanvas : SKCanvasElement,IDisposable
     }
     public CanvasPoint ScreenPoint(string nodeId,bool output,int index)
     {
-        var n=Drawing().Nodes.Single(n=>n.Node.Id==nodeId);var p=CanvasPort(n,output,index);return new(p.X*_zoom+_panX,p.Y*_zoom+_panY);
+        Drawing();var n=_layouts[nodeId];var p=CanvasPort(n,output,index);return new(p.X*_zoom+_panX,p.Y*_zoom+_panY);
     }
     private GraphDrawing Drawing()
     {
@@ -118,6 +118,12 @@ public sealed partial class GraphCanvas : SKCanvasElement,IDisposable
     private void Replaced(){ClearPanelResize();_before=null;_gesture="";_wire=null;_slider=null;_starts.Clear();ReleasePointerCaptures();if(_graph is not null){_graph.Changed-=GraphChanged;_graph.Solved-=Solved;}_graph=_session!.Graph;_graph.Changed+=GraphChanged;_graph.Solved+=Solved;_selection.IntersectWith(_graph.Nodes.Select(n=>n.Id));SelectionChanged?.Invoke();Invalidate();}
     private void GraphChanged()
     {
+        // Dropping a stale resize draft never rolls back independent host edits.
+        if(_session is not null&&_panelResize is{} resize&&!resize.IsCurrent(_session.Graph))
+        {ClearPanelResize();_gesture="";ReleasePointerCaptures();}
+        // A deleted wire source must not be dereferenced by the next paint.
+        if(_session is not null&&_wire is{} pending&&!_session.Graph.TryGetNode(pending.Node,out _))
+        {CancelGesture();ReleasePointerCaptures();}
         if(_session is not null&&_selection.Count>0){var count=_selection.Count;_selection.IntersectWith(Drawing().Nodes.Select(n=>n.Node.Id));if(count!=_selection.Count)SelectionChanged?.Invoke();}
         Invalidate();
     }
@@ -153,13 +159,17 @@ public sealed partial class GraphCanvas : SKCanvasElement,IDisposable
     protected override void RenderOverride(SKCanvas canvas,Size area)
     {
         canvas.Save();canvas.ClipRect(new(0,0,(float)area.Width,(float)area.Height));Fill(canvas,new(0,0,(float)area.Width,(float)area.Height),new(214,211,203));
+        // Draw in screen coordinates using bounded integer indices. Adding a
+        // 25-unit step to a float around 1e9 does not advance that float at all.
+        if(CanvasGridLayout.TryCreate(area.Width,area.Height,_zoom,_panX,_panY,out var grid))
+        {
+            _paint.Style=SKPaintStyle.Stroke;_paint.StrokeWidth=.6f;_paint.Color=new(194,192,185);
+            for(var i=0;i<grid.Columns;i++){var x=(float)(grid.OffsetX+i*grid.Spacing);canvas.DrawLine(x,0,x,(float)area.Height,_paint);}
+            for(var i=0;i<grid.Rows;i++){var y=(float)(grid.OffsetY+i*grid.Spacing);canvas.DrawLine(0,y,(float)area.Width,y,_paint);}
+        }
         canvas.Translate(_panX,_panY);canvas.Scale(_zoom);
         var bounds=new SKRect(-_panX/_zoom,-_panY/_zoom,((float)area.Width-_panX)/_zoom,((float)area.Height-_panY)/_zoom);
         var view=new CanvasBox(bounds.Left,bounds.Top,bounds.Width,bounds.Height);
-        var grid=_zoom>.45f?25:100;_paint.Style=SKPaintStyle.Stroke;_paint.StrokeWidth=.6f/_zoom;_paint.Color=new(194,192,185);
-        // Line grid is O(width+height), rather than one draw per grid intersection.
-        for(var x=MathF.Floor(bounds.Left/grid)*grid;x<bounds.Right;x+=grid)canvas.DrawLine(x,bounds.Top,x,bounds.Bottom,_paint);
-        for(var y=MathF.Floor(bounds.Top/grid)*grid;y<bounds.Bottom;y+=grid)canvas.DrawLine(bounds.Left,y,bounds.Right,y,_paint);
         if(_session is not null)
         {
             var graph=_session.Graph;var drawing=Drawing();
@@ -173,7 +183,7 @@ public sealed partial class GraphCanvas : SKCanvasElement,IDisposable
                 if(_zoom>.35f&&wire.Transform!="none")
                 {
                     var tag=wire.Transform switch{"flatten"=>"F","graft"=>"G","simplify"=>"S",_=>"?"};
-                    var x=(float)w.End.X-24;var y=(float)w.End.Y;
+                    var endpoint=WireEnd(w);var x=(float)endpoint.X-24;var y=(float)endpoint.Y;
                     Fill(canvas,new(x-5,y-7,x+5,y+6),new(249,239,186),2);
                     Text(canvas,tag,x-3,y+3,new(68,65,46),9);
                 }
@@ -202,7 +212,7 @@ public sealed partial class GraphCanvas : SKCanvasElement,IDisposable
                         var name=node.Name??node.Component;_font.Size=9;Text(canvas,name,rect.MidX-_font.MeasureText(name)/2,rect.Bottom-5,new(59,59,68),9);
                     }
                     canvas.Restore();
-                    if(PanelLayout.CanResize(node))DrawResizeHandle(canvas,rect);
+                    if(PanelLayout.CanResize(node))DrawResizeHandles(canvas,rect,selected);
                     for(var side=0;side<2;side++){var ports=side==1?n.Definition.Outputs:n.Definition.Inputs;for(var i=0;i<ports.Length;i++){var p=CanvasPort(n,side==1,i);_paint.Style=SKPaintStyle.Fill;_paint.Color=new(220,220,225);canvas.DrawCircle((float)p.X,(float)p.Y,3,_paint);_paint.Style=SKPaintStyle.Stroke;_paint.Color=new(65,65,70);_paint.StrokeWidth=1;canvas.DrawCircle((float)p.X,(float)p.Y,3,_paint);}}
                 }
             }
@@ -223,7 +233,10 @@ public sealed partial class GraphCanvas : SKCanvasElement,IDisposable
     public void Fit()
     {
         if(_session is null||_session.Graph.Nodes.Count==0)return;var rects=_session.Graph.Nodes.Select(Rect).ToArray();var minX=rects.Min(r=>r.Left);var minY=rects.Min(r=>r.Top);var maxX=rects.Max(r=>r.Right);var maxY=rects.Max(r=>r.Bottom);
-        _zoom=Math.Clamp((float)Math.Min(Math.Max(1,ActualWidth-60)/(maxX-minX),Math.Max(1,ActualHeight-60)/(maxY-minY)),.15f,1.5f);_panX=(float)ActualWidth/2-(minX+maxX)*_zoom/2;_panY=(float)ActualHeight/2-(minY+maxY)*_zoom/2;ViewChanged?.Invoke();Invalidate();
+        var zoom=Math.Clamp((float)Math.Min(Math.Max(1,ActualWidth-60)/(maxX-minX),Math.Max(1,ActualHeight-60)/(maxY-minY)),.15f,1.5f);
+        var panX=(float)ActualWidth/2-(minX/2+maxX/2)*zoom;var panY=(float)ActualHeight/2-(minY/2+maxY/2)*zoom;
+        if(!float.IsFinite(zoom)||!float.IsFinite(panX)||!float.IsFinite(panY)){Message?.Invoke("Definition coordinates exceed the canvas rendering range. The previous view was retained.");return;}
+        _zoom=zoom;_panX=panX;_panY=panY;ViewChanged?.Invoke();Invalidate();
     }
     public void Dispose(){ClearPanelResize();_panelPreviews.Clear();_panelDisplayLayouts.Clear();Unsubscribe();foreach(var path in _wirePaths.Values)path.Path.Dispose();_wirePaths.Clear();_paths.Clear();_treeDash.Dispose();_font.Dispose();_paint.Dispose();}
 }
