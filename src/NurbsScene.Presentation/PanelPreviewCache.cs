@@ -18,66 +18,35 @@ public sealed class PanelPreviewCache
     private string? _kind;
     private NodeResult? _result;
     private int _rows, _columns;
+    private PanelDisplayOptions? _options;
     private PanelPreview _preview = new([], "Waiting for solution");
     public long BuildCount { get; private set; }
+    public PanelPreview Current => _preview;
     public PanelPreview Get(GraphNode node, NodeResult? result) => Get(node, result, 8, 29);
     public PanelPreview Get(GraphNode node, NodeResult? result, int rows, int columns)
     {
         ArgumentNullException.ThrowIfNull(node);
         if (rows < 1 || rows > MaximumRows || columns < 1 || columns > MaximumColumns)
             throw new ArgumentOutOfRangeException(nameof(rows), "Preview dimensions exceed the formatting budget.");
-        if (_kind == node.Component && ReferenceEquals(result, _result) && rows == _rows && columns == _columns) return _preview;
-        _kind = node.Component; _result = result; _rows = rows; _columns = columns; BuildCount++;
-        var lines = ImmutableArray.CreateBuilder<string>(); var truncated = false; var scanned = 0;
-        void Text(string text)
-        {
-            if (lines.Count == rows || scanned == MaximumScannedCodeUnits) { truncated = true; return; }
-            var limit = Math.Min(2048, MaximumScannedCodeUnits - scanned);
-            if (text.Length > limit)
-            {
-                // This is a display prefix only; authoritative strings are intact.
-                var end = char.IsHighSurrogate(text[limit - 1]) ? limit - 1 : limit;
-                text = text[..end]; truncated = true;
-            }
-            scanned += text.Length;
-            var elements = StringInfo.GetTextElementEnumerator(text);
-            var line = new System.Text.StringBuilder(); var count = 0; var previousCr = false;
-            while (elements.MoveNext())
-            {
-                if (lines.Count == rows) { truncated = true; return; }
-                var element = elements.GetTextElement();
-                if (element is "\r\n" or "\n" or "\r")
-                {
-                    if (!(previousCr && element == "\n")) { lines.Add(line.ToString()); line.Clear(); count = 0; }
-                    previousCr = element == "\r"; continue;
-                }
-                previousCr = false;
-                if (count == columns)
-                {
-                    lines.Add(line.ToString()); line.Clear(); count = 0;
-                    if (lines.Count == rows) { truncated = true; return; }
-                }
-                // A single grapheme can contain arbitrarily many combining marks.
-                line.Append(element.Length > 64 ? "�" : element == "\t" ? " " : element); count++;
-            }
-            if (lines.Count < rows) lines.Add(line.ToString());
-            else truncated = true; // includes an omitted trailing empty line
-        }
-        PanelPreview Finish(string footer) => _preview = new(lines.ToImmutable(), footer + (truncated ? " · …" : "")) { Truncated = truncated };
+        var options = PanelDisplayOptions.For(node);
+        if (_kind == node.Component && ReferenceEquals(result, _result) && rows == _rows && columns == _columns && options == _options) return _preview;
+        _options = options; _kind = node.Component; _result = result; _rows = rows; _columns = columns; BuildCount++;
+        var text = new PanelTextRows(rows, columns, options.WrapItems);
+        PanelPreview Finish(string footer) => _preview = new(text.Snapshot(), footer + (text.Truncated ? " · …" : "")) { Truncated = text.Truncated };
         if (result is null) return Finish("Waiting for solution");
-        if (result.Status != "ok") { Text(result.Messages.FirstOrDefault() ?? result.Status); return Finish(result.Status); }
+        if (result.Status != "ok") { text.Append(result.Messages.FirstOrDefault() ?? result.Status); return Finish(result.Status); }
         if (!result.Outputs.TryGetValue("T", out var tree)) return Finish("No text output");
         // Even a malformed Text result containing many empty branches is bounded.
         var visited = 0;
         foreach (var branch in tree.Branches)
         {
-            if (lines.Count == rows || scanned == MaximumScannedCodeUnits || ++visited > MaximumRows)
-            { truncated = true; break; }
-            if (node.Component == "Panel") Text(branch.Path.ToString());
+            if (text.IsFull || ++visited > MaximumRows) { text.Truncate(); break; }
+            if (options.DrawPaths) text.Append(branch.Path.ToString());
+            var itemIndex = 0;
             foreach (var item in branch.Items)
             {
-                if (lines.Count == rows || scanned == MaximumScannedCodeUnits) { truncated = true; break; }
-                Text(item as string ?? "<non-text>");
+                if (text.IsFull) { text.Truncate(); break; }
+                text.Append(item as string ?? "<non-text>", options.DrawIndices ? itemIndex++ : -1);
             }
         }
         return Finish($"{tree.ItemCount} items · {tree.Branches.Length} branches");

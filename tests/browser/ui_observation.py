@@ -6,6 +6,7 @@ read. An explicit failure or premature restoration fails immediately. No action
 is dispatched, model mutated, timeout extended, or failed campaign retried here.
 """
 from typing import Any
+import math
 
 # Preserve PR10's published readiness predicate and helper name for callers.
 READY_EXPRESSION = """(() => {
@@ -77,3 +78,20 @@ async def settle(page) -> dict:
         return await wait_for_ui(page, "globalThis.nurbsSceneUi.sample >= " + str(first["sample"] + 2))
     except AssertionError as error:
         raise AssertionError({"message": "Workspace observer stopped during input", "detail": str(error)}) from error
+
+
+def text_editor_point(bounds: dict) -> tuple[float, float]:
+    """Target the lower editor, not the header/gap included in control bounds.
+
+    Computes coordinates only. Callers must verify the actual focused control
+    and captured draft before sending or accepting text; no focus is forced here.
+    """
+    try:
+        x, y, width, height = (bounds[k] for k in ("x", "y", "width", "height"))
+        if any(type(v) not in (int, float) or not math.isfinite(v) for v in (x, y, width, height)):
+            raise ValueError("Nonfinite or nonnumeric editor bounds")
+        if width <= 0 or height <= 0:
+            raise ValueError("Editor bounds must have positive dimensions")
+        return x + width / 2, y + height - min(12, height / 2)
+    except (KeyError, TypeError) as error:
+        raise ValueError("Incomplete editor bounds") from error

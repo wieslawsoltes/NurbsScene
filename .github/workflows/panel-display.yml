@@ -1,0 +1,47 @@
+name: Panel display options and cache contracts
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  panel-display:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      DOTNET_TieredCompilation: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Display metadata, undo, exact interchange and cache budgets
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/panel-display
+          dotnet run --project tests/dotnet/NurbsScene.PanelDisplayContracts -c Release 2>&1 | tee artifacts/panel-display/contracts.log
+          python -m unittest discover -s tests/browser -p 'test_observation*contracts.py' -v 2>&1 | tee artifacts/panel-display/observer.log
+          git rev-parse HEAD HEAD^{tree} > artifacts/panel-display/tested-revision.txt
+      - name: Identical original PR11 and candidate preview workloads
+        shell: bash
+        run: |
+          set -euo pipefail
+          baseline="$RUNNER_TEMP/nurbsscene-panel-display-baseline"
+          git worktree add --detach "$baseline" 4c6bd761431c9a86fef74f8361aa3b8118e75b3f
+          mkdir -p "$baseline/tests/panel-display-performance"
+          cp tests/panel-display-performance/*.cs tests/panel-display-performance/*.csproj "$baseline/tests/panel-display-performance/"
+          dotnet run --project "$baseline/tests/panel-display-performance" -c Release -- "$GITHUB_WORKSPACE/artifacts/panel-display/baseline.json"
+          dotnet run --project tests/panel-display-performance -c Release -- "$GITHUB_WORKSPACE/artifacts/panel-display/candidate.json"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: panel-display-${{ github.run_id }}
+          path: artifacts/panel-display/

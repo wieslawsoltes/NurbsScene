@@ -111,6 +111,7 @@ public sealed partial class GraphEditorControl
         AutomationProperties.SetAutomationId(item, "GraphEditValue"); _contextElements.Add(item);
         item.Click += (_, _) => { if (node.Component == "Boolean") ToggleValue(expected, node); else QueueTextEdit(expected, node.Id); };
         menu.Items.Add(item);
+        AddPanelDisplayMenus(menu, expected, node);
     }
     private void AddValueInspector(GraphNode node)
     {

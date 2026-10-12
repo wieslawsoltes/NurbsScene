@@ -80,3 +80,12 @@ factored once per call and reused for every homogeneous U column, with cancellat
 and explicit work limits. It does not add the other Rhino loft styles, automatic
 seam alignment, closed/periodic lofting, arbitrary trim or solid support. See
 `ELLIPSE-AND-LOFT.md` for current evidence and numerical boundaries.
+
+The integrated panel-display review adds persistent path/index/wrap controls for
+Text and Panel, with stale-owner checks, exact interchange and output/wire-cache
+reuse. Span-based preview formatting fixes partial Unicode clusters at bounded
+scan cutoffs and avoids per-character strings. It retains the ellipse/loft and
+ordered-document work from PR #12. Six actual Uno input campaigns are mandatory;
+font/alignment options, full complex-script shaping and scrolling every item are
+still unfinished. See `PANEL-DISPLAY-AND-TEXT-REVIEW.md`; historical local-only
+qualification notes above describe their respective older revisions.
