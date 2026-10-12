@@ -77,3 +77,9 @@ and executable cached buttons. Its compile-time hook only reports observed visua
 bounds/state; it does not dispatch commands or replace the real renderer. Per-head
 Actions artifacts establish pass/fail results. Physical-GPU/desktop runtime,
 accessibility, full pointer-device and full Rhino/Grasshopper parity are not implied.
+
+The first expanded UI run passed the earlier 44 input assertions but reached the
+observer's previous four-minute cleanup limit during the first new menu action.
+The observer now allows a bounded ten-minute lifetime for the three full campaigns
+and reports expiration as a failure instead of silently reporting restoration.
+Per-action 20-second timeouts and all state/visibility assertions remain unchanged.

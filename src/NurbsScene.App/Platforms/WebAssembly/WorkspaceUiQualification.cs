@@ -29,7 +29,9 @@ public partial class App
             view.Viewport.Canvas.RestoreFourViews();view.Viewport.Canvas.Fit();view.GraphEditor.Canvas.Fit();
             view.Console.ClearHistory();view.Console.WriteLine("NurbsScene — independent NURBS modeling and visual programming");
             await Task.Delay(250);
-            while(watch.Elapsed<TimeSpan.FromMinutes(4))
+            // The expanded suite contains three complete input campaigns. Keep a
+            // bounded observer lifetime without restoring the document mid-campaign.
+            while(watch.Elapsed<TimeSpan.FromMinutes(10))
             {
                 if(Uno.Foundation.WebAssemblyRuntime.InvokeJS("globalThis.nurbsSceneUiFinish === true ? 'yes' : 'no'")=="yes")break;
                 var controls=new Dictionary<string,object>();
@@ -110,7 +112,9 @@ public partial class App
             controller.Load(source);controller.Scene.ShowGrid=true;controller.Scene.ShowIsocurves=true;
             view.SetPreferences(preferences,false);view.Aids.GridSnap=false;view.Aids.Ortho=false;view.Aids.EndSnap=false;
             view.Viewport.Canvas.RestoreFourViews();view.Viewport.Canvas.Fit();view.GraphEditor.Canvas.Fit();
-            PublishUi(new{status="restored"});
+            if(watch.Elapsed>=TimeSpan.FromMinutes(10))
+                PublishUi(new{status="failed",error="The qualification observation lifetime expired before the test finished."});
+            else PublishUi(new{status="restored"});
         }
         catch(Exception error){PublishUi(new{status="failed",error=error.ToString()});}
     }
