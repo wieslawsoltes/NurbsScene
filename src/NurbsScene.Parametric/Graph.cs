@@ -14,13 +14,6 @@ public sealed record ComponentContext(IReadOnlyDictionary<string,object?> Inputs
     public double Parameter(string name,double fallback=0)=>Parameters.TryGetValue(name,out var v)?Convert.ToDouble(v,System.Globalization.CultureInfo.InvariantCulture):fallback;
 }
 public sealed record ComponentDefinition(string Id,string Category,string Description,ImmutableArray<PortDefinition> Inputs,ImmutableArray<PortDefinition> Outputs,Func<ComponentContext,ValueTask<IReadOnlyDictionary<string,object?>>> Evaluate);
-public sealed class ComponentRegistry
-{
-    private readonly Dictionary<string,ComponentDefinition> _definitions=[];
-    public IReadOnlyList<ComponentDefinition> Definitions=>_definitions.Values.ToArray();
-    public void Register(ComponentDefinition definition){if(definition.Inputs.Select(p=>p.Name).Distinct().Count()!=definition.Inputs.Length||definition.Outputs.Select(p=>p.Name).Distinct().Count()!=definition.Outputs.Length)throw new ArgumentException("Duplicate port names.");_definitions.Add(definition.Id,definition with { Inputs=definition.Inputs.Select(p=>p with {Default=ParameterValues.FreezeValue(p.Default)}).ToImmutableArray() });}
-    public ComponentDefinition Get(string id)=>_definitions.TryGetValue(id,out var d)?d:throw new NotSupportedException($"Missing component implementation: {id}.");
-}
 public sealed record GraphNode(string Id,string Component,double X,double Y,ImmutableDictionary<string,object?> Parameters,string? Name=null,bool Enabled=true,bool Preview=true,string Matching="longest");
 public sealed record PortAddress(string Node,string Port);
 public sealed record Wire(string Id,PortAddress From,PortAddress To,string Transform="none");
@@ -89,19 +82,17 @@ public sealed partial class Graph(ComponentRegistry registry)
     public int NodeCount { get { lock(_gate)return _nodes.Count; } }
     public int WireCount { get { lock(_gate)return _wires.Count; } }
     public GraphResult? LastResult { get; private set; }
-    public IReadOnlyList<GraphNode> Nodes { get {lock(_gate)return _nodes.Values.ToArray();} }
-    public IReadOnlyList<Wire> Wires { get {lock(_gate)return _wires.Values.ToArray();} }
     public GraphNode GetNode(string id){lock(_gate)return _nodes.TryGetValue(id,out var n)?n:throw new KeyNotFoundException(id);}
     private void Invalidate(string id){var queue=new Queue<string>();var seen=new HashSet<string>();queue.Enqueue(id);while(queue.TryDequeue(out var n)){if(!seen.Add(n))continue;_dirty.Add(n);if(_outgoing.TryGetValue(n,out var children))foreach(var child in children.Keys)queue.Enqueue(child);}}
     public GraphNode Add(string component,double x=0,double y=0,IReadOnlyDictionary<string,object?>? parameters=null,string? name=null,string? id=null)
     {
         Registry.Get(component);if(!double.IsFinite(x)||!double.IsFinite(y))throw new ArgumentException("Node position must be finite.");var node=new GraphNode(id??Guid.NewGuid().ToString("N"),component,x,y,ParameterValues.Freeze(parameters),name);
-        lock(_gate){if(_nodes.Count>=10000)throw new InvalidOperationException("Node budget exceeded.");_nodes.Add(node.Id,node);TopologyRevision++;_plan=null;Invalidate(node.Id);Revision++;}NotifyChanged();return node;
+        lock(_gate){if(_nodes.Count>=10000)throw new InvalidOperationException("Node budget exceeded.");_nodes.Add(node.Id,node);_nodesView=null;TopologyRevision++;_plan=null;Invalidate(node.Id);Revision++;}NotifyChanged();return node;
     }
     public void Update(GraphNode node)
     {
         if(!double.IsFinite(node.X)||!double.IsFinite(node.Y)||node.Matching is not("longest" or "shortest" or "cross"))throw new ArgumentException("Invalid node position or matching mode.");
-        lock(_gate){var previous=GetNode(node.Id);if(previous==node)return;if(previous.Parameters!=node.Parameters)node=node with{Parameters=ParameterValues.Freeze(node.Parameters)};if(previous.Component!=node.Component)throw new InvalidOperationException("Cannot replace a component type in place.");_nodes[node.Id]=node;if(previous.Parameters!=node.Parameters||previous.Enabled!=node.Enabled||previous.Matching!=node.Matching)Invalidate(node.Id);Revision++;}NotifyChanged();
+        lock(_gate){var previous=GetNode(node.Id);if(previous==node)return;if(previous.Parameters!=node.Parameters)node=node with{Parameters=ParameterValues.Freeze(node.Parameters)};if(previous.Component!=node.Component)throw new InvalidOperationException("Cannot replace a component type in place.");_nodes[node.Id]=node;_nodesView=null;if(previous.Parameters!=node.Parameters||previous.Enabled!=node.Enabled||previous.Matching!=node.Matching)Invalidate(node.Id);Revision++;}NotifyChanged();
     }
     public void Remove(string id)
     {
@@ -111,7 +102,7 @@ public sealed partial class Graph(ComponentRegistry registry)
             var successors=_outgoing.TryGetValue(id,out var children)?children.Keys.ToArray():[];
             foreach(var wire in _wires.Values.Where(w=>w.From.Node==id||w.To.Node==id).ToArray()){_wires.Remove(wire.Id);Unlink(wire);WireRevision++;}
             foreach(var next in successors)Invalidate(next);
-            _nodes.Remove(id);TopologyRevision++;_plan=null;_cache.Remove(id);_dirty.Remove(id);Revision++;
+            _nodes.Remove(id);_nodesView=null;TopologyRevision++;_plan=null;_cache.Remove(id);_dirty.Remove(id);Revision++;
         }
         NotifyChanged();
     }
