@@ -26,6 +26,7 @@ public sealed partial class GraphEditorControl
             AutomationProperties.SetAutomationId(slider,"GraphEditSlider");_contextElements.Add(slider);
             slider.Click+=(_,_)=>QueueNumberSliderEdit(expected,node.Id);menu.Items.Add(slider);
         }
+        AddValueContextMenu(menu,expected,node);
         var matching=Sub("Data matching","GraphMatchingMenu");
         foreach(var mode in new[]{"longest","shortest","cross"})
         {

@@ -68,6 +68,7 @@ public sealed partial class GraphCanvas : SKCanvasElement,IDisposable
             }
             foreach(var id in _wirePaths.Keys.Where(id=>!live.Contains(id)).ToArray())
             {_wirePaths[id].Path.Dispose();_wirePaths.Remove(id);}
+            foreach(var id in _panelPreviews.Keys.Where(id=>!_layouts.ContainsKey(id)).ToArray())_panelPreviews.Remove(id);
             _drawing=next;
         }
         return next;
@@ -174,7 +175,7 @@ public sealed partial class GraphCanvas : SKCanvasElement,IDisposable
                 if(!n.Bounds.Intersects(view))continue;
                 var node=n.Node;var b=n.Bounds;var rect=new SKRect((float)b.X,(float)b.Y,(float)(b.X+b.Width),(float)(b.Y+b.Height));
                 var selected=_selection.Contains(node.Id);var result=graph.LastResult?.Nodes.GetValueOrDefault(node.Id);var error=result?.Status is "error" or "blocked";
-                var body=!node.Enabled?new SKColor(184,184,182):error?new(241,163,59):selected?new(188,222,105):node.Component=="Text"?new(249,245,163):new(220,220,226);
+                var body=!node.Enabled?new SKColor(184,184,182):error?new(241,163,59):selected?new(188,222,105):(node.Component is "Text" or "Panel")?new(249,245,163):new(220,220,226);
                 Fill(canvas,new(rect.Left+2,rect.Top+3,rect.Right+2,rect.Bottom+3),new(0,0,0,32),7);
                 Fill(canvas,rect,body,n.Slider?12:6);Stroke(canvas,rect,selected?new(64,95,19):new(83,83,88),selected?2:1,n.Slider?12:6);
                 if(_zoom>.35f)
@@ -184,11 +185,8 @@ public sealed partial class GraphCanvas : SKCanvasElement,IDisposable
                     {
                         DrawNumberSlider(canvas,node,rect);
                     }
-                    else if(node.Component=="Text")
-                    {
-                        Text(canvas,"Panel",rect.Left+8,rect.Top+16,new(94,92,54),10);
-                        var text=node.Parameters.GetValueOrDefault("text")?.ToString()??"";Text(canvas,text,rect.Left+8,rect.Top+37,new(68,66,47),11);
-                    }
+                    else if(node.Component=="Boolean")DrawBooleanToggle(canvas,node,rect);
+                    else if(node.Component is "Text" or "Panel")DrawDataPanel(canvas,node,rect,result);
                     else
                     {
                         canvas.Save();canvas.Translate(rect.MidX-10,rect.MidY-14);canvas.Scale(.85f);IconArtwork.Draw(canvas,n.IconKey);canvas.Restore();
@@ -218,5 +216,5 @@ public sealed partial class GraphCanvas : SKCanvasElement,IDisposable
         if(_session is null||_session.Graph.Nodes.Count==0)return;var rects=_session.Graph.Nodes.Select(Rect).ToArray();var minX=rects.Min(r=>r.Left);var minY=rects.Min(r=>r.Top);var maxX=rects.Max(r=>r.Right);var maxY=rects.Max(r=>r.Bottom);
         _zoom=Math.Clamp((float)Math.Min(Math.Max(1,ActualWidth-60)/(maxX-minX),Math.Max(1,ActualHeight-60)/(maxY-minY)),.15f,1.5f);_panX=(float)ActualWidth/2-(minX+maxX)*_zoom/2;_panY=(float)ActualHeight/2-(minY+maxY)*_zoom/2;ViewChanged?.Invoke();Invalidate();
     }
-    public void Dispose(){Unsubscribe();foreach(var path in _wirePaths.Values)path.Path.Dispose();_wirePaths.Clear();_paths.Clear();_treeDash.Dispose();_font.Dispose();_paint.Dispose();}
+    public void Dispose(){_panelPreviews.Clear();Unsubscribe();foreach(var path in _wirePaths.Values)path.Path.Dispose();_wirePaths.Clear();_paths.Clear();_treeDash.Dispose();_font.Dispose();_paint.Dispose();}
 }

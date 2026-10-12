@@ -16,7 +16,7 @@ public static class ComponentGlyphs
             "Negate"=>"−x","Clamp"=>"clamp","Integer"=>"123","Boolean"=>"T/F",_=>null};
         if(operation is not null)return "op:"+operation;
         if(id is "Flatten" or "Graft" or "Simplify")return id;
-        if(id=="Text")return "Panel";
+        if(id is "Text" or "Panel")return "Panel";
         if(id.Contains("Centroid",StringComparison.Ordinal))return "Centroid";
         if(id.Contains("Area",StringComparison.Ordinal))return "Area";
         if(id.Contains("Mirror",StringComparison.Ordinal))return "Mirror";
