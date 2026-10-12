@@ -25,6 +25,8 @@ public static class InputComponents
 
     public static DataTree EvaluatePanel(ComponentContext context)
     {
+        ArgumentNullException.ThrowIfNull(context);
+        context.CancellationToken.ThrowIfCancellationRequested();
         var data = context.Get<DataTree>("D");
         if (!context.IsConnected("D") && !context.Parameters.ContainsKey("input:D"))
         {

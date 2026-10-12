@@ -26,8 +26,9 @@ public sealed partial class GraphCanvas
         {
             if(shift&&_selection.Remove(node.Id)){SelectionChanged?.Invoke();_gesture="";ReleasePointerCapture(e.Pointer);Invalidate();e.Handled=true;return;}
             if(!_selection.Contains(node.Id))Select(node.Id,shift);
-            if(PanelLayout.CanResize(node)&&PanelLayout.IsHandle(Layout(node).Bounds,new(_worldStart.X,_worldStart.Y),Math.Min(128,10/_zoom)))
-            {_gesture="resize";_panelResize=new(_session.Graph,node.Id);}
+            var edges=ResizeHit(node,_worldStart);
+            if(edges!=PanelResizeEdges.None)
+            {_gesture="resize";_panelResize=new(_session.Graph,node.Id,edges);}
             else if((node.Component is "Number" or "Integer")&&_worldStart.Y>Rect(node).Bottom-22){_before=_session.Graph.Snapshot();_gesture="slider";_slider=node.Id;Scrub(node,_worldStart.X);}
             else{_gesture="nodes";_starts.Clear();foreach(var n in _session.Graph.Nodes.Where(n=>_selection.Contains(n.Id)))_starts[n.Id]=(n.X,n.Y);}
         }
