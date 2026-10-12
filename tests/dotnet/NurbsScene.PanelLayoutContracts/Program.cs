@@ -109,6 +109,20 @@ Test("warmed preview and resize motion allocate zero managed bytes", () => {
     for (var i = 0; i < 10000; i++) { cache.Get(p, r, 8, 29); draft.Move(i % 100, i % 50); }
     var allocated = GC.GetAllocatedBytesForCurrentThread() - start; Check(allocated == 0); Console.WriteLine($"METRIC preview-and-resize-10000={allocated} B");
 });
+Test("large zoomed-out panels retain readable bounded text layout", () => {
+    var layout = PanelDisplayLayout.Create(new(0, 0, 640, 420), .3);
+    Check(layout.Readable && Math.Abs(layout.FontSize * .3 - 8) < 1e-12 && layout.Rows > 4);
+    Check(layout.Rows <= PanelPreviewCache.MaximumRows && layout.Columns <= PanelPreviewCache.MaximumColumns);
+    Check(layout.FirstBaseline + (layout.Rows - 1) * layout.LineHeight < 420 - layout.FooterInset);
+    Check(!PanelDisplayLayout.Create(new(0, 0, 224, 168), .3).Readable);
+});
+Test("panel text layout preserves normal zoom and rejects invalid inputs", () => {
+    var layout = PanelDisplayLayout.Create(new(0, 0, 224, 168), 1);
+    Check(layout.Readable && layout.FontSize == 10 && layout.Rows == 9 && layout.Columns == 34);
+    foreach (var zoom in new[] { double.NaN, double.PositiveInfinity, 0d, -1d })
+        Throws<ArgumentOutOfRangeException>(() => PanelDisplayLayout.Create(new(0, 0, 224, 168), zoom));
+    Throws<ArgumentOutOfRangeException>(() => PanelDisplayLayout.Create(new(0, 0, double.PositiveInfinity, 168), 1));
+});
 var failed = 0;
 foreach (var (name, run) in tests) try { run(); Console.WriteLine("PASS " + name); } catch (Exception error) { failed++; Console.WriteLine("FAIL " + name + "\n" + error); }
 Console.WriteLine(JsonSerializer.Serialize(new { suite = "panel-layout", total = tests.Count, passed = tests.Count - failed, failed })); return failed == 0 ? 0 : 1;

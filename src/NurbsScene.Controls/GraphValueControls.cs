@@ -10,6 +10,8 @@ namespace NurbsScene.Controls;
 public sealed partial class GraphCanvas
 {
     private readonly Dictionary<string, PanelPreviewCache> _panelPreviews = [];
+    private readonly Dictionary<string, PanelDisplayLayout> _panelDisplayLayouts = [];
+    public PanelDisplayLayout? PanelDrawing(string id) => _panelDisplayLayouts.TryGetValue(id, out var layout) && layout.Readable ? layout : null;
     public long ValuePreviewBuilds { get; private set; }
     public event Action<string>? TextEditRequested;
     private void HandleValueDoubleTap(GraphNode node)
@@ -32,14 +34,16 @@ public sealed partial class GraphCanvas
     }
     private void DrawDataPanel(SKCanvas canvas, GraphNode node, SKRect rect, NodeResult? result)
     {
+        var layout = PanelDisplayLayout.Create(new(rect.Left, rect.Top, rect.Width, rect.Height), _zoom);
+        _panelDisplayLayouts[node.Id] = layout;
+        if (!layout.Readable) return;
         if (!_panelPreviews.TryGetValue(node.Id, out var cache)) _panelPreviews[node.Id] = cache = new();
-        var rows = Math.Clamp((int)((rect.Height - 48) / 13), 1, PanelPreviewCache.MaximumRows);
-        var columns = Math.Clamp((int)((rect.Width - 16) / 6), 1, PanelPreviewCache.MaximumColumns);
-        var builds = cache.BuildCount; var preview = cache.Get(node, result, rows, columns); ValuePreviewBuilds += cache.BuildCount - builds;
-        Text(canvas, node.Name ?? (node.Component == "Text" ? "Text" : "Panel"), rect.Left + 8, rect.Top + 15, new(94,92,54), 10);
-        var count = Math.Min(preview.Lines.Length, Math.Max(0, (int)((rect.Height - 48) / 13)));
-        for (var i = 0; i < count; i++) Text(canvas, preview.Lines[i], rect.Left + 8, rect.Top + 32 + i * 13, new(62,60,40), 10);
-        Text(canvas, preview.Footer, rect.Left + 8, rect.Bottom - 7, new(112,105,69), 9);
+        var builds = cache.BuildCount; var preview = cache.Get(node, result, layout.Rows, layout.Columns); ValuePreviewBuilds += cache.BuildCount - builds;
+        var font = (float)layout.FontSize;
+        Text(canvas, node.Name ?? (node.Component == "Text" ? "Text" : "Panel"), rect.Left + 8, rect.Top + (float)layout.HeadingBaseline, new(94,92,54), font);
+        for (var i = 0; i < preview.Lines.Length; i++)
+            Text(canvas, preview.Lines[i], rect.Left + 8, rect.Top + (float)(layout.FirstBaseline + i * layout.LineHeight), new(62,60,40), font);
+        Text(canvas, preview.Footer, rect.Left + 8, rect.Bottom - (float)layout.FooterInset, new(112,105,69), font * .9f);
     }
 }
 

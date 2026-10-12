@@ -53,6 +53,9 @@ async def verify_panel_layout_ui(page):
               'Release commits the expanded panel size to its actual canvas layout')
         check(after['state']['graphRevision']==before['state']['graphRevision']+1 and after['state']['graphErrors']==0,
               'Panel resize is one graph revision and preserves valid numerical outputs')
+        panel=next(p for p in after['values']['panels'] if p['id']==pid)
+        check(panel['drawnFontSize'] is not None and panel['drawnFontSize']*panel['zoom']>=7.99 and panel['drawnRows']>1,
+              'Resized panels render readable data even below ordinary component detail zoom')
         await click('GraphUndo');restored=await node(pid)
         check(abs(restored['width']-p['width'])<.1 and abs(restored['height']-p['height'])<.1,
               'One undo restores the original panel dimensions')
