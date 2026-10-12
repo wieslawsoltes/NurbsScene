@@ -73,6 +73,7 @@ public static class IconArtwork
             case "Graph":case "Dock":Rect(2,5,7,6,new(173,207,138));Rect(15,14,7,6,new(199,199,205));Line(9,8,18,8);Line(18,8,18,14);break;
             case "Line":Line(4,20,20,4,blue);Rect(2,18,4,4,gold);Rect(18,2,4,4,gold);break;
             case "Circle":Oval(3,3,18,18);Rect(10,10,3,3,gold);break;
+            case "Ellipse":Oval(2,6,20,12);Line(2,12,22,12,pale);Line(12,6,12,18,pale);Rect(10.5f,10.5f,3,3,gold);break;
             case "Curve":Curve();Rect(2,17,4,4,gold);Rect(18,2,4,4,gold);break;
             case "Reverse":Curve();Arrow(17,19,5,19,green);break;
             case "Knot":Curve();Rect(10,10,5,5,gold);break;

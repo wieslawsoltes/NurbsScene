@@ -139,6 +139,7 @@ public sealed partial class WorkspaceController : IDisposable
             {
                 case "line":if(a.Length!=2)throw new ArgumentException("Line x,y,z x,y,z");Document.Add(Kernel.Line(Point(a[0]),Point(a[1])),"Line");break;
                 case "circle":if(a.Length!=2)throw new ArgumentException("Circle centerX,centerY,centerZ radius");Document.Add(Kernel.Circle(Point(a[0]),Number(a[1])),"Circle");break;
+                case "ellipse":if(a.Length!=3)throw new ArgumentException("Ellipse centerX,centerY,centerZ radiusX radiusY");Document.Add(Kernel.Ellipse(Point(a[0]),Number(a[1]),Number(a[2])),"Ellipse");break;
                 case "interpolate":if(a.Length<2)throw new ArgumentException("Interpolate x,y,z x,y,z ...");Document.Add(Kernel.Interpolate(a.Select(Point).ToArray(),Math.Min(3,a.Length-1)),"Interpolated curve");break;
                 case "delete":Document.Delete(Document.Selection);break;
                 case "move":case "copy":if(a.Length!=1)throw new ArgumentException("Move/Copy dx,dy,dz");Document.Transform(Document.Selection,Transform3.Translation(Point(a[0])),command=="copy");break;
