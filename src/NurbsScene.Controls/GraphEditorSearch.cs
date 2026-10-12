@@ -20,8 +20,19 @@ public sealed partial class GraphEditorControl
             _searchPanel.Children.Add(ClassicChrome.Label("Search",11));_searchPanel.Children.Add(_popupSearch);
             _searchPanel.Children.Add(new TextBlock{Text="Enter adds a component at the canvas cursor",FontSize=10,TextWrapping=TextWrapping.Wrap});
             _canvasSearch=new Flyout{Content=_searchPanel,Placement=FlyoutPlacementMode.Bottom};
-            _canvasSearch.Opened+=(_,_)=>{SearchIsOpen=true;_popupSearch.Focus(FocusState.Programmatic);};
-            _canvasSearch.Closed+=(_,_)=>{SearchIsOpen=false;_popupSearch.IsSuggestionListOpen=false;};
+            // Uno 6.7.135 defers FlyoutBase.Opened to dispatcher Idle. A rendered
+            // flyout can therefore be open before that event is delivered. Read
+            // the actual dependency property, not an event-derived shadow state.
+            // Reference: Uno.UI/UI/Xaml/Controls/Flyout/FlyoutBase.cs, ShowAtCore.
+            _canvasSearch.RegisterPropertyChangedCallback(FlyoutBase.IsOpenProperty,
+                (sender,_)=>SearchIsOpen=((FlyoutBase)sender).IsOpen);
+            _searchPanel.Loaded+=(_,_)=>DispatcherQueue.TryEnqueue(()=>{
+                if(_canvasSearch.IsOpen&&_popupSearch.IsLoaded)_popupSearch.Focus(FocusState.Programmatic);
+            });
+            _canvasSearch.Closed+=(_,_)=>{
+                SearchIsOpen=_canvasSearch.IsOpen;
+                if(!SearchIsOpen)_popupSearch.IsSuggestionListOpen=false;
+            };
             _popupSearch.TextChanged+=(_,_)=>{
                 if(Session is null)return;
                 var query=_popupSearch.Text.Trim();
