@@ -1,0 +1,30 @@
+name: Canvas creation and data panel contracts
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  inputs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      DOTNET_TieredCompilation: '0'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Literal creation, typed panels and cache budgets
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/canvas-inputs
+          dotnet run --project tests/dotnet/NurbsScene.CanvasInputContracts -c Release 2>&1 | tee artifacts/canvas-inputs/contracts.log
+          git rev-parse HEAD HEAD^{tree} > artifacts/canvas-inputs/tested-revision.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: canvas-inputs-${{ github.run_id }}
+          path: artifacts/canvas-inputs/

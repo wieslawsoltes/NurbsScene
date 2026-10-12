@@ -9,6 +9,10 @@ public enum ValueKind { Any,Number,Integer,Boolean,Text,Point,Vector,Curve,Surfa
 public sealed record PortDefinition(string Name,ValueKind Kind=ValueKind.Any,PortAccess Access=PortAccess.Item,object? Default=null,bool Optional=false);
 public sealed record ComponentContext(IReadOnlyDictionary<string,object?> Inputs,IReadOnlyDictionary<string,object?> Parameters,DataPath Path,CancellationToken CancellationToken)
 {
+    /// <summary>Connected ports at this solve's captured revision, including
+    /// connected empty trees. Persistent/default inputs are not connections.</summary>
+    public ImmutableArray<string> ConnectedInputs { get; init; } = [];
+    public bool IsConnected(string name) => ConnectedInputs.Contains(name);
     public double Number(string name)=>Convert.ToDouble(Inputs[name],System.Globalization.CultureInfo.InvariantCulture);
     public T Get<T>(string name)=>Inputs[name] is T value?value:throw new InvalidCastException($"Input {name} is not {typeof(T).Name}.");
     public double Parameter(string name,double fallback=0)=>Parameters.TryGetValue(name,out var v)?Convert.ToDouble(v,System.Globalization.CultureInfo.InvariantCulture):fallback;
@@ -152,9 +156,11 @@ public sealed partial class Graph(ComponentRegistry registry)
                 else
                 {
                     var inputs=new Dictionary<string,DataTree>();
+                    var connected=ImmutableArray.CreateBuilder<string>();
                     foreach(var port in definition.Inputs)
                     {
                         var incoming=plan.Inputs.GetValueOrDefault(new PortAddress(id,port.Name))??[];var tree=DataTree.Empty;
+                        if(incoming.Length>0)connected.Add(port.Name);
                         DataTree Resolve(Wire wire)
                         {
                             var upstream=results[wire.From.Node];
@@ -167,7 +173,7 @@ public sealed partial class Graph(ComponentRegistry registry)
                         if(incoming.Length==0){var key="input:"+port.Name;var value=node.Parameters.TryGetValue(key,out var v)?v:port.Default;if(value is null&&!port.Optional)throw new ArgumentException($"Required input {port.Name} is not connected.");if(value is not null)tree=value is DataTree persistent?persistent:port.Access==PortAccess.List&&value is System.Collections.IEnumerable list&&value is not string?DataTree.List(list.Cast<object?>()):DataTree.Item(value);}
                         foreach(var value in tree.AllItems)Validate(value,port);inputs.Add(port.Name,tree);
                     }
-                    output=await EvaluateDefinition(definition,node,inputs,cancellationToken);
+                    output=await EvaluateDefinition(definition,node,inputs,connected.ToImmutable(),cancellationToken);
                 }
             }
             catch(OperationCanceledException){throw;}
@@ -176,7 +182,7 @@ public sealed partial class Graph(ComponentRegistry registry)
         }
         cancellationToken.ThrowIfCancellationRequested();GraphResult result;lock(_gate){if(generation!=_generation)throw new OperationCanceledException("Superseded solve.");result=new(revision,Revision!=revision,results.ToImmutableDictionary(),evaluated,cached,stopwatch.Elapsed.TotalMilliseconds);if(!result.Stale){_cache=results;_dirty.Clear();LastResult=result;}}if(!result.Stale)Solved?.Invoke(result);return result;
     }
-    private static async ValueTask<ImmutableDictionary<string,DataTree>> EvaluateDefinition(ComponentDefinition definition,GraphNode node,Dictionary<string,DataTree> inputs,CancellationToken cancellationToken)
+    private static async ValueTask<ImmutableDictionary<string,DataTree>> EvaluateDefinition(ComponentDefinition definition,GraphNode node,Dictionary<string,DataTree> inputs,ImmutableArray<string> connected,CancellationToken cancellationToken)
     {
         var branches=definition.Outputs.ToDictionary(p=>p.Name,_=>new SortedDictionary<DataPath,List<object?>>());
         var nonTreeInputs=definition.Inputs.Where(p=>p.Access!=PortAccess.Tree).Select(p=>inputs[p.Name]).ToArray();
@@ -196,7 +202,7 @@ public sealed partial class Graph(ComponentRegistry registry)
             {
                 cancellationToken.ThrowIfCancellationRequested();var values=new Dictionary<string,object?>(fixedValues);var remainder=row;for(var i=0;i<arrays.Count;i++){var index=node.Matching=="cross"?remainder%arrays[i].Length:Math.Min(row,arrays[i].Length-1);if(node.Matching=="cross")remainder/=arrays[i].Length;values[itemPorts[i].Name]=arrays[i][index];}
                 if(++invocations>100_000)throw new InvalidOperationException("Component invocation budget exceeded.");
-                var output=await definition.Evaluate(new(values,node.Parameters,path,cancellationToken));
+                var output=await definition.Evaluate(new(values,node.Parameters,path,cancellationToken){ConnectedInputs=connected});
                 foreach(var port in definition.Outputs){if(!output.TryGetValue(port.Name,out var value))throw new InvalidOperationException($"Component omitted output {port.Name}.");if(value is DataTree tree){foreach(var branch in tree.Branches){if(++branchVisits>1_000_000)throw new InvalidOperationException("Component branch work budget exceeded.");if(!branches[port.Name].ContainsKey(branch.Path))branches[port.Name].Add(branch.Path,[]);foreach(var item in branch.Items)Add(port,branch.Path,item);}}else if(port.Access==PortAccess.List&&value is System.Collections.IEnumerable list&&value is not string){if(!branches[port.Name].ContainsKey(path))branches[port.Name].Add(path,[]);foreach(var item in list.Cast<object?>())Add(port,path,item);}else Add(port,path,value);}
             }
         }

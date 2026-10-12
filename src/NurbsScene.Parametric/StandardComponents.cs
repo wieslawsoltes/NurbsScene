@@ -18,7 +18,7 @@ public static class StandardComponents
         void Add(string id,string category,PortDefinition[] inputs,PortDefinition[] outputs,Func<ComponentContext,IReadOnlyDictionary<string,object?>> evaluate,string description="")=>registry.Register(new(id,category,description,inputs.ToImmutableArray(),outputs.ToImmutableArray(),c=>ValueTask.FromResult(evaluate(c))));
         Add("Number","Params",[],[P("N",ValueKind.Number)],c=>Out(("N",c.Parameter("value",1))),"Persistent binary64 number.");
         Add("Integer","Params",[],[P("N",ValueKind.Integer)],c=>Out(("N",Integer(c.Parameter("value",1),int.MinValue,int.MaxValue))));
-        Add("Boolean","Params",[],[P("B",ValueKind.Boolean)],c=>Out(("B",c.Parameters.TryGetValue("value",out var v)&&v is true)));
+        Add("Boolean","Params",[],[P("B",ValueKind.Boolean)],c=>Out(("B",InputComponents.BooleanValue(c.Parameters))));
         Add("Text","Params",[],[P("T",ValueKind.Text)],c=>Out(("T",c.Parameters.GetValueOrDefault("text")?.ToString()??"NurbsScene")));
         foreach(var(id,fn)in new Dictionary<string,Func<double,double,double>>{["Add"]=(a,b)=>a+b,["Subtract"]=(a,b)=>a-b,["Multiply"]=(a,b)=>a*b,["Divide"]=(a,b)=>b==0?throw new DivideByZeroException():a/b,["Power"]=Math.Pow,["Minimum"]=Math.Min,["Maximum"]=Math.Max})Add(id,"Maths",[N("A",1),N("B",1)],[P("R",ValueKind.Number)],c=>Out(("R",fn(c.Number("A"),c.Number("B")))));
         foreach(var(id,fn)in new Dictionary<string,Func<double,double>>{["Sine"]=Math.Sin,["Cosine"]=Math.Cos,["Tangent"]=Math.Tan,["ArcSine"]=Math.Asin,["ArcCosine"]=Math.Acos,["ArcTangent"]=Math.Atan,["Sqrt"]=Math.Sqrt,["Absolute"]=Math.Abs,["Floor"]=Math.Floor,["Ceiling"]=Math.Ceiling,["Round"]=x=>Math.Round(x,MidpointRounding.ToEven),["Exponential"]=Math.Exp,["Logarithm"]=Math.Log,["Degrees"]=x=>x*180/Math.PI,["Radians"]=x=>x*Math.PI/180,["Negate"]=x=>-x})Add(id,"Maths",[N("X")],[P("R",ValueKind.Number)],c=>Out(("R",fn(c.Number("X")))));
@@ -72,6 +72,7 @@ public static class StandardComponents
         Add("Preview","Display",[P("G",access:PortAccess.Tree)],[P("G",access:PortAccess.Tree)],c=>Out(("G",c.Get<DataTree>("G"))));
         GeometryComponents.Register(registry);
         TreeComponents.Register(registry);
+        InputComponents.Register(registry);
         return registry;
     }
 }
