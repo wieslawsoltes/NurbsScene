@@ -1,0 +1,30 @@
+name: Number slider editing and range contracts
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  sliders:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      DOTNET_TieredCompilation: '0'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Numerical slider ranges, editing isolation and allocation checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/sliders
+          dotnet run --project tests/dotnet/NurbsScene.SliderContracts -c Release 2>&1 | tee artifacts/sliders/contracts.log
+          git rev-parse HEAD HEAD^{tree} > artifacts/sliders/tested-revision.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sliders-${{ github.run_id }}
+          path: artifacts/sliders/
