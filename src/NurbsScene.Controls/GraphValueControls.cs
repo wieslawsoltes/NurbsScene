@@ -10,6 +10,8 @@ namespace NurbsScene.Controls;
 public sealed partial class GraphCanvas
 {
     private readonly Dictionary<string, PanelPreviewCache> _panelPreviews = [];
+    private readonly Dictionary<string, PanelDisplayLayout> _panelDisplayLayouts = [];
+    public PanelDisplayLayout? PanelDrawing(string id) => _panelDisplayLayouts.TryGetValue(id, out var layout) && layout.Readable ? layout : null;
     public long ValuePreviewBuilds { get; private set; }
     public event Action<string>? TextEditRequested;
     private void HandleValueDoubleTap(GraphNode node)
@@ -32,12 +34,16 @@ public sealed partial class GraphCanvas
     }
     private void DrawDataPanel(SKCanvas canvas, GraphNode node, SKRect rect, NodeResult? result)
     {
+        var layout = PanelDisplayLayout.Create(new(rect.Left, rect.Top, rect.Width, rect.Height), _zoom);
+        _panelDisplayLayouts[node.Id] = layout;
+        if (!layout.Readable) return;
         if (!_panelPreviews.TryGetValue(node.Id, out var cache)) _panelPreviews[node.Id] = cache = new();
-        var builds = cache.BuildCount; var preview = cache.Get(node, result); ValuePreviewBuilds += cache.BuildCount - builds;
-        Text(canvas, node.Name ?? (node.Component == "Text" ? "Text" : "Panel"), rect.Left + 8, rect.Top + 15, new(94,92,54), 10);
-        var count = Math.Min(preview.Lines.Length, Math.Max(0, (int)((rect.Height - 48) / 13)));
-        for (var i = 0; i < count; i++) Text(canvas, preview.Lines[i], rect.Left + 8, rect.Top + 32 + i * 13, new(62,60,40), 10);
-        Text(canvas, preview.Footer, rect.Left + 8, rect.Bottom - 7, new(112,105,69), 9);
+        var builds = cache.BuildCount; var preview = cache.Get(node, result, layout.Rows, layout.Columns); ValuePreviewBuilds += cache.BuildCount - builds;
+        var font = (float)layout.FontSize;
+        Text(canvas, node.Name ?? (node.Component == "Text" ? "Text" : "Panel"), rect.Left + 8, rect.Top + (float)layout.HeadingBaseline, new(94,92,54), font);
+        for (var i = 0; i < preview.Lines.Length; i++)
+            Text(canvas, preview.Lines[i], rect.Left + 8, rect.Top + (float)(layout.FirstBaseline + i * layout.LineHeight), new(62,60,40), font);
+        Text(canvas, preview.Footer, rect.Left + 8, rect.Bottom - (float)layout.FooterInset, new(112,105,69), font * .9f);
     }
 }
 
@@ -49,6 +55,7 @@ public sealed partial class GraphEditorControl
     private TextPanelDialog? _textPanelDialog;
     private bool _valueEditorDisposed;
     public FrameworkElement? ValueEditor => _textPanelDialog;
+    public string? ValueDraftText => _textPanelDialog?.DraftText;
     public bool ValueEditorIsOpen => _textPanelDialog?.IsLoaded == true;
     public string LastCreationError { get; private set; } = "";
     private void CreationError(string text) { LastCreationError = text; _creationInfo.Text = text; Report(text); }
@@ -108,7 +115,9 @@ public sealed partial class GraphEditorControl
     private void AddValueInspector(GraphNode node)
     {
         var expected = Session!.Graph;
-        _inspector.Children.Add(ClassicChrome.Button(node.Component == "Boolean" ? "Toggle value" : "Edit text…",
+        // Keep the component's primary editing action above generic flags and
+        // matching options, including in the short bottom-docked inspector.
+        _inspector.Children.Insert(Math.Min(2, _inspector.Children.Count), ClassicChrome.Button(node.Component == "Boolean" ? "Toggle value" : "Edit text…",
             () => { if (node.Component == "Boolean") ToggleValue(expected, node); else QueueTextEdit(expected, node.Id); }, "InspectorEditValue"));
     }
     private void DisposeValueEditor() { _valueEditorDisposed = true; _textPanelDialog?.Hide(); }

@@ -1,0 +1,45 @@
+name: Panel layout and resize contracts
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  panels:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      DOTNET_TieredCompilation: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Draft resizing, exact interchange and preview cache budgets
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/panel-layout
+          dotnet run --project tests/dotnet/NurbsScene.PanelLayoutContracts -c Release 2>&1 | tee artifacts/panel-layout/contracts.log
+          dotnet run --project tests/dotnet/NurbsScene.CanvasReviewContracts -c Release 2>&1 | tee artifacts/panel-layout/canvas-review.log
+          dotnet run --project tests/dotnet/NurbsScene.PanelEdgeContracts -c Release 2>&1 | tee artifacts/panel-layout/edges.log
+          git rev-parse HEAD HEAD^{tree} > artifacts/panel-layout/tested-revision.txt
+      - name: Identical baseline and candidate CPU workloads
+        shell: bash
+        run: |
+          set -euo pipefail
+          baseline="$RUNNER_TEMP/nurbsscene-panel-baseline"
+          git worktree add --detach "$baseline" 08ea6f481fe44c6f0ae6633139a9751533500662
+          mkdir -p "$baseline/tests/panel-review-performance"
+          cp tests/panel-review-performance/*.cs tests/panel-review-performance/*.csproj "$baseline/tests/panel-review-performance/"
+          dotnet run --project "$baseline/tests/panel-review-performance" -c Release -- "$GITHUB_WORKSPACE/artifacts/panel-layout/baseline.json"
+          dotnet run --project tests/panel-review-performance -c Release -- "$GITHUB_WORKSPACE/artifacts/panel-layout/candidate.json"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: panel-layout-${{ github.run_id }}
+          path: artifacts/panel-layout/

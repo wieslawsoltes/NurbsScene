@@ -3,18 +3,15 @@ Uses only native pointer/keyboard input; read hooks are bounded observations.
 """
 import json
 from pathlib import Path
-from ui_observation import settle
+from ui_observation import settle, wait_for_ui, read_ui
 ROOT=Path(__file__).resolve().parents[2]
 
 async def verify_canvas_values_ui(page):
     checks=[]
     async def read():
-        d=await page.evaluate('globalThis.nurbsSceneUi')
-        if d.get('status')!='ready':raise AssertionError(d)
-        return d
+        return await read_ui(page)
     async def wait(expr):
-        await page.wait_for_function('globalThis.nurbsSceneUi?.status!=="ready" || ('+expr+')',timeout=20000)
-        return await read()
+        return await wait_for_ui(page, expr)
     async def click(identity):
         d=await wait('!!globalThis.nurbsSceneUi.controls['+json.dumps(identity)+']');b=d['controls'][identity]
         if not b['enabled']:raise AssertionError('Disabled '+identity)
@@ -91,5 +88,5 @@ async def verify_canvas_values_ui(page):
               'New canvas workflows restore the original definition with no graph or GPU error')
         (ROOT/'evidence/uno-canvas-values-ui.json').write_text(json.dumps({'status':'passed','checks':checks,'final':final['state']},indent=2))
     except Exception as error:
-        (ROOT/'evidence/uno-canvas-values-ui.json').write_text(json.dumps({'status':'failed','checks':checks,'error':str(error),'observed':await read()},indent=2));raise
+        (ROOT/'evidence/uno-canvas-values-ui.json').write_text(json.dumps({'status':'failed','checks':checks,'error':str(error),'observed':await page.evaluate('globalThis.nurbsSceneUi')},indent=2));raise
     return checks

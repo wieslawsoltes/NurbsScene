@@ -18,7 +18,11 @@ public static class WorkspaceFormat
     private static readonly JsonSerializerOptions Options = new() { WriteIndented = true, MaxDepth = 64, PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
     public sealed record GeometryData(string Kind, int Degree, int DegreeU, int DegreeV, int CountU, int CountV, double[] Knots, double[] KnotsU, double[] KnotsV, double[][] Controls);
     public sealed record ObjectData(string Id, string Name, string LayerId, ColorRgba? Color, bool Visible, bool Locked, string? Source, GeometryData Geometry);
-    public sealed record NodeData(string Id, string Component, double X, double Y, Dictionary<string,JsonElement> Parameters, string? Name, bool Enabled, bool Preview, string Matching);
+    public sealed record NodeData(string Id, string Component, double X, double Y, Dictionary<string,JsonElement> Parameters, string? Name, bool Enabled, bool Preview, string Matching)
+    {
+        [System.Text.Json.Serialization.JsonIgnore(Condition=System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        public NodeCanvasSize? CanvasSize { get; init; }
+    }
     public sealed record DocumentData(string Name, string Units, double AbsoluteTolerance, double AngleTolerance, string ActiveLayer, Layer[] Layers, ObjectData[] Objects, string[] Selection);
     public sealed record GraphData(NodeData[] Nodes, Wire[] Wires);
     public sealed record WorkspaceData(string Format, int Version, DocumentData Document, GraphData Graph);
@@ -81,7 +85,7 @@ public static class WorkspaceFormat
     {
         var d=document.Snapshot();var snapshot=graph.Snapshot();
         var data=new WorkspaceData(Format,1,new(d.Name,d.Units,d.AbsoluteTolerance,d.AngleTolerance,d.ActiveLayer,d.Layers,d.Objects.Select(o=>new ObjectData(o.Id,o.Name,o.LayerId,o.Color,o.Visible,o.Locked,o.Source,EncodeGeometry(o.Geometry))).ToArray(),d.Selection),
-            new(snapshot.Nodes.Select(n=>new NodeData(n.Id,n.Component,n.X,n.Y,n.Parameters.ToDictionary(kv=>kv.Key,kv=>EncodeValue(kv.Value)),n.Name,n.Enabled,n.Preview,n.Matching)).ToArray(),snapshot.Wires));
+            new(snapshot.Nodes.Select(n=>new NodeData(n.Id,n.Component,n.X,n.Y,n.Parameters.ToDictionary(kv=>kv.Key,kv=>EncodeValue(kv.Value)),n.Name,n.Enabled,n.Preview,n.Matching){CanvasSize=n.CanvasSize}).ToArray(),snapshot.Wires));
         var json=JsonSerializer.Serialize(data,Options);if(Encoding.UTF8.GetByteCount(json)>MaximumBytes)throw new InvalidOperationException("Workspace exceeds the export budget.");return json;
     }
     public static Workspace Deserialize(INurbsEvaluator evaluator,ComponentRegistry registry,string json)
@@ -96,7 +100,7 @@ public static class WorkspaceFormat
         var objects=d.Objects.Select(o=>new SceneObject(o.Id,o.Name,DecodeGeometry(evaluator,o.Geometry),o.LayerId,o.Color,o.Visible,o.Locked,o.Source)).ToArray();
         if(objects.Any(o=>o.Color is{} c&&!c.IsValid))throw new FormatException("Invalid object color.");
         var document=SceneDocument.FromSnapshot(new(d.Name,d.Units,d.AbsoluteTolerance,d.AngleTolerance,d.ActiveLayer,d.Layers,objects,d.Selection??[]));
-        var graph=Graph.FromSnapshot(registry,new(g.Nodes.Select(n=>new GraphNode(n.Id,n.Component,n.X,n.Y,n.Parameters.ToImmutableDictionary(kv=>kv.Key,kv=>DecodeValue(evaluator,kv.Value)),n.Name,n.Enabled,n.Preview,n.Matching)).ToArray(),g.Wires));
+        var graph=Graph.FromSnapshot(registry,new(g.Nodes.Select(n=>new GraphNode(n.Id,n.Component,n.X,n.Y,n.Parameters.ToImmutableDictionary(kv=>kv.Key,kv=>DecodeValue(evaluator,kv.Value)),n.Name,n.Enabled,n.Preview,n.Matching){CanvasSize=n.CanvasSize}).ToArray(),g.Wires));
         // Both graphs are prepared and validated before a caller replaces its active workspace.
         return new(document,graph);
     }

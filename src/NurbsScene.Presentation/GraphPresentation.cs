@@ -48,7 +48,7 @@ public sealed class GraphPresentation
     }
     public static CanvasBox Bounds(GraphNode node,ComponentDefinition definition)
     {
-        if(node.Component=="Panel")return new(node.X,node.Y,224,168);
+        if(PanelLayout.CanResize(node))return PanelLayout.Bounds(node);
         var slider=node.Component is "Number" or "Integer" or "Boolean";
         var height=slider?38:node.Component=="Text"?76:Math.Max(56,Math.Max(definition.Inputs.Length,definition.Outputs.Length)*19+24);
         return new(node.X,node.Y,slider?180:156,height);

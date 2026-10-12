@@ -2,19 +2,16 @@
 No application mutation is invoked through the observation hook.
 """
 import json
-from ui_observation import settle
+from ui_observation import settle, wait_for_ui, read_ui
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[2]
 
 async def verify_graph_editing_ui(page):
     checks=[]
     async def read():
-        value=await page.evaluate('globalThis.nurbsSceneUi')
-        if value.get('status')!='ready':raise AssertionError(value)
-        return value
+        return await read_ui(page)
     async def wait(expression):
-        await page.wait_for_function('globalThis.nurbsSceneUi?.status==="failed" || (globalThis.nurbsSceneUi?.status==="ready" && ('+expression+'))',timeout=20000)
-        return await read()
+        return await wait_for_ui(page, expression)
     async def click(identity):
         await wait('!!globalThis.nurbsSceneUi.controls['+json.dumps(identity)+']')
         box=(await read())['controls'][identity]

@@ -24,7 +24,7 @@ public sealed class CommandConsole : Grid
         _prompt.Margin=new(5,0,4,0);row.Children.Add(_prompt);row.Children.Add(_input);SetColumn(_input,1);Children.Add(row);SetRow(row,1);
         AutomationProperties.SetAutomationId(_input,"CommandInput");AutomationProperties.SetName(_input,"Command");AutomationProperties.SetAutomationId(_log,"CommandHistory");
         _input.TextChanged+=(_,e)=>{if(_setting)return;var text=_input.Text.Trim();_input.ItemsSource=text.Length>0&&!text.Contains(' ')?WorkspaceCommands.Search(text).Select(t=>t.Command).ToArray():Array.Empty<string>();};
-        _input.QuerySubmitted+=(_,e)=>Submit(e.ChosenSuggestion?.ToString()??_input.Text);
+        _input.QuerySubmitted+=(_,e)=>Submit(e.ChosenSuggestion?.ToString()??e.QueryText);
         _input.KeyDown+=(_,e)=>{
             if(e.Key==VirtualKey.Escape){SetText("");_history.ResetNavigation();_input.IsSuggestionListOpen=false;CommandSubmitted?.Invoke("Cancel");e.Handled=true;}
             else if(!_input.IsSuggestionListOpen&&e.Key==VirtualKey.Up){SetText(_history.Previous(_input.Text));e.Handled=true;}

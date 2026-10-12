@@ -1,20 +1,16 @@
 """Real Uno input/matching menus, bounded output previews and retained shelves."""
 import json
 from pathlib import Path
-from ui_observation import settle
+from ui_observation import settle, wait_for_ui, read_ui
 from test_sliders_ui import verify_sliders_ui
-from test_canvas_values_ui import verify_canvas_values_ui
 ROOT=Path(__file__).resolve().parents[2]
 
 async def verify_graph_inputs_ui(page):
     checks=[]
     async def read():
-        value=await page.evaluate('globalThis.nurbsSceneUi')
-        if value.get('status')!='ready':raise AssertionError(value)
-        return value
+        return await read_ui(page)
     async def wait(expression):
-        await page.wait_for_function('globalThis.nurbsSceneUi?.status!=="ready" || ('+expression+')',timeout=20000)
-        return await read()
+        return await wait_for_ui(page, expression)
     async def control(identity,hover=False):
         await wait('!!globalThis.nurbsSceneUi.controls['+json.dumps(identity)+']')
         box=(await read())['controls'][identity]
@@ -84,5 +80,4 @@ async def verify_graph_inputs_ui(page):
     await page.screenshot(path=str(ROOT/'evidence/uno-inputs-final.png'))
     (ROOT/'evidence/uno-inputs-ui.json').write_text(json.dumps({'status':'passed','checks':checks,'final':final['state']},indent=2))
     checks.extend(await verify_sliders_ui(page))
-    checks.extend(await verify_canvas_values_ui(page))
     return checks

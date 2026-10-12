@@ -4,18 +4,15 @@ The qualification hook is observation-only.
 """
 import json
 from pathlib import Path
-from ui_observation import settle
+from ui_observation import settle, wait_for_ui, read_ui
 ROOT=Path(__file__).resolve().parents[2]
 
 async def verify_sliders_ui(page):
     checks=[]
     async def read():
-        data=await page.evaluate('globalThis.nurbsSceneUi')
-        if data.get('status')!='ready':raise AssertionError(data)
-        return data
+        return await read_ui(page)
     async def wait(expression):
-        await page.wait_for_function('globalThis.nurbsSceneUi?.status!=="ready" || ('+expression+')',timeout=20000)
-        return await read()
+        return await wait_for_ui(page, expression)
     async def click(identity):
         data=await wait('!!globalThis.nurbsSceneUi.controls['+json.dumps(identity)+']')
         b=data['controls'][identity]
@@ -30,7 +27,7 @@ async def verify_sliders_ui(page):
     await click('GraphDockBottom');await click('GraphFit');await settle(page)
     data=await read();original=next(n for n in data['nodes'] if n['name']=='Rise');identity=original['id']
     at=(original['x']+original['width']/2,original['y']+2)
-    revision=data['state']['graphRevision'];paths=data['state']['graphPathBuilds']
+    revision=data['state']['graphRevision'];paths=data['state']['graphPathBuilds'];wire_passes=data['values']['wireCachePasses']
     await page.mouse.click(*at,button='right');await settle(page);await click('GraphEditSlider')
     await wait('globalThis.nurbsSceneUi.state.sliderEditorOpen')
     check((await read())['state']['graphRevision']==revision,'Context-menu slider editor opens without changing the definition')
@@ -48,6 +45,7 @@ async def verify_sliders_ui(page):
     check(current['minimum']==-20 and current['maximum']==80 and current['decimalPlaces']==2 and abs(current['value']-15.13)<1e-10 and current['name']=='Rise edited',
           'Apply commits range, precision, rounded value and nickname together')
     check(data['state']['graphErrors']==0 and data['state']['graphPathBuilds']==paths,'Slider settings solve correctly without rebuilding wire paths')
+    check(data['values']['wireCachePasses']==wire_passes,'Slider parameter edits skip native wire-cache reconciliation entirely')
     await click('GraphUndo');current=await node(identity)
     check(current['value']==original['value'] and current['name']==original['name'] and current['minimum']==original['minimum'] and current['maximum']==original['maximum'] and current['decimalPlaces']==original['decimalPlaces'],
           'One undo restores every original slider setting')
