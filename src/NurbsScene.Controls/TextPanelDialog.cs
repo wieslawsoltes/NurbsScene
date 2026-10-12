@@ -18,8 +18,11 @@ public sealed class TextPanelDialog : ContentDialog
         Title = "Text Panel"; PrimaryButtonText = "Apply"; CloseButtonText = "Cancel";
         DefaultButton = ContentDialogButton.None;
         AutomationProperties.SetAutomationId(this, "TextPanelDialog");
-        _text = new TextBox { Text = node.Parameters.GetValueOrDefault("text", node.Component == "Text" ? "NurbsScene" : "") as string ?? "",
-            AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, Height = 200, MaxLength = InputComponents.MaximumTextLength, FontSize = 12 };
+        // Text is coerced while AcceptsReturn is false. Enable multiline first,
+        // otherwise reopening a saved draft truncates it at the first newline.
+        _text = new TextBox { AcceptsReturn = true, TextWrapping = TextWrapping.Wrap,
+            Height = 200, MaxLength = InputComponents.MaximumTextLength, FontSize = 12,
+            Text = node.Parameters.GetValueOrDefault("text", node.Component == "Text" ? "NurbsScene" : "") as string ?? "" };
         AutomationProperties.SetAutomationId(_text, "PanelTextInput");
         AutomationProperties.SetName(_text, "Persistent panel text");
         _single = new CheckBox { Content = "Keep all lines as one text item", IsChecked = node.Component == "Text" || node.Parameters.GetValueOrDefault("singleItem") is true,
