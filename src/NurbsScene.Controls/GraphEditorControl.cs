@@ -67,6 +67,7 @@ public sealed partial class GraphEditorControl : Grid,IDisposable
         _search.TextChanged+=(_,_)=>{if(Session is null)return;var query=_search.Text.Trim();_search.ItemsSource=Session.Graph.Registry.Definitions.Where(d=>d.Id.Contains(query,StringComparison.OrdinalIgnoreCase)||d.Category.Contains(query,StringComparison.OrdinalIgnoreCase)).Take(30).Select(d=>d.Id).ToArray();};
         _search.QuerySubmitted+=(_,e)=>{var id=e.ChosenSuggestion?.ToString()??_search.Text.Trim();AddComponent(id);};
         Shelf.ComponentRequested+=AddComponent;
+        Canvas.SliderEditRequested+=id=>DispatcherQueue.TryEnqueue(()=>{_ =EditNumberSliderAsync(id);});
         Canvas.SelectionChanged+=()=>{RefreshInspector();UpdateStatus();};Canvas.SearchRequested+=ShowCanvasSearch;Canvas.Message+=Report;Canvas.ViewChanged+=UpdateStatus;
         SizeChanged+=(_,_)=>SizeInspector();
         InitializeActions();
@@ -128,10 +129,25 @@ public sealed partial class GraphEditorControl : Grid,IDisposable
         var matching=new ComboBox{Header="List matching",ItemsSource=new[]{"longest","shortest","cross"},SelectedItem=node.Matching,HorizontalAlignment=HorizontalAlignment.Stretch,FontSize=12};matching.SelectionChanged+=(_,_)=>{if(matching.SelectedItem is string mode)Edit("Change matching",g=>g.Update(g.GetNode(node.Id) with{Matching=mode}));};_inspector.Children.Add(matching);
         if(node.Component is "Number" or "Integer")
         {
-            var value=Convert.ToDouble(node.Parameters.GetValueOrDefault("value",1d),CultureInfo.InvariantCulture);
-            var box=new NumberBox{Header="Value",Value=value,SmallChange=node.Component=="Integer"?1:.1,SpinButtonPlacementMode=NumberBoxSpinButtonPlacementMode.Compact,FontSize=12};AutomationProperties.SetAutomationId(box,"SelectedNodeValue");
-            box.ValueChanged+=(_,e)=>{if(double.IsFinite(e.NewValue))Edit("Change number",g=>{var n=g.GetNode(node.Id);g.Update(n with{Parameters=n.Parameters.SetItem("value",node.Component=="Integer"?Math.Round(e.NewValue):e.NewValue)});});};_inspector.Children.Add(box);
-            foreach(var key in new[]{"min","max"}){var limit=new NumberBox{Header=key=="min"?"Slider minimum":"Slider maximum",Value=Convert.ToDouble(node.Parameters.GetValueOrDefault(key,key=="min"?0d:100d),CultureInfo.InvariantCulture),FontSize=12};limit.ValueChanged+=(_,e)=>{if(double.IsFinite(e.NewValue))Edit("Set slider range",g=>{var n=g.GetNode(node.Id);g.Update(n with{Parameters=n.Parameters.SetItem(key,e.NewValue)});});};_inspector.Children.Add(limit);}
+            if(NumberSliderSettings.TryRead(node,out var options,out var value,out var error))
+            {
+                Label(FormattableString.Invariant($"Range: {options.Minimum:G7} to {options.Maximum:G7}"));
+                Label(options.DecimalPlaces is{} digits?$"Decimal places: {digits}":"Precision: Automatic");
+                var box=new NumberBox{Header="Value",Value=value,SmallChange=options.Integer?1:.1,SpinButtonPlacementMode=NumberBoxSpinButtonPlacementMode.Compact,FontSize=12};
+                AutomationProperties.SetAutomationId(box,"SelectedNodeValue");
+                box.ValueChanged+=(sender,e)=>{
+                    if(!double.IsFinite(e.NewValue))return;
+                    try
+                    {
+                        var normalized=options.Normalize(e.NewValue);
+                        Edit("Change number",g=>{var n=g.GetNode(node.Id);if(!NumberSliderSettings.TryRead(n,out _,out var oldValue,out _)||oldValue!=normalized)g.Update(n with{Parameters=n.Parameters.SetItem("value",normalized)});});
+                    }
+                    catch(ArgumentException ex){Report(ex.Message);}
+                };
+                _inspector.Children.Add(box);
+            }
+            else Label(error!);
+            _inspector.Children.Add(ClassicChrome.Button("Edit slider…",()=>{_ =EditNumberSliderAsync(node.Id);},"InspectorEditSlider"));
         }
         if(node.Component=="Text")
         {

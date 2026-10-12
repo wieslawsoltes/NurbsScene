@@ -34,7 +34,12 @@ public sealed partial class GraphCanvas
     }
     private void Scrub(GraphNode node,double x)
     {
-        var min=Parameter(node,"min",0);var max=Parameter(node,"max",100);if(!(max>min))return;var value=min+Math.Clamp((x-node.X-13)/154,0,1)*(max-min);if(node.Component=="Integer")value=Math.Round(value);_session!.Graph.Update(node with{Parameters=node.Parameters.SetItem("value",value)});
+        if(!NumberSliderSettings.TryRead(node,out var settings,out var previous,out var error))
+        { Message?.Invoke(error!);_gesture="";_before=null;return; }
+        var fraction=(x-node.X-13)/154;
+        if(!double.IsFinite(fraction))return;
+        var value=settings.ValueAt(fraction);
+        if(value!=previous)_session!.Graph.Update(node with{Parameters=node.Parameters.SetItem("value",value)});
     }
     private void Moved(object sender,PointerRoutedEventArgs e)
     {
