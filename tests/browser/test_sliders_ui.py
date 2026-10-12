@@ -80,10 +80,11 @@ async def verify_sliders_ui(page):
         b=(await read())['controls']['SelectedNodeValue']
         await page.mouse.click(b['x']+b['width']*.3,b['y']+b['height']-12)
         await page.keyboard.press('Control+A');await page.keyboard.insert_text(value);await page.keyboard.press('Enter');await settle(page)
+    # Math.Round uses ties-to-even: this input rounds to 12.34, not 12.35.
     await inspector_value('12.345');n=await node(identity);data=await read()
-    check(n['value']==12.35 and data['state']['sliderInspectorValue']==12.35,'Native inspector commits a rounded value and displays the accepted number')
+    check(n['value']==12.34 and data['state']['sliderInspectorValue']==12.34,'Native inspector commits a rounded value and displays the accepted number')
     revision=data['state']['graphRevision'];await inspector_value('999');data=await read()
-    check((await node(identity))['value']==12.35 and data['state']['sliderInspectorValue']==12.35 and data['state']['graphRevision']==revision,
+    check((await node(identity))['value']==12.34 and data['state']['sliderInspectorValue']==12.34 and data['state']['graphRevision']==revision,
           'Rejected inspector value restores its display without changing graph history')
     await click('GraphUndo');check((await node(identity))['value']==15.13,'Inspector value editing has one independent undo record')
     await click('GraphProperties');await click('GraphUndo');await click('GraphFit');final=await settle(page)
