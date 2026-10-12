@@ -1,36 +1,103 @@
-"""Smoke test of the compiled Uno application, not the JS harness.
-Build with -p:NurbsSceneQualification=true and serve the actual publish output.
-No GPU mocks or skip-on-unavailable behavior. Browser logs are retained on failure.
+"""Qualify the actual published Uno application in isolated input campaigns.
+Each context loads the same artifact and runs the unchanged managed/framebuffer
+checks. Every input scenario is mandatory; separate disposable sessions avoid a
+single expanded campaign exhausting the bounded observation lifetime. No GPU
+mocks, retry-to-pass, skip-on-unavailable or mutation hooks are used.
 """
-import argparse,asyncio,json,os
+import argparse
+import asyncio
+import json
+import os
 from pathlib import Path
 from playwright.async_api import async_playwright
 from test_workspace_ui import verify_workspace_ui
-ROOT=Path(__file__).resolve().parents[2]
+from test_graph_inputs_ui import verify_graph_inputs_ui
+from test_canvas_values_ui import verify_canvas_values_ui
+from test_panel_layout_ui import verify_panel_layout_ui
+
+ROOT = Path(__file__).resolve().parents[2]
+EVIDENCE = ROOT / "evidence"
+
+async def verify_panels(page):
+    checks = await verify_canvas_values_ui(page)
+    checks.extend(await verify_panel_layout_ui(page))
+    return checks
+
 async def main(url):
- (ROOT/'evidence').mkdir(exist_ok=True)
- async with async_playwright() as pw:
-  options={'headless':True}
-  if os.getenv('CHROMIUM_PATH'):options['executable_path']=os.environ['CHROMIUM_PATH']
-  browser=await pw.chromium.launch(**options)
-  page=await browser.new_page(viewport={'width':1600,'height':1100},device_scale_factor=1)
-  await page.context.grant_permissions(['clipboard-read','clipboard-write'])
-  errors=[];logs=[]
-  page.on('pageerror',lambda error:errors.append(str(error)))
-  page.on('console',lambda msg:logs.append(msg.type+': '+msg.text))
-  try:
-   await page.goto(url+('&' if '?' in url else '?')+'qualification=1',wait_until='domcontentloaded',timeout=60000)
-   await page.wait_for_function('globalThis.nurbsSceneQualification && globalThis.nurbsSceneQualification.status !== "running"',timeout=180000)
-   report=await page.evaluate('globalThis.nurbsSceneQualification');report['pageErrors']=errors
-   (ROOT/'evidence/uno-browser.json').write_text(json.dumps(report,indent=2))
-   if report.get('application')!='Uno Platform' or report.get('status')!='passed' or errors:
-    raise AssertionError(json.dumps(report,indent=2))
-   print(json.dumps(report,indent=2))
-   await verify_workspace_ui(page)
-   if errors: raise AssertionError(errors)
-  finally:
-   await page.screenshot(path=str(ROOT/'evidence/uno-browser.png'))
-   (ROOT/'evidence/uno-console.json').write_text(json.dumps({'errors':errors,'console':logs},indent=2))
-   await browser.close()
-if __name__=='__main__':
- parser=argparse.ArgumentParser();parser.add_argument('--url',default='http://127.0.0.1:8766/');args=parser.parse_args();asyncio.run(main(args.url))
+    EVIDENCE.mkdir(exist_ok=True)
+    campaigns = (("workspace", verify_workspace_ui),
+                 ("inputs-sliders", verify_graph_inputs_ui),
+                 ("panels", verify_panels))
+    all_checks, reports, campaign_reports, errors, logs = [], [], [], [], []
+    def write(name, data):
+        (EVIDENCE / name).write_text(json.dumps(data, indent=2))
+    async with async_playwright() as pw:
+        options = {"headless": True}
+        if os.getenv("CHROMIUM_PATH"):
+            options["executable_path"] = os.environ["CHROMIUM_PATH"]
+        browser = await pw.chromium.launch(**options)
+        try:
+            for name, verify in campaigns:
+                context = await browser.new_context(viewport={"width": 1600, "height": 1100}, device_scale_factor=1)
+                await context.grant_permissions(["clipboard-read", "clipboard-write"])
+                page = await context.new_page()
+                campaign_errors = []
+                def on_error(error, campaign=name, found=campaign_errors):
+                    found.append(str(error)); errors.append({"campaign": campaign, "error": str(error)})
+                page.on("pageerror", on_error)
+                page.on("console", lambda msg, campaign=name: logs.append({"campaign": campaign, "message": msg.type + ": " + msg.text}))
+                record = {"campaign": name, "status": "running", "checks": []}
+                campaign_reports.append(record)
+                print("CAMPAIGN " + name, flush=True)
+                try:
+                    await page.goto(url + ("&" if "?" in url else "?") + "qualification=1", wait_until="domcontentloaded", timeout=60000)
+                    await page.wait_for_function('globalThis.nurbsSceneQualification && globalThis.nurbsSceneQualification.status !== "running"', timeout=180000)
+                    report = await page.evaluate("globalThis.nurbsSceneQualification")
+                    report["pageErrors"] = list(campaign_errors)
+                    write("uno-browser-" + name + ".json", report)
+                    if report.get("application") != "Uno Platform" or report.get("status") != "passed" or campaign_errors:
+                        raise AssertionError(json.dumps(report, indent=2))
+                    reports.append(report)
+                    if len(reports) == 1:
+                        write("uno-browser.json", report)  # canonical modeling/framebuffer report
+                    record["checks"] = await verify(page)
+                    record["final"] = await page.evaluate("globalThis.nurbsSceneUi")
+                    await page.evaluate("globalThis.nurbsSceneUiFinish=true")
+                    await page.wait_for_function('globalThis.nurbsSceneUi?.status !== "ready"', timeout=15000)
+                    if await page.evaluate("globalThis.nurbsSceneUi.status") != "restored":
+                        raise AssertionError(await page.evaluate("globalThis.nurbsSceneUi"))
+                    record["checks"].append("Interaction test session restored: " + name)
+                    if campaign_errors:
+                        raise AssertionError(campaign_errors)
+                    record["status"] = "passed"
+                    all_checks.extend(record["checks"])
+                    print(json.dumps({"campaign": name, "status": "passed", "checks": len(record["checks"])}), flush=True)
+                except Exception as error:
+                    record["status"] = "failed"; record["error"] = str(error)
+                    try:
+                        record["observed"] = await page.evaluate("globalThis.nurbsSceneUi")
+                        await page.evaluate("globalThis.nurbsSceneUiFinish=true")
+                    except Exception as observation_error:
+                        record["observationError"] = str(observation_error)
+                    raise
+                finally:
+                    write("uno-campaign-" + name + ".json", record)
+                    try:
+                        await page.screenshot(path=str(EVIDENCE / ("uno-campaign-" + name + ".png")))
+                        await page.screenshot(path=str(EVIDENCE / "uno-browser.png"))
+                    finally:
+                        await context.close()
+            write("uno-ui.json", {"status": "passed", "checks": all_checks, "campaigns": campaign_reports,
+                "modelingChecksPerCampaign": [len(r["checks"]) for r in reports], "pageErrors": errors})
+        except Exception as error:
+            write("uno-ui.json", {"status": "failed", "error": str(error), "checks": all_checks, "campaigns": campaign_reports, "pageErrors": errors})
+            raise
+        finally:
+            write("uno-console.json", {"errors": errors, "console": logs})
+            await browser.close()
+    print(json.dumps({"suite": "real-uno-pointer-keyboard", "passed": len(all_checks), "campaigns": len(campaign_reports)}), flush=True)
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--url", default="http://127.0.0.1:8766/")
+    asyncio.run(main(parser.parse_args().url))

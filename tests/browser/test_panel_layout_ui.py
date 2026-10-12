@@ -92,5 +92,5 @@ async def verify_panel_layout_ui(page):
               'Panel layout workflows restore the original definition without graph or GPU errors')
         (ROOT/'evidence/uno-panel-layout-ui.json').write_text(json.dumps({'status':'passed','checks':checks,'final':final['state']},indent=2))
     except Exception as error:
-        (ROOT/'evidence/uno-panel-layout-ui.json').write_text(json.dumps({'status':'failed','error':str(error),'checks':checks,'observed':await read()},indent=2));raise
+        (ROOT/'evidence/uno-panel-layout-ui.json').write_text(json.dumps({'status':'failed','error':str(error),'checks':checks,'observed':await page.evaluate('globalThis.nurbsSceneUi')},indent=2));raise
     return checks

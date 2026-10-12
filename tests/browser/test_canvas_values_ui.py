@@ -91,5 +91,5 @@ async def verify_canvas_values_ui(page):
               'New canvas workflows restore the original definition with no graph or GPU error')
         (ROOT/'evidence/uno-canvas-values-ui.json').write_text(json.dumps({'status':'passed','checks':checks,'final':final['state']},indent=2))
     except Exception as error:
-        (ROOT/'evidence/uno-canvas-values-ui.json').write_text(json.dumps({'status':'failed','checks':checks,'error':str(error),'observed':await read()},indent=2));raise
+        (ROOT/'evidence/uno-canvas-values-ui.json').write_text(json.dumps({'status':'failed','checks':checks,'error':str(error),'observed':await page.evaluate('globalThis.nurbsSceneUi')},indent=2));raise
     return checks

@@ -100,3 +100,16 @@ Graph clipboard/menu/selection scenarios run inside the same actual Uno test via
 contracts and identical presentation benchmarks against previous main `1d41fc57`.
 See `GRAPH-EDITING.md`; performance numbers from the earlier presentation milestone
 are not assumed to apply to later source.
+
+## Panel layout and persistent text
+
+```sh
+DOTNET_TieredCompilation=0 dotnet run --project tests/dotnet/NurbsScene.PanelLayoutContracts -c Release
+DOTNET_TieredCompilation=0 dotnet run --project tests/dotnet/NurbsScene.CanvasInputContracts -c Release
+DOTNET_TieredCompilation=0 dotnet run --project tests/dotnet/NurbsScene.TextDraftContracts -c Release
+```
+
+`test_panel_layout_ui.py` extends the actual Uno input campaign with resize drafts,
+commit/cancel, history, no-op multiline Apply and legacy Text inspector reopening.
+Native wire-cache pass counters verify that slider changes skip unchanged wires;
+the numerical allocation contracts do not measure full canvas or GPU frame cost.

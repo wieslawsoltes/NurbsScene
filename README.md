@@ -13,7 +13,7 @@ The application lives in `src/NurbsScene.App`. The separate `validation-harness`
 | `NurbsScene.Geometry` | Immutable binary64 geometry, cached control bounds, planes and optional span/grid evaluator contracts |
 | `NurbsScene.Kernel` | Managed/native evaluators, exact curve/surface editing, numerical arc length and bounded curve queries |
 | `NurbsScene.Model` | Documents, cached immutable snapshot views, layers, locking, selection and atomic undoable transactions |
-| `NurbsScene.Parametric` | Typed data trees/paths, indexed dependency graph, incremental solving and 112 executable components |
+| `NurbsScene.Parametric` | Typed data trees/paths, indexed dependency graph, incremental solving and 113 executable components |
 | `NurbsScene.Rendering` | Knot-aware display tessellation, cameras, two-level spatial picking and a depth-enabled GL renderer |
 | `NurbsScene.IO` | Versioned exact `.nscene` workspaces and display-only OBJ/STL export |
 | `NurbsScene.Workbench` | Reusable application commands, graph preview and baking |
@@ -53,6 +53,13 @@ The [number-slider editor and snapshot review](docs/SLIDERS-AND-SNAPSHOT-REVIEW.
 adds atomic range/value/precision editing, label and context-menu entry points,
 validated rounded scrubbing, retained read-only graph/registry views and
 wire-metadata updates that do not rebuild drawing adjacency.
+
+Panels support native multiline editing, typed connected data, and a bottom-right
+resize grip. Resizing previews its layout without modifying the definition until
+release; Escape discards the draft. Exact canvas dimensions survive workspace and
+clipboard round trips. Large zoomed-out panels keep a readable text floor, and
+unchanged slider wires skip native-cache reconciliation. See [panel layout and
+review contracts](docs/PANEL-LAYOUT-REVIEW.md).
 
 ## Modeling and visual programming
 

@@ -1,6 +1,6 @@
 # Current implementation and compatibility boundaries
 
-This inventory includes the preserved-source import, typed data trees, curve-query additions, curve-plane sections, and graph-performance review through PR #8. It does not claim full Rhino/Grasshopper parity.
+This inventory includes the preserved-source import, typed data trees, curve-query additions, curve-plane sections, and graph-performance review through PR #10. It does not claim full Rhino/Grasshopper parity.
 
 | Area | Implemented | Remaining boundary |
 |---|---|---|
@@ -10,7 +10,7 @@ This inventory includes the preserved-source import, typed data trees, curve-que
 | Transforms | Translation, rotation, scale, affine plane projection and reflection of authoritative controls | Complete transform tools, gumball constraints, construction planes and command semantics |
 | Solids | No integrated solid-modeling backend | B-rep topology, booleans, fillets/chamfers, healing, sewing, shells and production robust predicates. OCCT is not integrated |
 | Measurements | Analytic surface area/centroid with work limits and numerical estimates; analytic-speed adaptive Gauss-Kronrod length, inverse arc length and equal-distance division with cancellation/work limits | Error estimates are not certified bounds; disconnected full-multiplicity length requests fail explicitly |
-| Parametric engine | 112 managed / 102 JavaScript definitions, typed ports, persistent trees/paths, bounded matching, cycle rejection, cached execution plans/results, batched edit notifications, cancellation and stale-solve rejection | Complete Grasshopper catalog, clusters, scripting/plugin compatibility and all matching/conversion rules |
+| Parametric engine | 113 managed / 102 JavaScript definitions, typed ports, persistent trees/paths, bounded matching, cycle rejection, cached execution plans/results, batched edit notifications, cancellation and stale-solve rejection | Complete Grasshopper catalog, clusters, scripting/plugin compatibility and all matching/conversion rules |
 | Documents | Cached immutable snapshot views, layers, locking, selection, undo/redo, atomic editing and explicit invalid-input errors | Full Rhino object types, blocks, history, reference files, annotations and large-project qualification |
 | Interchange | Managed exact `.nscene`; separate JS workspace dialect; OBJ/STL display export | `.3dm`, `.gh`, `.ghx`, STEP/IGES and plugin interchange. Display STL is not a watertight-solid certificate |
 | Uno UI | Compact tabbed toolbars/panels, authored vector icons, viewport activation/maximization, right/bottom definition docking, component shelves, command recall and world-aligned grid/ortho/endpoint construction; existing graph wiring, baking and file pickers | Identical Rhino/Grasshopper visuals/behavior, complete docking/toolbars/accessibility/input-device coverage |
@@ -51,3 +51,12 @@ guards. Graph/registry collection snapshots are retained and wire transforms
 reuse drawing adjacency. These do not add full Grasshopper numeric semantics,
 slider expressions/animation, all rounding modes or a different GPU backend.
 See `SLIDERS-AND-SNAPSHOT-REVIEW.md` for tests and measurement limits.
+
+PR #9 adds bounded numeric/range/operator/Boolean/text canvas creation, a typed
+Panel component and draft-only multiline editing. Connected empty trees override
+stored text rather than displaying stale data. PR #10 adds resize handles with
+isolated drafts, exact optional canvas dimensions, low-zoom panel readability and
+preview/wire-cache work avoidance. Native text normalization preserves unchanged
+original line endings; edited text uses LF. Only the bottom-right resize handle is
+implemented, not every original border/handle, font/alignment option or scrolling
+behavior. See `PANEL-LAYOUT-REVIEW.md` for tests and remaining boundaries.
