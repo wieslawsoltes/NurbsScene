@@ -19,7 +19,9 @@ public sealed class GraphSession(Graph graph,int capacity=100)
     private void Restore(GraphSnapshot snapshot){Graph=Graph.FromSnapshot(Graph.Registry,snapshot);Replaced?.Invoke();}
     private void RecordCore(string name,GraphSnapshot before)
     {
-        _undo.Add(new(name,new(before.Nodes.ToArray(),before.Wires.ToArray()),Graph.Snapshot()));
+        var after=Graph.Snapshot();
+        if(before.Nodes.SequenceEqual(after.Nodes)&&before.Wires.SequenceEqual(after.Wires))return;
+        _undo.Add(new(name,new(before.Nodes.ToArray(),before.Wires.ToArray()),after));
         if(_undo.Count>Math.Max(1,capacity))_undo.RemoveAt(0);_redo.Clear();
     }
     public void Record(string name,GraphSnapshot before){Guard();RecordCore(name,before);}
