@@ -2,6 +2,7 @@
 import json
 from pathlib import Path
 from ui_observation import settle
+from test_sliders_ui import verify_sliders_ui
 ROOT=Path(__file__).resolve().parents[2]
 
 async def verify_graph_inputs_ui(page):
@@ -81,4 +82,5 @@ async def verify_graph_inputs_ui(page):
     final=await read();check(final['state']['graphErrors']==0 and final['state']['gpuError'] is None,'Input-menu continuation leaves the definition and renderer error-free')
     await page.screenshot(path=str(ROOT/'evidence/uno-inputs-final.png'))
     (ROOT/'evidence/uno-inputs-ui.json').write_text(json.dumps({'status':'passed','checks':checks,'final':final['state']},indent=2))
+    checks.extend(await verify_sliders_ui(page))
     return checks

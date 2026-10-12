@@ -101,7 +101,7 @@ public sealed partial class GraphCanvas : SKCanvasElement,IDisposable
         InitializePointerInput();
         RightTapped+=(_,e)=>e.Handled=true;
         PointerWheelChanged+=(_,e)=>{var point=e.GetCurrentPoint(this);var world=World(point.Position);_zoom=Math.Clamp(_zoom*(float)Math.Exp(point.Properties.MouseWheelDelta*.001),.15f,3.5f);_panX=(float)point.Position.X-(float)world.X*_zoom;_panY=(float)point.Position.Y-(float)world.Y*_zoom;ViewChanged?.Invoke();Invalidate();e.Handled=true;};
-        DoubleTapped+=(_,e)=>{_worldLast=World(e.GetPosition(this));if(NodeAt(_worldLast) is null)SearchRequested?.Invoke();e.Handled=true;};
+        DoubleTapped+=OnCanvasDoubleTapped;
         KeyDown+=(_,e)=>{if(e.Key==VirtualKey.Delete){DeleteSelected();e.Handled=true;}else if(e.Key==VirtualKey.Escape){CancelGesture();e.Handled=true;}else if(e.Key==VirtualKey.F){Fit();e.Handled=true;}else if(e.Key==VirtualKey.Space){SearchRequested?.Invoke();e.Handled=true;}};
     }
     private void Subscribe(){if(_subscribed||_session is null)return;_subscribed=true;_session.Replaced+=Replaced;_graph=_session.Graph;_graph.Changed+=GraphChanged;_graph.Solved+=Solved;}
@@ -182,11 +182,7 @@ public sealed partial class GraphCanvas : SKCanvasElement,IDisposable
                     canvas.Save();canvas.ClipRect(new(rect.Left+5,rect.Top+2,rect.Right-5,rect.Bottom-2));
                     if(n.Slider)
                     {
-                        var value=Parameter(node,"value",1);var min=Parameter(node,"min",0);var max=Parameter(node,"max",100);var fraction=max>min?Math.Clamp((value-min)/(max-min),0,1):0;
-                        Text(canvas,node.Name??node.Component,rect.Left+9,rect.Top+14,new(50,50,54),10);
-                        _font.Size=10;var label=value.ToString("G7",CultureInfo.InvariantCulture);Text(canvas,label,rect.Right-10-_font.MeasureText(label),rect.Top+14,new(40,40,43),10);
-                        Fill(canvas,new(rect.Left+13,rect.Bottom-12,rect.Right-13,rect.Bottom-8),new(157,157,161),2);
-                        var x=rect.Left+13+(float)fraction*(rect.Width-26);Fill(canvas,new(x-3,rect.Bottom-16,x+3,rect.Bottom-4),new(230,231,223),2);Stroke(canvas,new(x-3,rect.Bottom-16,x+3,rect.Bottom-4),new(78,78,79),1,2);
+                        DrawNumberSlider(canvas,node,rect);
                     }
                     else if(node.Component=="Text")
                     {

@@ -67,7 +67,7 @@ public sealed partial class GraphEditorControl : Grid,IDisposable
         _search.TextChanged+=(_,_)=>{if(Session is null)return;var query=_search.Text.Trim();_search.ItemsSource=Session.Graph.Registry.Definitions.Where(d=>d.Id.Contains(query,StringComparison.OrdinalIgnoreCase)||d.Category.Contains(query,StringComparison.OrdinalIgnoreCase)).Take(30).Select(d=>d.Id).ToArray();};
         _search.QuerySubmitted+=(_,e)=>{var id=e.ChosenSuggestion?.ToString()??_search.Text.Trim();AddComponent(id);};
         Shelf.ComponentRequested+=AddComponent;
-        Canvas.SliderEditRequested+=id=>DispatcherQueue.TryEnqueue(()=>{_ =EditNumberSliderAsync(id);});
+        Canvas.SliderEditRequested+=id=>{if(Session is{} session)QueueNumberSliderEdit(session.Graph,id);};
         Canvas.SelectionChanged+=()=>{RefreshInspector();UpdateStatus();};Canvas.SearchRequested+=ShowCanvasSearch;Canvas.Message+=Report;Canvas.ViewChanged+=UpdateStatus;
         SizeChanged+=(_,_)=>SizeInspector();
         InitializeActions();
@@ -135,14 +135,23 @@ public sealed partial class GraphEditorControl : Grid,IDisposable
                 Label(options.DecimalPlaces is{} digits?$"Decimal places: {digits}":"Precision: Automatic");
                 var box=new NumberBox{Header="Value",Value=value,SmallChange=options.Integer?1:.1,SpinButtonPlacementMode=NumberBoxSpinButtonPlacementMode.Compact,FontSize=12};
                 AutomationProperties.SetAutomationId(box,"SelectedNodeValue");
+                var synchronizing=false;
                 box.ValueChanged+=(sender,e)=>{
-                    if(!double.IsFinite(e.NewValue))return;
+                    if(synchronizing||_rebuilding||generation!=_inspectorGeneration||!ReferenceEquals(Session?.Graph,_inspectorGraph))return;
                     try
                     {
+                        if(!double.IsFinite(e.NewValue))return; // transient cleared/native editing text
                         var normalized=options.Normalize(e.NewValue);
                         Edit("Change number",g=>{var n=g.GetNode(node.Id);if(!NumberSliderSettings.TryRead(n,out _,out var oldValue,out _)||oldValue!=normalized)g.Update(n with{Parameters=n.Parameters.SetItem("value",normalized)});});
                     }
                     catch(ArgumentException ex){Report(ex.Message);}
+                    finally
+                    {
+                        // Keep the native editor consistent after rounding or a
+                        // rejected out-of-range entry, without a recursive edit.
+                        if(Session is{} live&&ReferenceEquals(live.Graph,_inspectorGraph)&&NumberSliderSettings.TryRead(live.Graph.GetNode(node.Id),out _,out var actual,out _))
+                        {synchronizing=true;box.Value=actual;synchronizing=false;}
+                    }
                 };
                 _inspector.Children.Add(box);
             }
@@ -198,5 +207,5 @@ public sealed partial class GraphEditorControl : Grid,IDisposable
             if(preview.OmittedBranches>0)ResultLine($"… {preview.OmittedBranches} more branches");
         }
     }
-    public void Dispose(){if(Session is{} session)session.Replaced-=OnReplaced;DetachGraph();CloseActionPopups();Canvas.Dispose();}
+    public void Dispose(){DisposeSliderEditor();if(Session is{} session)session.Replaced-=OnReplaced;DetachGraph();CloseActionPopups();Canvas.Dispose();}
 }
