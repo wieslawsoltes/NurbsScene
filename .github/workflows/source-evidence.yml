@@ -1,0 +1,32 @@
+name: Reproducible source evidence
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Preserve exact source and history with revision manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/source
+          git rev-parse HEAD HEAD^{tree} > artifacts/source/revision.txt
+          git archive --format=tar.gz -o artifacts/source/NurbsScene-source.tar.gz HEAD
+          git bundle create artifacts/source/NurbsScene.bundle --all
+          git bundle verify artifacts/source/NurbsScene.bundle
+          cd artifacts/source
+          sha256sum NurbsScene-source.tar.gz NurbsScene.bundle > SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: source-${{ github.sha }}
+          path: artifacts/source/
+          retention-days: 30

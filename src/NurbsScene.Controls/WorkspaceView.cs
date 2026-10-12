@@ -71,7 +71,7 @@ public sealed class WorkspaceView : UserControl,IDisposable
         statusRow.Children.Add(ClassicChrome.Button("Panels",()=>SetPreferences(Preferences with{InspectorVisible=!Preferences.InspectorVisible}),"ToggleInspector"));statusRow.Children.Add(_status);
         var statusScroll=ClassicChrome.Horizontal(statusRow);root.Children.Add(statusScroll);Grid.SetRow(statusScroll,5);Content=root;
         AutomationProperties.SetAutomationId(this,"NurbsSceneWorkspace");AutomationProperties.SetAutomationId(_status,"WorkspaceStatus");
-        Viewport.Canvas.Scene=Controller.Scene;Viewport.Canvas.Aids=Aids;Viewport.Canvas.ConstructionAnchor=()=>Controller.CommandAnchor;GraphEditor.Session=Controller.GraphSession;Inspector.Document=Controller.Document;
+        Viewport.Canvas.Scene=Controller.Scene;Viewport.Canvas.Aids=Aids;Viewport.Canvas.ConstructionAnchor=()=>Controller.CommandAnchor;GraphEditor.Session=Controller.GraphSession;GraphEditor.ClipboardEvaluator=Controller.Kernel.Evaluator;Inspector.Document=Controller.Document;
         Controller.Changed+=Refresh;Controller.Message+=Console.WriteLine;Controller.FitRequested+=Viewport.Canvas.Fit;Controller.WorkspaceReplaced+=Replaced;
         Console.CommandSubmitted+=Run;GraphEditor.Message+=Console.WriteLine;Inspector.Message+=Console.WriteLine;
         GraphEditor.DockRequested+=dock=>{if(dock=="Hide")SetPreferences(Preferences with{DefinitionVisible=false});else SetPreferences(Preferences with{Dock=dock,DefinitionVisible=true});};

@@ -44,7 +44,10 @@ bottom-docked definition editor with component shelves. Grid Snap, Ortho and cur
 end snaps drive real point construction. The authored vector icons, compact
 sliders and cached graph paths bring the UI closer to Rhino/Grasshopper conventions
 without claiming identical visuals or complete behavior. See [workspace controls,
-performance and verification](docs/CLASSIC-WORKSPACE.md).
+performance and verification](docs/CLASSIC-WORKSPACE.md). The definition editor also
+provides native menus, exact copy/cut/paste/duplicate, alignment/distribution and
+search at the canvas cursor; [graph editing and incremental drawing](docs/GRAPH-EDITING.md)
+describes those contracts and performance tests.
 
 ## Modeling and visual programming
 

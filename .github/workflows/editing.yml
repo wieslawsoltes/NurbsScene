@@ -1,0 +1,43 @@
+name: Graph editing and incremental presentation
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  editing:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DOTNET_TieredCompilation: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Fragment, arrangement and incremental drawing contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/editing
+          dotnet run --project tests/dotnet/NurbsScene.EditingContracts -c Release 2>&1 | tee artifacts/editing/contracts.log
+      - name: Compare identical presentation workloads with previous main
+        shell: bash
+        run: |
+          set -euo pipefail
+          baseline="$RUNNER_TEMP/nurbsscene-editing-baseline"
+          git worktree add --detach "$baseline" 1d41fc5757691f2ef75ff64a2c82885d87dea68d
+          mkdir -p "$baseline/tests/editing-performance"
+          cp tests/editing-performance/*.cs tests/editing-performance/*.csproj "$baseline/tests/editing-performance/"
+          dotnet run --project "$baseline/tests/editing-performance" -c Release -- "$GITHUB_WORKSPACE/artifacts/editing/baseline.json"
+          dotnet run --project tests/editing-performance -c Release -- "$GITHUB_WORKSPACE/artifacts/editing/candidate.json"
+          git rev-parse HEAD HEAD^{tree} > artifacts/editing/tested-revision.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: editing-${{ github.run_id }}
+          path: artifacts/editing/

@@ -4,6 +4,8 @@ operation below uses mouse/keyboard input; the final flag only restores the test
 session. No DOM replacement, mock GPU, or direct command invocation is used.
 """
 import asyncio,json,math
+from ui_observation import settle
+from test_graph_editing_ui import verify_graph_editing_ui
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[2]
 
@@ -21,7 +23,7 @@ async def verify_workspace_ui(page):
         data=await observe();box=data['controls'][identity]
         if not box['enabled']: raise AssertionError('Disabled control '+identity)
         await page.mouse.click(box['x']+box['width']/2,box['y']+box['height']/2,click_count=2 if double else 1,delay=75)
-        await page.wait_for_timeout(200)
+        await settle(page)
     async def command(text):
         await click('CommandInput');await page.keyboard.press('Control+A');await page.keyboard.insert_text(text);await page.keyboard.press('Enter')
     def check(ok,name):
@@ -29,7 +31,7 @@ async def verify_workspace_ui(page):
         checks.append(name)
     async def state(): return (await observe())['state']
     async def drag(a,b):
-        await page.mouse.move(*a);await page.mouse.down();await page.mouse.move(*b,steps=9);await page.mouse.up();await page.wait_for_timeout(250)
+        await page.mouse.move(*a);await page.mouse.down();await page.mouse.move(*b,steps=9);await page.mouse.up();await settle(page)
     await wait('globalThis.nurbsSceneUi.state.nodeCount>0')
     initial=await state();objects=initial['objects'];node_count=initial['nodeCount']
     await page.screenshot(path=str(ROOT/'evidence/uno-ui-right.png'))
@@ -126,6 +128,8 @@ async def verify_workspace_ui(page):
         check(data['controls']['GraphCanvas']['x']>data['controls']['CadCanvas']['x'],'Wide layout restores right-docked definition')
         check(data['state']['gpuError'] is None and data['state']['graphErrors']==0,'No GPU submission or component errors after pointer interactions')
         await page.screenshot(path=str(ROOT/'evidence/uno-ui-final.png'))
+        checks.extend(await verify_graph_editing_ui(page))
+        data=await observe()
         (ROOT/'evidence/uno-ui.json').write_text(json.dumps({'status':'passed','checks':checks,'final':data['state']},indent=2))
     except Exception as error:
         data=await page.evaluate('globalThis.nurbsSceneUi')

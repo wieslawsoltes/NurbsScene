@@ -21,9 +21,10 @@ public partial class App
     private static async Task ObserveWorkspaceUiAsync(WorkspaceView view)
     {
         var controller=view.Controller;var source=controller.Save();var preferences=view.Preferences;
-        var watch=Stopwatch.StartNew();var drawing=new GraphPresentation();
+        var watch=Stopwatch.StartNew();var drawing=new GraphPresentation();long sample=0;
         try
         {
+            view.GraphEditor.Canvas.ObservePointerEvents=true;
             view.SetPreferences(new(),false);controller.Scene.ShowGrid=true;controller.Scene.ShowIsocurves=true;
             view.Viewport.Canvas.RestoreFourViews();view.Viewport.Canvas.Fit();view.GraphEditor.Canvas.Fit();
             view.Console.ClearHistory();view.Console.WriteLine("NurbsScene — independent NURBS modeling and visual programming");
@@ -48,6 +49,10 @@ public partial class App
                     for(var i=0;i<VisualTreeHelper.GetChildrenCount(value);i++)Visit(VisualTreeHelper.GetChild(value,i));
                 }
                 Visit(view);
+                // Native menu/flyout presenters live in the popup root rather
+                // than under WorkspaceView. Observe only loaded controls.
+                foreach(var item in view.GraphEditor.ActionElements)if(item.IsLoaded)Visit(item);
+                if(view.GraphEditor.SearchIsOpen&&view.GraphEditor.SearchElement is{} search&&search.IsLoaded)Visit(search);
                 var cad=view.Viewport.Canvas;var graph=view.GraphEditor.Canvas;
                 controls["CadCanvas"]=Box(cad);controls["GraphCanvas"]=Box(graph);
                 var cadOffset=cad.TransformToVisual(view).TransformPoint(new(0,0));
@@ -62,18 +67,21 @@ public partial class App
                         var p=graph.ScreenPoint(n.Node.Id,output,i);return(object)new{name=port.Name,x=graphOffset.X+p.X,y=graphOffset.Y+p.Y};
                     }).ToArray();
                     return new{id=n.Node.Id,name=n.Node.Name,component=n.Node.Component,modelX=n.Node.X,modelY=n.Node.Y,
-                        value=n.Node.Parameters.GetValueOrDefault("value"),x,y,width=n.Bounds.Width*graph.Zoom,height=n.Bounds.Height*graph.Zoom,
+                        value=n.Node.Parameters.GetValueOrDefault("value"),enabled=n.Node.Enabled,preview=n.Node.Preview,x,y,width=n.Bounds.Width*graph.Zoom,height=n.Bounds.Height*graph.Zoom,
                         inputs=Ports(false),outputs=Ports(true)};
                 }).ToArray();
                 var last=controller.Document.Objects.LastOrDefault();
                 var lastPoints=last?.Geometry is NurbsCurve curve?new[]{curve.PointAt(curve.Domain.Min).ToArray(),curve.PointAt(curve.Domain.Max).ToArray()}:null;
-                var snapshot=new{status="ready",controls,views,nodes,state=new{
+                var snapshot=new{status="ready",sample=++sample,controls,views,nodes,state=new{
                     objects=controller.Document.Objects.Count,layers=controller.Document.Layers.Count,
                     selected=controller.Document.Selection.Count,documentRevision=controller.Document.Revision,
                     nodeCount=controller.Graph.Nodes.Count,wireCount=controller.Graph.Wires.Count,graphRevision=controller.Graph.Revision,
+                    graphFocus=graph.FocusState.ToString(),focusedElement=Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(view.XamlRoot)?.GetType().FullName,
+                    pointerObservations=graph.PointerObservations,
                     graphSelected=graph.Selection.ToArray(),graphUndo=controller.GraphSession.CanUndo,graphRedo=controller.GraphSession.CanRedo,
                     graphErrors=controller.Graph.LastResult?.ErrorCount??0,graphLayoutBuilds=graph.LayoutBuilds,graphPathBuilds=graph.PathBuilds,
                     meshBuilds=controller.Scene.MeshBuildCount,layerStructureChanges=view.Inspector.LayerStructureChanges,
+                    contextMenuOpen=view.GraphEditor.ContextMenuIsOpen,searchOpen=view.GraphEditor.SearchIsOpen,
                     toolbar=view.Toolbar.Category,category=view.GraphEditor.Shelf.Category,inspector=view.Inspector.ActiveTab,
                     dock=view.Preferences.Dock,definitionVisible=view.Preferences.DefinitionVisible,inspectorVisible=view.Preferences.InspectorVisible,
                     activeViewport=cad.ActiveViewport,maximized=cad.Maximized,gridSnap=view.Aids.GridSnap,ortho=view.Aids.Ortho,endSnap=view.Aids.EndSnap,
@@ -81,6 +89,7 @@ public partial class App
                     gpuError=cad.LastError,workspaceWidth=view.ActualWidth,workspaceHeight=view.ActualHeight}};
                 PublishUi(snapshot);await Task.Delay(120);
             }
+            view.GraphEditor.Canvas.ObservePointerEvents=false;
             controller.Load(source);controller.Scene.ShowGrid=true;controller.Scene.ShowIsocurves=true;
             view.SetPreferences(preferences,false);view.Aids.GridSnap=false;view.Aids.Ortho=false;view.Aids.EndSnap=false;
             view.Viewport.Canvas.RestoreFourViews();view.Viewport.Canvas.Fit();view.GraphEditor.Canvas.Fit();
