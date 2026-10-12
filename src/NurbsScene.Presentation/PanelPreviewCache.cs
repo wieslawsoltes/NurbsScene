@@ -18,18 +18,21 @@ public sealed class PanelPreviewCache
     private string? _kind;
     private NodeResult? _result;
     private int _rows, _columns;
+    private PanelDisplayOptions? _options;
     private PanelPreview _preview = new([], "Waiting for solution");
     public long BuildCount { get; private set; }
+    public PanelPreview Current => _preview;
     public PanelPreview Get(GraphNode node, NodeResult? result) => Get(node, result, 8, 29);
     public PanelPreview Get(GraphNode node, NodeResult? result, int rows, int columns)
     {
         ArgumentNullException.ThrowIfNull(node);
         if (rows < 1 || rows > MaximumRows || columns < 1 || columns > MaximumColumns)
             throw new ArgumentOutOfRangeException(nameof(rows), "Preview dimensions exceed the formatting budget.");
-        if (_kind == node.Component && ReferenceEquals(result, _result) && rows == _rows && columns == _columns) return _preview;
-        _kind = node.Component; _result = result; _rows = rows; _columns = columns; BuildCount++;
+        var options = PanelDisplayOptions.For(node);
+        if (_kind == node.Component && ReferenceEquals(result, _result) && rows == _rows && columns == _columns && options == _options) return _preview;
+        _options = options; _kind = node.Component; _result = result; _rows = rows; _columns = columns; BuildCount++;
         var lines = ImmutableArray.CreateBuilder<string>(); var truncated = false; var scanned = 0;
-        void Text(string text)
+        void Text(string text, string prefix = "")
         {
             if (lines.Count == rows || scanned == MaximumScannedCodeUnits) { truncated = true; return; }
             var limit = Math.Min(2048, MaximumScannedCodeUnits - scanned);
@@ -40,24 +43,35 @@ public sealed class PanelPreviewCache
                 text = text[..end]; truncated = true;
             }
             scanned += text.Length;
+            // Only the bounded display prefix is combined with an item label.
+            if (prefix.Length > 0) text = prefix + text;
             var elements = StringInfo.GetTextElementEnumerator(text);
             var line = new System.Text.StringBuilder(); var count = 0; var previousCr = false;
+            var lastElementStart = 0; var clippedLine = false;
             while (elements.MoveNext())
             {
                 if (lines.Count == rows) { truncated = true; return; }
                 var element = elements.GetTextElement();
                 if (element is "\r\n" or "\n" or "\r")
                 {
-                    if (!(previousCr && element == "\n")) { lines.Add(line.ToString()); line.Clear(); count = 0; }
+                    if (!(previousCr && element == "\n")) { lines.Add(line.ToString()); line.Clear(); count = 0; clippedLine = false; lastElementStart = 0; }
                     previousCr = element == "\r"; continue;
                 }
                 previousCr = false;
                 if (count == columns)
                 {
+                    if (!options.WrapItems)
+                    {
+                        // Replace a whole final grapheme, never half a surrogate
+                        // or combining sequence. Explicit newlines still survive.
+                        if (!clippedLine) { line.Length = lastElementStart; line.Append('…'); clippedLine = true; }
+                        truncated = true; continue;
+                    }
                     lines.Add(line.ToString()); line.Clear(); count = 0;
                     if (lines.Count == rows) { truncated = true; return; }
                 }
                 // A single grapheme can contain arbitrarily many combining marks.
+                lastElementStart = line.Length;
                 line.Append(element.Length > 64 ? "�" : element == "\t" ? " " : element); count++;
             }
             if (lines.Count < rows) lines.Add(line.ToString());
@@ -73,11 +87,12 @@ public sealed class PanelPreviewCache
         {
             if (lines.Count == rows || scanned == MaximumScannedCodeUnits || ++visited > MaximumRows)
             { truncated = true; break; }
-            if (node.Component == "Panel") Text(branch.Path.ToString());
+            if (options.DrawPaths) Text(branch.Path.ToString());
+            var itemIndex = 0;
             foreach (var item in branch.Items)
             {
                 if (lines.Count == rows || scanned == MaximumScannedCodeUnits) { truncated = true; break; }
-                Text(item as string ?? "<non-text>");
+                Text(item as string ?? "<non-text>", options.DrawIndices ? (itemIndex++).ToString(CultureInfo.InvariantCulture) + ": " : "");
             }
         }
         return Finish($"{tree.ItemCount} items · {tree.Branches.Length} branches");
