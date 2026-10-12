@@ -2,6 +2,7 @@
 No application mutation is invoked through the observation hook.
 """
 import json
+from ui_observation import settle
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[2]
 
@@ -19,20 +20,20 @@ async def verify_graph_editing_ui(page):
         box=(await read())['controls'][identity]
         if not box['enabled']:raise AssertionError('Disabled '+identity)
         await page.mouse.click(box['x']+box['width']/2,box['y']+box['height']/2)
-        await page.wait_for_timeout(180)
+        await settle(page)
     async def key(value):
-        await page.keyboard.press(value);await page.wait_for_timeout(180)
+        await page.keyboard.press(value);await settle(page)
     async def focus_node(name):
         data=await read();node=next(n for n in data['nodes'] if n['name']==name)
         await page.mouse.click(node['x']+node['width']*.5,node['y']+5)
-        await page.wait_for_timeout(150);return node
+        await settle(page);return node
     async def drag(a,b,button='left'):
-        await page.mouse.move(*a);await page.mouse.down(button=button);await page.mouse.move(*b,steps=10);await page.mouse.up(button=button);await page.wait_for_timeout(250)
+        await page.mouse.move(*a);await page.mouse.down(button=button);await page.mouse.move(*b,steps=10);await page.mouse.up(button=button);await settle(page)
     def check(value,name):
         if not value:raise AssertionError(name)
         checks.append(name)
         print("EDIT CHECK "+name,flush=True)
-    await click('GraphDockBottom');await click('GraphFit');await page.wait_for_timeout(250)
+    await click('GraphDockBottom');await click('GraphFit');await settle(page)
     baseline=await read();count=baseline['state']['nodeCount'];wires=baseline['state']['wireCount']
     old_ids={n['id'] for n in baseline['nodes']}
     await focus_node('Width');await key('Control+A')
@@ -96,7 +97,7 @@ async def verify_graph_editing_ui(page):
             check((await read())['state']['nodeCount']==count+1,'Text-input undo does not execute graph undo')
             await page.keyboard.press('Control+A');await page.keyboard.press('Backspace')
         await click('GraphUndo');await wait(f'globalThis.nurbsSceneUi.state.nodeCount==={count}');await click('GraphFit');await page.wait_for_timeout(650)
-    await click('GraphDockRight');await click('GraphFit');await page.wait_for_timeout(250)
+    await click('GraphDockRight');await click('GraphFit');await settle(page)
     final=await read();check(final['state']['graphErrors']==0 and final['state']['gpuError'] is None,'Editing leaves the definition and GPU submission error-free')
     await page.screenshot(path=str(ROOT/'evidence/uno-editing-final.png'))
     (ROOT/'evidence/uno-editing-ui.json').write_text(json.dumps({'status':'passed','checks':checks,'final':final['state']},indent=2))

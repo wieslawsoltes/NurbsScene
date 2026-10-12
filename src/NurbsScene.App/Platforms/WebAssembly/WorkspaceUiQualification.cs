@@ -21,7 +21,7 @@ public partial class App
     private static async Task ObserveWorkspaceUiAsync(WorkspaceView view)
     {
         var controller=view.Controller;var source=controller.Save();var preferences=view.Preferences;
-        var watch=Stopwatch.StartNew();var drawing=new GraphPresentation();
+        var watch=Stopwatch.StartNew();var drawing=new GraphPresentation();long sample=0;
         try
         {
             view.GraphEditor.Canvas.ObservePointerEvents=true;
@@ -72,7 +72,7 @@ public partial class App
                 }).ToArray();
                 var last=controller.Document.Objects.LastOrDefault();
                 var lastPoints=last?.Geometry is NurbsCurve curve?new[]{curve.PointAt(curve.Domain.Min).ToArray(),curve.PointAt(curve.Domain.Max).ToArray()}:null;
-                var snapshot=new{status="ready",controls,views,nodes,state=new{
+                var snapshot=new{status="ready",sample=++sample,controls,views,nodes,state=new{
                     objects=controller.Document.Objects.Count,layers=controller.Document.Layers.Count,
                     selected=controller.Document.Selection.Count,documentRevision=controller.Document.Revision,
                     nodeCount=controller.Graph.Nodes.Count,wireCount=controller.Graph.Wires.Count,graphRevision=controller.Graph.Revision,
