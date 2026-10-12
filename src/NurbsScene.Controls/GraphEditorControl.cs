@@ -133,15 +133,17 @@ public sealed partial class GraphEditorControl : Grid,IDisposable
             {
                 Label(FormattableString.Invariant($"Range: {options.Minimum:G7} to {options.Maximum:G7}"));
                 Label(options.DecimalPlaces is{} digits?$"Decimal places: {digits}":"Precision: Automatic");
-                var box=new NumberBox{Header="Value",Value=value,SmallChange=options.Integer?1:.1,SpinButtonPlacementMode=NumberBoxSpinButtonPlacementMode.Compact,FontSize=12};
+                var box=new NumberBox{Header="Value",Value=value,SmallChange=options.DecimalPlaces is{} precision?Math.Pow(10,-precision):.1,SpinButtonPlacementMode=NumberBoxSpinButtonPlacementMode.Compact,FontSize=12};
                 AutomationProperties.SetAutomationId(box,"SelectedNodeValue");
                 var synchronizing=false;
                 box.ValueChanged+=(sender,e)=>{
                     if(synchronizing||_rebuilding||generation!=_inspectorGeneration||!ReferenceEquals(Session?.Graph,_inspectorGraph))return;
+                    if(!double.IsFinite(e.NewValue))return; // retain native transient cleared/editing text
                     try
                     {
-                        if(!double.IsFinite(e.NewValue))return; // transient cleared/native editing text
-                        var normalized=options.Normalize(e.NewValue);
+                        var current=Session!.Graph.GetNode(node.Id);
+                        if(!NumberSliderSettings.TryRead(current,out var currentOptions,out _,out var invalid))throw new ArgumentException(invalid);
+                        var normalized=currentOptions.Normalize(e.NewValue);
                         Edit("Change number",g=>{var n=g.GetNode(node.Id);if(!NumberSliderSettings.TryRead(n,out _,out var oldValue,out _)||oldValue!=normalized)g.Update(n with{Parameters=n.Parameters.SetItem("value",normalized)});});
                     }
                     catch(ArgumentException ex){Report(ex.Message);}

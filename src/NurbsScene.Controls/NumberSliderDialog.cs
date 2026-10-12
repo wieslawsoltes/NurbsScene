@@ -52,6 +52,11 @@ public sealed class NumberSliderDialog : ContentDialog
         content.Children.Add(_value);content.Children.Add(_precision);
         content.Children.Add(new TextBlock { Text="Apply updates all settings in one undoable edit. Cancel preserves the current definition.",TextWrapping=TextWrapping.Wrap,FontSize=10 });
         content.Children.Add(_error);Content=content;
+        // Validation belongs to the submitted draft, not a later corrected one.
+        // Edits remain draft-only; clearing the message never commits a value.
+        void DraftChanged(){Edit=null;_error.Text="";}
+        foreach(var field in new[]{_name,_minimum,_maximum,_value})field.TextChanged+=(_,_)=>DraftChanged();
+        _precision.SelectionChanged+=(_,_)=>DraftChanged();
         PrimaryButtonClick+=(_,args)=>
         {
             try

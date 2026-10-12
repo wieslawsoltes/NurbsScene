@@ -41,6 +41,7 @@ async def verify_sliders_ui(page):
     await click('SliderPrecision');await page.keyboard.press('Home')
     for _ in range(3):await page.keyboard.press('ArrowDown')
     await page.keyboard.press('Enter');await settle(page)
+    check((await read())['state']['sliderValidation']=='','Correcting the slider draft clears its obsolete validation message')
     await page.screenshot(path=str(ROOT/'evidence/uno-slider-dialog.png'))
     await click('SliderApply');await wait('!globalThis.nurbsSceneUi.state.sliderEditorOpen')
     current=await node(identity);data=await read()
@@ -72,7 +73,20 @@ async def verify_sliders_ui(page):
     await page.keyboard.press('Shift+F10');await settle(page);await click('GraphEditSlider');await wait('globalThis.nurbsSceneUi.state.sliderEditorOpen')
     check(True,'Keyboard context-menu entry opens the same slider editor')
     await page.keyboard.press('Escape');await wait('!globalThis.nurbsSceneUi.state.sliderEditorOpen')
-    await click('GraphDockRight');await click('GraphFit');final=await settle(page)
+    await click('GraphRedo');await click('GraphDockRight');await click('GraphFit');await settle(page)
+    n=await node(identity);await page.mouse.click(n['x']+n['width']/2,n['y']+2);await settle(page)
+    await click('GraphProperties');await wait('!!globalThis.nurbsSceneUi.controls.SelectedNodeValue')
+    async def inspector_value(value):
+        b=(await read())['controls']['SelectedNodeValue']
+        await page.mouse.click(b['x']+b['width']*.3,b['y']+b['height']-12)
+        await page.keyboard.press('Control+A');await page.keyboard.insert_text(value);await page.keyboard.press('Enter');await settle(page)
+    await inspector_value('12.345');n=await node(identity);data=await read()
+    check(n['value']==12.35 and data['state']['sliderInspectorValue']==12.35,'Native inspector commits a rounded value and displays the accepted number')
+    revision=data['state']['graphRevision'];await inspector_value('999');data=await read()
+    check((await node(identity))['value']==12.35 and data['state']['sliderInspectorValue']==12.35 and data['state']['graphRevision']==revision,
+          'Rejected inspector value restores its display without changing graph history')
+    await click('GraphUndo');check((await node(identity))['value']==15.13,'Inspector value editing has one independent undo record')
+    await click('GraphProperties');await click('GraphUndo');await click('GraphFit');final=await settle(page)
     check(final['state']['graphErrors']==0 and final['state']['gpuError'] is None and (await node(identity))['value']==original['value'],
           'Slider editing leaves the original definition and GPU submission error-free')
     await page.screenshot(path=str(ROOT/'evidence/uno-sliders-final.png'))
