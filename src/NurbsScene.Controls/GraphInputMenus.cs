@@ -20,6 +20,12 @@ public sealed partial class GraphEditorControl
             try{Session.Edit(name,action);RefreshInspector();UpdateStatus();}
             catch(Exception error){Report(error.Message);}
         }
+        if(node.Component is "Number" or "Integer")
+        {
+            var slider=new MenuFlyoutItem{Text="Edit slider…",FontSize=11,MinHeight=24,Padding=new(8,2,8,2)};
+            AutomationProperties.SetAutomationId(slider,"GraphEditSlider");_contextElements.Add(slider);
+            slider.Click+=(_,_)=>QueueNumberSliderEdit(expected,node.Id);menu.Items.Add(slider);
+        }
         var matching=Sub("Data matching","GraphMatchingMenu");
         foreach(var mode in new[]{"longest","shortest","cross"})
         {

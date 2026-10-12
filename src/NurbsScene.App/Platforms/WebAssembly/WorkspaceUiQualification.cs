@@ -34,7 +34,7 @@ public partial class App
             while(watch.Elapsed<TimeSpan.FromMinutes(10))
             {
                 if(Uno.Foundation.WebAssemblyRuntime.InvokeJS("globalThis.nurbsSceneUiFinish === true ? 'yes' : 'no'")=="yes")break;
-                var controls=new Dictionary<string,object>();
+                var controls=new Dictionary<string,object>();double? sliderInspectorValue=null;
                 object Box(FrameworkElement element)
                 {
                     var p=element.TransformToVisual(view).TransformPoint(new(0,0));
@@ -46,11 +46,13 @@ public partial class App
                     {
                         if(e.Visibility!=Visibility.Visible)return;
                         var id=AutomationProperties.GetAutomationId(e);
+                        if(id=="SelectedNodeValue"&&e is NumberBox number&&double.IsFinite(number.Value))sliderInspectorValue=number.Value;
                         if(id.Length>0&&e.ActualWidth>0&&e.ActualHeight>0)controls[id]=Box(e);
                     }
                     for(var i=0;i<VisualTreeHelper.GetChildrenCount(value);i++)Visit(VisualTreeHelper.GetChild(value,i));
                 }
                 Visit(view);
+                if(view.GraphEditor.NumberSliderEditorIsOpen&&view.GraphEditor.NumberSliderEditor is{} sliderDialog)Visit(sliderDialog);
                 // Native menu/flyout presenters live in the popup root rather
                 // than under WorkspaceView. Observe only loaded controls.
                 foreach(var item in view.GraphEditor.ActionElements)if(item.IsLoaded)Visit(item);
@@ -69,7 +71,7 @@ public partial class App
                         var p=graph.ScreenPoint(n.Node.Id,output,i);return(object)new{name=port.Name,x=graphOffset.X+p.X,y=graphOffset.Y+p.Y};
                     }).ToArray();
                     return new{id=n.Node.Id,name=n.Node.Name,component=n.Node.Component,modelX=n.Node.X,modelY=n.Node.Y,
-                        value=n.Node.Parameters.GetValueOrDefault("value"),enabled=n.Node.Enabled,preview=n.Node.Preview,matching=n.Node.Matching,x,y,width=n.Bounds.Width*graph.Zoom,height=n.Bounds.Height*graph.Zoom,
+                        value=n.Node.Parameters.GetValueOrDefault("value"),minimum=n.Node.Parameters.GetValueOrDefault("min"),maximum=n.Node.Parameters.GetValueOrDefault("max"),decimalPlaces=n.Node.Parameters.GetValueOrDefault("decimalPlaces"),enabled=n.Node.Enabled,preview=n.Node.Preview,matching=n.Node.Matching,x,y,width=n.Bounds.Width*graph.Zoom,height=n.Bounds.Height*graph.Zoom,
                         inputs=Ports(false),outputs=Ports(true)};
                 }).ToArray();
                 var last=controller.Document.Objects.LastOrDefault();
@@ -94,12 +96,12 @@ public partial class App
                     objects=controller.Document.Objects.Count,layers=controller.Document.Layers.Count,
                     selected=controller.Document.Selection.Count,documentRevision=controller.Document.Revision,
                     nodeCount=controller.Graph.Nodes.Count,wireCount=controller.Graph.Wires.Count,graphRevision=controller.Graph.Revision,
-                    graphFocus=graph.FocusState.ToString(),focusedElement=Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(view.XamlRoot)?.GetType().FullName,
+                    graphFocus=graph.FocusState.ToString(),focusedElement=view.XamlRoot is{} root?Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(root)?.GetType().FullName:null,
                     pointerObservations=graph.PointerObservations,
                     graphSelected=graph.Selection.ToArray(),graphUndo=controller.GraphSession.CanUndo,graphRedo=controller.GraphSession.CanRedo,
                     graphErrors=controller.Graph.LastResult?.ErrorCount??0,graphLayoutBuilds=graph.LayoutBuilds,graphPathBuilds=graph.PathBuilds,
                     meshBuilds=controller.Scene.MeshBuildCount,layerStructureChanges=view.Inspector.LayerStructureChanges,
-                    contextMenuOpen=view.GraphEditor.ContextMenuIsOpen,searchOpen=view.GraphEditor.SearchIsOpen,
+                    contextMenuOpen=view.GraphEditor.ContextMenuIsOpen,searchOpen=view.GraphEditor.SearchIsOpen,sliderEditorOpen=view.GraphEditor.NumberSliderEditorIsOpen,sliderValidation=view.GraphEditor.NumberSliderValidation,sliderInspectorValue,
                     shelfPageBuilds=view.GraphEditor.Shelf.PageBuildCount,shelfButtonBuilds=view.GraphEditor.Shelf.ButtonBuildCount,
                     toolbar=view.Toolbar.Category,category=view.GraphEditor.Shelf.Category,inspector=view.Inspector.ActiveTab,
                     dock=view.Preferences.Dock,definitionVisible=view.Preferences.DefinitionVisible,inspectorVisible=view.Preferences.InspectorVisible,

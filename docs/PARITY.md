@@ -1,6 +1,6 @@
 # Current implementation and compatibility boundaries
 
-This inventory includes the preserved-source import, typed data trees, curve-query additions, curve-plane sections, and graph-performance review through PR #6. It does not claim full Rhino/Grasshopper parity.
+This inventory includes the preserved-source import, typed data trees, curve-query additions, curve-plane sections, and graph-performance review through PR #8. It does not claim full Rhino/Grasshopper parity.
 
 | Area | Implemented | Remaining boundary |
 |---|---|---|
@@ -25,7 +25,7 @@ The performance suite compares one identical harness against baseline `f0bd8e3` 
 
 The real Uno browser suite compiles and runs the application and compares actual GL framebuffer pixels against an empty scene and after camera motion. It exercises managed commands, undo/redo, graph edits, baking, workspace and typed-path round trips. The new query APIs and review contracts are additionally tested in managed .NET CI; the browser smoke test does not exercise every new API or command. Software GL may satisfy the browser check; no physical-GPU performance claim follows.
 
-The section suite adds 28 contracts for forward extraction, rational plane roots/overlaps/uncertainty, balanced splitting, two executable components, commands, branch lookup, plan/result reuse, fan-in ordering, and edit/history isolation. Its independent benchmark harness compares graph/tree operations against the previous main `21ed2c7`, not the older geometry baseline. The new extraction cache is used by plane queries only; public Bezier decomposition and the pre-existing display/measurement paths are unchanged. No automatic plane-splitting wrapper is included.
+The section suite adds 28 contracts for forward extraction, rational plane roots/overlaps/uncertainty, balanced splitting, two executable components, commands, branch lookup, plan/result reuse, definition serialization, and edit/history isolation. Its independent benchmark harness compares graph/tree operations against the previous main `21ed2c7`, not the older geometry baseline. The new extraction cache is used by plane queries only; public Bezier decomposition and the pre-existing display/measurement paths are unchanged. No automatic plane-splitting wrapper is included.
 
 The Uno browser hook adds seven checks for real managed sections, overlaps, component execution, cached results, serialization and actual controller split/undo, alongside the existing framebuffer tests. These are not exhaustive pointer/menu or physical-GPU tests. See `SECTIONS-AND-RUNTIME.md`.
 
@@ -44,3 +44,10 @@ duplicate actions, native editor/context menus, alignment/distribution, selectio
 windows and cursor search. Incremental drawing retains unchanged nodes and wires.
 It does not add Grasshopper clipboard/file compatibility, clusters or plugins;
 see `GRAPH-EDITING.md` for contracts and benchmark scope.
+
+PR #8 adds a native number-slider settings dialog, 0–12-place or automatic
+precision, binary64 range-safe scrubbing, atomic Apply/Cancel and stale-edit
+guards. Graph/registry collection snapshots are retained and wire transforms
+reuse drawing adjacency. These do not add full Grasshopper numeric semantics,
+slider expressions/animation, all rounding modes or a different GPU backend.
+See `SLIDERS-AND-SNAPSHOT-REVIEW.md` for tests and measurement limits.

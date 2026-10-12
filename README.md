@@ -12,7 +12,7 @@ The application lives in `src/NurbsScene.App`. The separate `validation-harness`
 |---|---|
 | `NurbsScene.Geometry` | Immutable binary64 geometry, cached control bounds, planes and optional span/grid evaluator contracts |
 | `NurbsScene.Kernel` | Managed/native evaluators, exact curve/surface editing, numerical arc length and bounded curve queries |
-| `NurbsScene.Model` | Documents, cached immutable snapshot views, layers, selection and atomic undoable transactions |
+| `NurbsScene.Model` | Documents, cached immutable snapshot views, layers, locking, selection and atomic undoable transactions |
 | `NurbsScene.Parametric` | Typed data trees/paths, indexed dependency graph, incremental solving and 112 executable components |
 | `NurbsScene.Rendering` | Knot-aware display tessellation, cameras, two-level spatial picking and a depth-enabled GL renderer |
 | `NurbsScene.IO` | Versioned exact `.nscene` workspaces and display-only OBJ/STL export |
@@ -48,6 +48,11 @@ performance and verification](docs/CLASSIC-WORKSPACE.md). The definition editor 
 provides native menus, exact copy/cut/paste/duplicate, alignment/distribution and
 search at the canvas cursor; [graph editing and incremental drawing](docs/GRAPH-EDITING.md)
 describes those contracts and performance tests.
+
+The [number-slider editor and snapshot review](docs/SLIDERS-AND-SNAPSHOT-REVIEW.md)
+adds atomic range/value/precision editing, label and context-menu entry points,
+validated rounded scrubbing, retained read-only graph/registry views and
+wire-metadata updates that do not rebuild drawing adjacency.
 
 ## Modeling and visual programming
 

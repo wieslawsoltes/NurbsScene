@@ -1,0 +1,43 @@
+name: Graph snapshot and presentation review
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  snapshots:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      DOTNET_TieredCompilation: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Retained view and drawing topology regressions
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/snapshots
+          dotnet run --project tests/dotnet/NurbsScene.SnapshotContracts -c Release 2>&1 | tee artifacts/snapshots/contracts.log
+      - name: Identical baseline and candidate workloads
+        shell: bash
+        run: |
+          set -euo pipefail
+          baseline="$RUNNER_TEMP/nurbsscene-snapshot-baseline"
+          git worktree add --detach "$baseline" 49601b987577ac796609950a917e9ac9c5f18246
+          mkdir -p "$baseline/tests/snapshot-performance"
+          cp tests/snapshot-performance/*.cs tests/snapshot-performance/*.csproj "$baseline/tests/snapshot-performance/"
+          dotnet run --project "$baseline/tests/snapshot-performance" -c Release -- "$GITHUB_WORKSPACE/artifacts/snapshots/baseline.json"
+          dotnet run --project tests/snapshot-performance -c Release -- "$GITHUB_WORKSPACE/artifacts/snapshots/candidate.json"
+          git rev-parse HEAD HEAD^{tree} > artifacts/snapshots/tested-revision.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: snapshots-${{ github.run_id }}
+          path: artifacts/snapshots/

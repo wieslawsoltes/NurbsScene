@@ -37,8 +37,12 @@ public sealed class GraphPresentation
     {
         ArgumentNullException.ThrowIfNull(graph);
         if(ReferenceEquals(graph,_graph)&&graph.Revision==_revision)return _drawing;
-        if(!ReferenceEquals(graph,_graph)||graph.TopologyRevision!=_topology||graph.WireRevision!=_wires)Rebuild(graph);
-        else UpdateNodes(graph);
+        if(!ReferenceEquals(graph,_graph)||graph.TopologyRevision!=_topology)Rebuild(graph);
+        else
+        {
+            UpdateNodes(graph);
+            if(graph.WireRevision!=_wires)UpdateWireMetadata(graph);
+        }
         _graph=graph;_revision=graph.Revision;_topology=graph.TopologyRevision;_wires=graph.WireRevision;BuildCount++;
         return _drawing;
     }
@@ -92,6 +96,21 @@ public sealed class GraphPresentation
             else wires.Add(Present(wire,n));
         }
         _drawing=new(n,wires.MoveToImmutable());TopologyBuilds++;
+    }
+    private void UpdateWireMetadata(Graph graph)
+    {
+        // With unchanged topology, wire order/endpoints and incident indices are
+        // stable. Transform changes replace only the metadata record; existing
+        // endpoint geometry, paths, adjacency and unchanged nodes remain intact.
+        var source=graph.Wires;var paths=_drawing.Wires;
+        ImmutableArray<PresentedWire>.Builder? changed=null;
+        for(var i=0;i<source.Count;i++)
+        {
+            var previous=paths[i];var wire=source[i];
+            if(ReferenceEquals(previous.Wire,wire))continue;
+            (changed??=paths.ToBuilder())[i]=previous with{Wire=wire};
+        }
+        if(changed is not null)_drawing=new(_drawing.Nodes,changed.ToImmutable());
     }
     private void UpdateNodes(Graph graph)
     {
