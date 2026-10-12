@@ -18,7 +18,7 @@ public sealed record ComponentContext(IReadOnlyDictionary<string,object?> Inputs
     public double Parameter(string name,double fallback=0)=>Parameters.TryGetValue(name,out var v)?Convert.ToDouble(v,System.Globalization.CultureInfo.InvariantCulture):fallback;
 }
 public sealed record ComponentDefinition(string Id,string Category,string Description,ImmutableArray<PortDefinition> Inputs,ImmutableArray<PortDefinition> Outputs,Func<ComponentContext,ValueTask<IReadOnlyDictionary<string,object?>>> Evaluate);
-public sealed record GraphNode(string Id,string Component,double X,double Y,ImmutableDictionary<string,object?> Parameters,string? Name=null,bool Enabled=true,bool Preview=true,string Matching="longest");
+public sealed partial record GraphNode(string Id,string Component,double X,double Y,ImmutableDictionary<string,object?> Parameters,string? Name=null,bool Enabled=true,bool Preview=true,string Matching="longest");
 public sealed record PortAddress(string Node,string Port);
 public sealed record Wire(string Id,PortAddress From,PortAddress To,string Transform="none");
 public sealed record NodeResult(ImmutableDictionary<string,DataTree> Outputs,string Status,ImmutableArray<string> Messages,double Milliseconds);
@@ -95,6 +95,7 @@ public sealed partial class Graph(ComponentRegistry registry)
     }
     public void Update(GraphNode node)
     {
+        node.CanvasSize?.Validate();
         if(!double.IsFinite(node.X)||!double.IsFinite(node.Y)||node.Matching is not("longest" or "shortest" or "cross"))throw new ArgumentException("Invalid node position or matching mode.");
         lock(_gate){var previous=GetNode(node.Id);if(previous==node)return;if(previous.Parameters!=node.Parameters)node=node with{Parameters=ParameterValues.Freeze(node.Parameters)};if(previous.Component!=node.Component)throw new InvalidOperationException("Cannot replace a component type in place.");_nodes[node.Id]=node;_nodesView=null;if(previous.Parameters!=node.Parameters||previous.Enabled!=node.Enabled||previous.Matching!=node.Matching)Invalidate(node.Id);Revision++;}NotifyChanged();
     }

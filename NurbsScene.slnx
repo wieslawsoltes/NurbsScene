@@ -26,4 +26,5 @@
   <Project Path="tests/dotnet/NurbsScene.SliderContracts/NurbsScene.SliderContracts.csproj" />
   <Project Path="tests/dotnet/NurbsScene.SnapshotContracts/NurbsScene.SnapshotContracts.csproj" />
   <Project Path="tests/dotnet/NurbsScene.CanvasInputContracts/NurbsScene.CanvasInputContracts.csproj" />
+  <Project Path="tests/dotnet/NurbsScene.PanelLayoutContracts/NurbsScene.PanelLayoutContracts.csproj" />
 </Solution>

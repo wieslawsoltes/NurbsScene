@@ -115,7 +115,7 @@ Test("Boolean and panel definitions survive exact clipboard and workspace interc
 Test("panel preview is bounded, immutable and reused between frames", () => {
     var g = new Graph(Registry()); var n = g.Add("Panel", parameters: new Dictionary<string, object?> { ["text"] = string.Join('\n', Enumerable.Repeat(new string('x', 300), 100)) }); var r = Solve(g).Nodes[n.Id];
     var cache = new PanelPreviewCache(); var first = cache.Get(n, r); Check(first.Lines.Length <= 8 && first.Footer.StartsWith("100 items") && ReferenceEquals(first, cache.Get(n, r)) && cache.BuildCount == 1);
-    g.Update(n with { Name = "Renamed" }); var next = cache.Get(g.GetNode(n.Id), r); Check(cache.BuildCount == 2 && !ReferenceEquals(first, next));
+    g.Update(n with { Name = "Renamed" }); var next = cache.Get(g.GetNode(n.Id), r); Check(cache.BuildCount == 1 && ReferenceEquals(first, next));
 });
 Test("preview handles Unicode text without partial surrogate output", () => {
     var g = new Graph(Registry()); var n = g.Add("Text", parameters: new Dictionary<string, object?> { ["text"] = string.Concat(Enumerable.Repeat("🌐é\n", 40)) }); var preview = new PanelPreviewCache().Get(n, Solve(g).Nodes[n.Id]);

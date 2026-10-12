@@ -4,32 +4,47 @@ using NurbsScene.Parametric;
 
 namespace NurbsScene.Presentation;
 
-public sealed record PanelPreview(ImmutableArray<string> Lines, string Footer);
+public sealed record PanelPreview(ImmutableArray<string> Lines, string Footer)
+{
+    public bool Truncated { get; init; }
+}
 
-/// <summary>Owner-thread, bounded preview of a panel's string output. Formatting
-/// runs only when its immutable node or result changes, never once per frame.
-/// Unicode text elements and explicit line breaks are retained within the budget.</summary>
+/// <summary>Bounded, owner-thread preview formatting. Cache keys are immutable
+/// solution identity, component kind and visible row/column budgets; moving,
+/// renaming or selecting a panel does not reshape identical output text.</summary>
 public sealed class PanelPreviewCache
 {
-    private GraphNode? _node;
+    public const int MaximumRows = 64, MaximumColumns = 128, MaximumScannedCodeUnits = 8192;
+    private string? _kind;
     private NodeResult? _result;
+    private int _rows, _columns;
     private PanelPreview _preview = new([], "Waiting for solution");
     public long BuildCount { get; private set; }
-    public PanelPreview Get(GraphNode node, NodeResult? result)
+    public PanelPreview Get(GraphNode node, NodeResult? result) => Get(node, result, 8, 29);
+    public PanelPreview Get(GraphNode node, NodeResult? result, int rows, int columns)
     {
-        if (ReferenceEquals(node, _node) && ReferenceEquals(result, _result)) return _preview;
-        _node = node; _result = result; BuildCount++;
-        var lines = ImmutableArray.CreateBuilder<string>();
-        const int rows = 8, columns = 29;
+        ArgumentNullException.ThrowIfNull(node);
+        if (rows < 1 || rows > MaximumRows || columns < 1 || columns > MaximumColumns)
+            throw new ArgumentOutOfRangeException(nameof(rows), "Preview dimensions exceed the formatting budget.");
+        if (_kind == node.Component && ReferenceEquals(result, _result) && rows == _rows && columns == _columns) return _preview;
+        _kind = node.Component; _result = result; _rows = rows; _columns = columns; BuildCount++;
+        var lines = ImmutableArray.CreateBuilder<string>(); var truncated = false; var scanned = 0;
         void Text(string text)
         {
-            // Bound scanning and temporary grapheme strings as well as final rows.
-            if (text.Length > 2048) { var end = char.IsHighSurrogate(text[2047]) ? 2047 : 2048; text = text[..end] + "…"; }
-            var elements = StringInfo.GetTextElementEnumerator(text); var line = new System.Text.StringBuilder(); var count = 0;
-            var previousCr = false;
+            if (lines.Count == rows || scanned == MaximumScannedCodeUnits) { truncated = true; return; }
+            var limit = Math.Min(2048, MaximumScannedCodeUnits - scanned);
+            if (text.Length > limit)
+            {
+                // This is a display prefix only; authoritative strings are intact.
+                var end = char.IsHighSurrogate(text[limit - 1]) ? limit - 1 : limit;
+                text = text[..end]; truncated = true;
+            }
+            scanned += text.Length;
+            var elements = StringInfo.GetTextElementEnumerator(text);
+            var line = new System.Text.StringBuilder(); var count = 0; var previousCr = false;
             while (elements.MoveNext())
             {
-                if (lines.Count == rows) return;
+                if (lines.Count == rows) { truncated = true; return; }
                 var element = elements.GetTextElement();
                 if (element is "\r\n" or "\n" or "\r")
                 {
@@ -37,27 +52,35 @@ public sealed class PanelPreviewCache
                     previousCr = element == "\r"; continue;
                 }
                 previousCr = false;
-                if (count == columns) { lines.Add(line.ToString()); line.Clear(); count = 0; if (lines.Count == rows) return; }
-                // Limit even adversarial single graphemes with enormous runs of
-                // combining marks; canvas shaping is never given unbounded text.
+                if (count == columns)
+                {
+                    lines.Add(line.ToString()); line.Clear(); count = 0;
+                    if (lines.Count == rows) { truncated = true; return; }
+                }
+                // A single grapheme can contain arbitrarily many combining marks.
                 line.Append(element.Length > 64 ? "�" : element == "\t" ? " " : element); count++;
             }
             if (lines.Count < rows) lines.Add(line.ToString());
+            else truncated = true; // includes an omitted trailing empty line
         }
-        if (result is null) return _preview = new([], "Waiting for solution");
-        if (result.Status != "ok") { Text(result.Messages.FirstOrDefault() ?? result.Status); return _preview = new(lines.ToImmutable(), result.Status); }
-        if (!result.Outputs.TryGetValue("T", out var tree)) return _preview = new([], "No text output");
+        PanelPreview Finish(string footer) => _preview = new(lines.ToImmutable(), footer + (truncated ? " · …" : "")) { Truncated = truncated };
+        if (result is null) return Finish("Waiting for solution");
+        if (result.Status != "ok") { Text(result.Messages.FirstOrDefault() ?? result.Status); return Finish(result.Status); }
+        if (!result.Outputs.TryGetValue("T", out var tree)) return Finish("No text output");
+        // Even a malformed Text result containing many empty branches is bounded.
+        var visited = 0;
         foreach (var branch in tree.Branches)
         {
-            if (lines.Count == rows) break;
+            if (lines.Count == rows || scanned == MaximumScannedCodeUnits || ++visited > MaximumRows)
+            { truncated = true; break; }
             if (node.Component == "Panel") Text(branch.Path.ToString());
             foreach (var item in branch.Items)
             {
-                if (lines.Count == rows) break;
+                if (lines.Count == rows || scanned == MaximumScannedCodeUnits) { truncated = true; break; }
                 Text(item as string ?? "<non-text>");
             }
         }
-        return _preview = new(lines.ToImmutable(), $"{tree.ItemCount} items · {tree.Branches.Length} branches");
+        return Finish($"{tree.ItemCount} items · {tree.Branches.Length} branches");
     }
 }
 
