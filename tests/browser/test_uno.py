@@ -15,6 +15,7 @@ from test_graph_inputs_ui import verify_graph_inputs_ui
 from test_canvas_values_ui import verify_canvas_values_ui
 from test_panel_layout_ui import verify_panel_layout_ui
 from ui_observation import wait_ready
+from test_panel_display_ui import verify_panel_display_ui
 
 ROOT = Path(__file__).resolve().parents[2]
 EVIDENCE = ROOT / "evidence"
@@ -28,7 +29,8 @@ async def main(url):
     EVIDENCE.mkdir(exist_ok=True)
     campaigns = (("workspace", verify_workspace_ui),
                  ("inputs-sliders", verify_graph_inputs_ui),
-                 ("panels", verify_panels))
+                 ("panels", verify_panels),
+                 ("panel-display", verify_panel_display_ui))
     all_checks, reports, campaign_reports, errors, logs = [], [], [], [], []
     def write(name, data):
         (EVIDENCE / name).write_text(json.dumps(data, indent=2))
