@@ -43,8 +43,11 @@ public sealed partial class GraphEditorControl
                 _popupSearch.ItemsSource=_canvasSearchIndex.Search(Session.Graph.Registry,_popupSearch.Text);
                 _creationInfo.Text=CreationHint;LastCreationError="";
             };
+            // QueryText is captured from the native TextBox at submission.
+            // AutoSuggestBox.Text is synchronized by deferred TextChanged and
+            // can still be stale when Enter immediately follows paste or typing.
             _popupSearch.QuerySubmitted+=(_,e)=>{
-                var query=e.ChosenSuggestion?.ToString()??_popupSearch.Text;
+                var query=e.ChosenSuggestion?.ToString()??e.QueryText;
                 if(!ReferenceEquals(Session?.Graph,_searchOwner)){CreationError("Definition changed. Reopen search.");return;}
                 if(CreateFromQuery(query,_searchInsertion)){_popupSearch.IsSuggestionListOpen=false;_canvasSearch.Hide();}
             };
