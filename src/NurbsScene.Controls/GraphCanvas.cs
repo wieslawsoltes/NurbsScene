@@ -24,7 +24,6 @@ public sealed partial class GraphCanvas : SKCanvasElement,IDisposable
     private string _gesture="";private string? _slider;
     private PortHit? _wire;
     private GraphSnapshot? _before;
-    private readonly Dictionary<string,(double X,double Y)> _starts=[];
     private bool _moved,_rightPan;
     private readonly GraphPresentation _presentation=new();
     private GraphDrawing? _drawing;
@@ -40,6 +39,7 @@ public sealed partial class GraphCanvas : SKCanvasElement,IDisposable
     public void SetZoom(float zoom)
     {
         if(!float.IsFinite(zoom))throw new ArgumentException("Finite zoom required.");
+        CancelGesture();ReleasePointerCaptures();
         var center=new Point(ActualWidth/2,ActualHeight/2);var world=World(center);_zoom=Math.Clamp(zoom,.15f,3.5f);
         _panX=(float)(center.X-world.X*_zoom);_panY=(float)(center.Y-world.Y*_zoom);ViewChanged?.Invoke();Invalidate();
     }
@@ -106,21 +106,23 @@ public sealed partial class GraphCanvas : SKCanvasElement,IDisposable
     public GraphCanvas()
     {
         IsTabStop=true;
-        Loaded+=(_,_)=>Subscribe();Unloaded+=(_,_)=>{Unsubscribe();_panelTypography.Clear();};SizeChanged+=(_,_)=>Invalidate();
+        Loaded+=(_,_)=>Subscribe();Unloaded+=(_,_)=>{CancelGesture();ReleasePointerCaptures();Unsubscribe();_panelTypography.Clear();};SizeChanged+=(_,_)=>Invalidate();
         InitializePointerInput();
         RightTapped+=(_,e)=>e.Handled=true;
-        PointerWheelChanged+=(_,e)=>{if(_panelResize is not null){e.Handled=true;return;}var point=e.GetCurrentPoint(this);var world=World(point.Position);_zoom=Math.Clamp(_zoom*(float)Math.Exp(point.Properties.MouseWheelDelta*.001),.15f,3.5f);_panX=(float)point.Position.X-(float)world.X*_zoom;_panY=(float)point.Position.Y-(float)world.Y*_zoom;ViewChanged?.Invoke();Invalidate();e.Handled=true;};
+        PointerWheelChanged+=(_,e)=>{if(_activePointerId is not null){e.Handled=true;return;}var point=e.GetCurrentPoint(this);var world=World(point.Position);_zoom=Math.Clamp(_zoom*(float)Math.Exp(point.Properties.MouseWheelDelta*.001),.15f,3.5f);_panX=(float)point.Position.X-(float)world.X*_zoom;_panY=(float)point.Position.Y-(float)world.Y*_zoom;ViewChanged?.Invoke();Invalidate();e.Handled=true;};
         DoubleTapped+=OnCanvasDoubleTapped;
-        KeyDown+=(_,e)=>{if(e.Key==VirtualKey.Delete){DeleteSelected();e.Handled=true;}else if(e.Key==VirtualKey.Escape){CancelGesture();e.Handled=true;}else if(e.Key==VirtualKey.F){Fit();e.Handled=true;}else if(e.Key==VirtualKey.Space){SearchRequested?.Invoke();e.Handled=true;}};
+        KeyDown+=(_,e)=>{if(e.Key==VirtualKey.Delete){DeleteSelected();e.Handled=true;}else if(e.Key==VirtualKey.Escape){CancelGesture();ReleasePointerCaptures();e.Handled=true;}else if(e.Key==VirtualKey.F){Fit();e.Handled=true;}else if(e.Key==VirtualKey.Space){SearchRequested?.Invoke();e.Handled=true;}};
     }
     private void Subscribe(){if(_subscribed||_session is null)return;_subscribed=true;_session.Replaced+=Replaced;_graph=_session.Graph;_graph.Changed+=GraphChanged;_graph.Solved+=Solved;}
     private void Unsubscribe(){if(!_subscribed)return;_subscribed=false;if(_session is not null)_session.Replaced-=Replaced;if(_graph is not null){_graph.Changed-=GraphChanged;_graph.Solved-=Solved;}_graph=null;}
-    private void Replaced(){_panelTypography.Clear();ClearPanelResize();_before=null;_gesture="";_wire=null;_slider=null;_starts.Clear();ReleasePointerCaptures();if(_graph is not null){_graph.Changed-=GraphChanged;_graph.Solved-=Solved;}_graph=_session!.Graph;_graph.Changed+=GraphChanged;_graph.Solved+=Solved;_selection.IntersectWith(_graph.Nodes.Select(n=>n.Id));SelectionChanged?.Invoke();Invalidate();}
+    private void Replaced(){_panelTypography.Clear();ClearPanelResize();_before=null;_gesture="";_wire=null;_slider=null;ClearPointerDrafts();ReleasePointerCaptures();if(_graph is not null){_graph.Changed-=GraphChanged;_graph.Solved-=Solved;}_graph=_session!.Graph;_graph.Changed+=GraphChanged;_graph.Solved+=Solved;_selection.IntersectWith(_graph.Nodes.Select(n=>n.Id));SelectionChanged?.Invoke();Invalidate();}
     private void GraphChanged()
     {
+        if ((_gesture is "nodes" or "slider") && !_applyingPointerEdit)
+            AbandonStalePointerEdit();
         // Dropping a stale resize draft never rolls back independent host edits.
         if(_session is not null&&_panelResize is{} resize&&!resize.IsCurrent(_session.Graph))
-        {ClearPanelResize();_gesture="";ReleasePointerCaptures();}
+        {ClearPanelResize();ClearPointerDrafts();_gesture="";ReleasePointerCaptures();}
         // A deleted wire source must not be dereferenced by the next paint.
         if(_session is not null&&_wire is{} pending&&!_session.Graph.TryGetNode(pending.Node,out _))
         {CancelGesture();ReleasePointerCaptures();}
@@ -217,7 +219,7 @@ public sealed partial class GraphCanvas : SKCanvasElement,IDisposable
                 }
             }
             if(_wire is{} pending){var anchor=PortPoint(pending);Wire(canvas,pending.Output?anchor:_worldLast,pending.Output?_worldLast:anchor,new(110,155,35),2.2f);}
-            if(_gesture=="marquee"){var r=new SKRect((float)Math.Min(_worldStart.X,_worldLast.X),(float)Math.Min(_worldStart.Y,_worldLast.Y),(float)Math.Max(_worldStart.X,_worldLast.X),(float)Math.Max(_worldStart.Y,_worldLast.Y));Fill(canvas,r,new(100,155,35,30));Stroke(canvas,r,new(100,155,35),1/_zoom);}
+            DrawSelectionFeedback(canvas);
         }
         canvas.Restore();
     }
@@ -229,14 +231,15 @@ public sealed partial class GraphCanvas : SKCanvasElement,IDisposable
         if(_session is null)return;var at=InsertionPoint;
         _session.Edit("Add component",graph=>{var node=graph.Add(component,at.X,at.Y);Select(node.Id,false);});
     }
-    public void DeleteSelected(){if(_session is null||_selection.Count==0)return;try{var ids=_selection.ToArray();_session.Edit("Delete components",graph=>{foreach(var id in ids)graph.Remove(id);});_selection.Clear();SelectionChanged?.Invoke();}catch(Exception error){Message?.Invoke(error.Message);}}
+    public void DeleteSelected(){if(_session is null||_selection.Count==0)return;CancelGesture();ReleasePointerCaptures();try{var ids=_selection.ToArray();_session.Edit("Delete components",graph=>{foreach(var id in ids)graph.Remove(id);});_selection.Clear();SelectionChanged?.Invoke();}catch(Exception error){Message?.Invoke(error.Message);}}
     public void Fit()
     {
+        CancelGesture();ReleasePointerCaptures();
         if(_session is null||_session.Graph.Nodes.Count==0)return;var rects=_session.Graph.Nodes.Select(Rect).ToArray();var minX=rects.Min(r=>r.Left);var minY=rects.Min(r=>r.Top);var maxX=rects.Max(r=>r.Right);var maxY=rects.Max(r=>r.Bottom);
         var zoom=Math.Clamp((float)Math.Min(Math.Max(1,ActualWidth-60)/(maxX-minX),Math.Max(1,ActualHeight-60)/(maxY-minY)),.15f,1.5f);
         var panX=(float)ActualWidth/2-(minX/2+maxX/2)*zoom;var panY=(float)ActualHeight/2-(minY/2+maxY/2)*zoom;
         if(!float.IsFinite(zoom)||!float.IsFinite(panX)||!float.IsFinite(panY)){Message?.Invoke("Definition coordinates exceed the canvas rendering range. The previous view was retained.");return;}
         _zoom=zoom;_panX=panX;_panY=panY;ViewChanged?.Invoke();Invalidate();
     }
-    public void Dispose(){_panelTypography.Dispose();ClearPanelResize();_panelPreviews.Clear();_panelDisplayLayouts.Clear();Unsubscribe();foreach(var path in _wirePaths.Values)path.Path.Dispose();_wirePaths.Clear();_paths.Clear();_treeDash.Dispose();_font.Dispose();_paint.Dispose();}
+    public void Dispose(){CancelGesture();ReleasePointerCaptures();_panelTypography.Dispose();ClearPanelResize();_panelPreviews.Clear();_panelDisplayLayouts.Clear();Unsubscribe();foreach(var path in _wirePaths.Values)path.Path.Dispose();_wirePaths.Clear();_paths.Clear();_treeDash.Dispose();_font.Dispose();_paint.Dispose();}
 }
