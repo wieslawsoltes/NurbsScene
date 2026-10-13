@@ -27,7 +27,7 @@ jobs:
           path: artifacts/uno-desktop/
   browser:
     runs-on: ubuntu-latest
-    # Compile once, then run all seven isolated mandatory input campaigns.
+    # Compile once, then run all eight isolated mandatory input campaigns.
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
