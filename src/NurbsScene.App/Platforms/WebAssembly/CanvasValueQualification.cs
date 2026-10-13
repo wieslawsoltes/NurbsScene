@@ -23,7 +23,9 @@ public partial class App
                 items=output?.AllItems.Take(8).Select(x=>x is string s?(s.Length>200?s[..200]:s):"<non-text>").ToArray(),
                 lines=new PanelPreviewCache().Get(n,result).Lines};
         }).ToArray();
-        return new{editorOpen=view.GraphEditor.ValueEditorIsOpen,editorText=view.GraphEditor.ValueDraftText,resizeBounds=view.GraphEditor.Canvas.PanelResizeBounds,error=view.GraphEditor.LastCreationError,
+        // IsLoaded can become false before ShowAsync resumes its commit. Observe
+        // the existing dialog lifetime separately; never infer commit from visibility.
+        return new{editorOpen=view.GraphEditor.ValueEditorIsOpen,editorPending=view.GraphEditor.ValueEditor is not null,editorText=view.GraphEditor.ValueDraftText,resizeBounds=view.GraphEditor.Canvas.PanelResizeBounds,error=view.GraphEditor.LastCreationError,
             wireCachePasses=view.GraphEditor.Canvas.WireCachePasses,resizePathBuilds=view.GraphEditor.Canvas.ResizePathBuilds,
             solvedRevision=graph.LastResult?.Revision,evaluated=graph.LastResult?.Evaluated,previewBuilds=view.GraphEditor.Canvas.ValuePreviewBuilds,panels};
     }

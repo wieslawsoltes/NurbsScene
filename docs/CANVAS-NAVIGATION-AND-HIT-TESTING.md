@@ -112,3 +112,33 @@ individual campaign jobs each retain a finite 20-minute job budget instead of
 extending the old serial deadline. The final artifact gate has a 10-minute budget.
 This parallelization trades additional runner use and artifact transfers for lower
 wall-clock latency; no fixed CI speedup is promised before a completed run.
+
+
+## Panel result observation review
+
+The first parallel run (38468174050, source ccccaaa) passed seven campaigns,
+including all new pointer/navigation checks, but the retained panels campaign
+failed its original multiline single-item assertion. The downloaded failure
+archive SHA256 is `ffa4ac27222142b106bb7cdf2a665e83f806f333f1ca1e7f26e9f4f6417bff0b`.
+Its later snapshot already has single-item mode, the exact multiline item and a
+current solved revision. That later state does not make the failed assertion pass;
+the previous harness had not retained the exact snapshot it asserted against.
+
+Code review exposes two independent completion boundaries: ContentDialog unloads
+before its ShowAsync continuation applies the graph edit, then the controller
+schedules numerical evaluation separately. A wait for editorOpen=false is not
+proof of either completion. The read-only qualification observer now includes
+editorPending from the existing dialog object's lifetime. It changes no input,
+dialog, graph, solver or renderer behavior. Panel output reads require the dialog
+lifetime to have ended and the solved revision to match the current graph. Apply
+additionally requires a revision transition from the pre-Apply snapshot. No wait
+predicate includes an expected output value; a completed wrong value still fails
+the original assertion immediately. The exact asserted panel snapshot is retained
+on failure rather than replaced by a later observation.
+
+Six additional observer contracts reproduce the unloaded-but-uncommitted and
+committed-but-unsolved states, retain wrong completed results, validate transition
+constraints, preserve the original deadline and propagate failures without retry.
+All previous panel assertions, interaction actions, remaining campaigns and the
+strict aggregate gate are unchanged. Current-head acceptance must run again;
+there is no retry of the failed unchanged source or relaxed timeout.
