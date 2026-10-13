@@ -18,8 +18,8 @@ public sealed record PanelTextStyle(string FontFamily = "", double Size = 10, bo
     }
     public void Validate()
     {
-        if (FontFamily is null || FontFamily.Length > 128 || FontFamily.Any(char.IsControl) || FontFamily != FontFamily.Trim())
-            throw new ArgumentException("Font family must be trimmed, at most 128 characters, and contain no control characters.");
+        if (FontFamily is null || FontFamily.Length > 128 || FontFamily.Any(c => char.IsControl(c) || c is '/' or '\\' or ':' or '#') || FontFamily != FontFamily.Trim())
+            throw new ArgumentException("Font family must be trimmed, at most 128 characters, and contain no control characters or font-file/URI syntax.");
         for (var i = 0; i < FontFamily.Length; i++)
             if (char.IsHighSurrogate(FontFamily[i]))
             {
