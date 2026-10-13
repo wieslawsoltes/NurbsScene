@@ -1,91 +1,51 @@
-# Current implementation and compatibility boundaries
+# Compatibility inventory
 
-This inventory includes the preserved-source import, typed data trees, curve-query additions, curve-plane sections, and graph-performance review through PR #10. It does not claim full Rhino/Grasshopper parity.
+NurbsScene is an independent alpha, not full or pixel-identical Rhino/Grasshopper
+parity. Tests establish the recorded contracts, not complete product compatibility.
 
 | Area | Implemented | Remaining boundary |
 |---|---|---|
-| Exact geometry | Positive-weight rational curves and tensor-product surfaces; expanded knots; analytic derivatives; optional span/grid evaluators and cached bounds | Negative/zero projective weights, full periodic/disconnected editing coverage and every extreme-conditioning case |
-| Curve modeling | Lines, polylines, arcs/circles, exact planar ellipses, interpolation, insertion, split/trim, elevation, control/weight editing, closest-point and numerical curve-plane queries, balanced multi-splitting | Full joining, curve/curve and surface intersections, offsets, blending, fitting and Rhino command behavior; query distance gaps are numerical estimates |
-| Surface modeling | Extrusion, revolution, loft, exact isocurves; U/V refinement/elevation/split/reversal; rectangular extraction; control/weight edits; Bezier patches | Arbitrary trimming loops, robust surface intersections, sweep/network/patch variants and full editing semantics |
-| Transforms | Translation, rotation, scale, affine plane projection and reflection of authoritative controls | Complete transform tools, gumball constraints, construction planes and command semantics |
-| Solids | No integrated solid-modeling backend | B-rep topology, booleans, fillets/chamfers, healing, sewing, shells and production robust predicates. OCCT is not integrated |
-| Measurements | Analytic surface area/centroid with work limits and numerical estimates; analytic-speed adaptive Gauss-Kronrod length, inverse arc length and equal-distance division with cancellation/work limits | Error estimates are not certified bounds; disconnected full-multiplicity length requests fail explicitly |
-| Parametric engine | 114 managed / 102 JavaScript definitions, typed ports, persistent trees/paths, bounded matching, cycle rejection, cached execution plans/results, batched edit notifications, cancellation and stale-solve rejection | Complete Grasshopper catalog, clusters, scripting/plugin compatibility and all matching/conversion rules |
-| Documents | Cached immutable snapshot views, layers, locking, selection, undo/redo, atomic editing and explicit invalid-input errors | Full Rhino object types, blocks, history, reference files, annotations and large-project qualification |
-| Interchange | Managed exact `.nscene`; separate JS workspace dialect; OBJ/STL display export | `.3dm`, `.gh`, `.ghx`, STEP/IGES and plugin interchange. Display STL is not a watertight-solid certificate |
-| Uno UI | Compact tabbed toolbars/panels, authored vector icons, viewport activation/maximization, right/bottom definition docking, component shelves, command recall and world-aligned grid/ortho/endpoint construction; existing graph wiring, baking and file pickers | Identical Rhino/Grasshopper visuals/behavior, complete docking/toolbars/accessibility/input-device coverage |
-| Rendering | GL/WebGL2 depth rendering, shared-state restoration, knot-aware surface sampling, origin re-encoding, hierarchical picking and clip-aware selection; separate JS WebGPU source | Direct Uno WebGPU, certified adaptive surface tessellation, production materials/lighting/transparency, full clipping and hardware/performance matrix |
-| Other Rhino systems | Not implemented | SubD, full meshing, rendering plugins, layouts/printing, scripting ecosystem and remaining product features |
+| Exact geometry | Immutable positive-weight rational curves and tensor-product surfaces; expanded knots, analytic derivatives and cached bounds | Zero/negative projective weights, complete periodic/disconnected editing and every extreme-conditioning case |
+| Curves | Lines, polylines, arcs/circles, planar ellipses, interpolation, refinement, elevation, split/trim, control/weight edits, bounded closest-point and plane sections | Complete joining, curve/curve and surface intersections, offsets, blending, fitting and original command semantics |
+| Surfaces | Extrusion, revolution, compatible section lofting, isocurves, U/V editing, rectangular extraction, Bezier patches | Arbitrary trim loops, robust intersections, sweep/network/patch variants, seam alignment, all loft styles and periodic/closed lofts |
+| Solids | No integrated solid-modeling backend | B-rep topology, booleans, fillets/chamfers, healing, sewing and shells; OCCT is not integrated |
+| Measurements | Analytic-speed numerical length, inverse/equal-length sampling, surface area/centroid, cancellation/work limits | Certified bounds, arbitrary-trim integration, inertia, second moments and solid volume |
+| Transforms | Translation, rotation, scale, plane projection/reflection of exact controls | Complete gumball, CPlane, constraints and original tool behavior |
+| Parametric engine | 114 managed/102 JavaScript components, typed trees/paths, indexed DAG, bounded matching, incremental plans/results, cancellation and stale-result rejection | Complete catalog, clusters, scripting/plugins, all conversion and matching rules |
+| Documents | Stable object/layer/pick order, immutable views, locking, selection, transactional undo/redo | Full object types, blocks, references, annotations, construction history and large-project qualification |
+| Interchange | Exact managed `.nscene`, separate JS dialect, display OBJ/STL | `.3dm`, `.gh`, `.ghx`, STEP/IGES and plugin compatibility; STL is not a solid certificate |
+| Uno UI | Compact toolbars/icons, four viewports, right/bottom definition docking, command recall, grid/ortho/end snaps, native inspectors and dialogs | Identical visual/functional parity, full docking, Osnap/CPlane/gumball, accessibility and input-device matrix |
+| Graph UI | Typed wires, shelves/search, clipboard/duplicate, arrangement, numeric range/precision editing, all-edge panel resize, paths/indices/wrap and font/style/alignment metadata | Complete panel scrolling, measured paragraph wrapping, full script shaping/bidi/glyph fallback, every original component interaction |
+| Rendering | GL/WebGL2 depth rendering, shared-state restoration, knot-aware meshes, origin re-encoding, spatial picking, clip-aware selection; separate JS WebGPU | Direct Uno WebGPU, certified adaptive tessellation, production materials/lighting/transparency and full hardware matrix |
+| Other systems | Not implemented | SubD, complete meshing, rendering plugins, layouts/printing and scripting ecosystem |
 
-## Validation scope
+## Qualification boundaries
 
-Numerical tests compare the native/managed kernel to analytic results and independent SciPy fixtures. Closest-point references minimize many intervals independently; they are not certified global-minimum oracles. Tests compare distances and enforce work budgets. The graph suites include sparse paths, empty branches, serialization, dependency changes, cancellation and a 2,001-node incremental graph.
+The geometry suites use analytic references, native/managed comparisons and
+independent SciPy fixtures. Closest-point and integration errors are numerical
+estimates, not proofs of global minima or certified bounds. Rectangular UV trims
+are not arbitrary B-rep trimming loops. Exact primitive/editing tests do not qualify
+unimplemented solid operations.
 
-The performance suite compares one identical harness against baseline `f0bd8e3` and the candidate on one runner. Structural tests separately check allocation and traversal budgets. The 19 review regressions cover clipping, tiny viewports, cache identity/record cloning/hash stability, narrow knot spans, grid input limits, immutable document views, selected-workspace refresh allocations and ValueTask transaction rejection. These are bounded checks, not proof of every possible input or a complete product review. See `PERFORMANCE-AND-REVIEW.md`.
+The real Uno runner retains managed modeling and differential framebuffer checks
+in every isolated input campaign. Workspace, inputs/sliders, panels, panel edges,
+ellipse/loft, panel display and typography are all mandatory. Repeated modeling
+checks across campaigns are not distinct features. Software GL can satisfy these
+checks; no physical-GPU performance conclusion follows. Desktop compilation is not
+execution across every desktop OS/device. The separate JavaScript harness and
+observer unit tests do not replace the Uno application's acceptance tests.
 
-The real Uno browser suite compiles and runs the application and compares actual GL framebuffer pixels against an empty scene and after camera motion. It exercises managed commands, undo/redo, graph edits, baking, workspace and typed-path round trips. The new query APIs and review contracts are additionally tested in managed .NET CI; the browser smoke test does not exercise every new API or command. Software GL may satisfy the browser check; no physical-GPU performance claim follows.
+Typography raster tests link the actual renderer source to SkiaSharp 3.119.2 and
+exercise real native pixels, clipping and cache eviction. A text blob uses simple
+character-to-glyph mapping; complete grapheme segmentation does not imply full
+font shaping or fallback. Font selection can be substituted by the host. No font
+binaries are embedded or exported by the feature.
 
-The section suite adds 28 contracts for forward extraction, rational plane roots/overlaps/uncertainty, balanced splitting, two executable components, commands, branch lookup, plan/result reuse, definition serialization, and edit/history isolation. Its independent benchmark harness compares graph/tree operations against the previous main `21ed2c7`, not the older geometry baseline. The new extraction cache is used by plane queries only; public Bezier decomposition and the pre-existing display/measurement paths are unchanged. No automatic plane-splitting wrapper is included.
-
-The Uno browser hook adds seven checks for real managed sections, overlaps, component execution, cached results, serialization and actual controller split/undo, alongside the existing framebuffer tests. These are not exhaustive pointer/menu or physical-GPU tests. See `SECTIONS-AND-RUNTIME.md`.
-
-The offline JavaScript suite is separate. Historical alpha evidence is preserved as history, not rewritten to imply checks that were never run.
-
-The area/native milestone adds 27 managed/native analysis checks and seven Uno browser checks (29 browser checks total). It does not add second/product moments, inertia, solid volume or arbitrary-trim area integration. Native allocation improvements apply to the optional C ABI adapter, not the default browser evaluator or GPU rendering. See `SURFACE-ANALYSIS.md`.
-
-The compact workspace adds the reusable Presentation package, 25 presentation/input
-contracts and real pointer/keyboard browser scenarios. Graph metadata/path reuse,
-layer-row retention and view/layout behavior have dedicated checks. This is not
-pixel-identical UI, full docking/Osnap/CPlane/gumball or desktop-runtime parity.
-The existing GL renderer and numerical kernel are retained. See `CLASSIC-WORKSPACE.md`.
-
-The graph-editing milestone adds versioned exact graph fragments, clipboard and
-duplicate actions, native editor/context menus, alignment/distribution, selection
-windows and cursor search. Incremental drawing retains unchanged nodes and wires.
-It does not add Grasshopper clipboard/file compatibility, clusters or plugins;
-see `GRAPH-EDITING.md` for contracts and benchmark scope.
-
-PR #8 adds a native number-slider settings dialog, 0–12-place or automatic
-precision, binary64 range-safe scrubbing, atomic Apply/Cancel and stale-edit
-guards. Graph/registry collection snapshots are retained and wire transforms
-reuse drawing adjacency. These do not add full Grasshopper numeric semantics,
-slider expressions/animation, all rounding modes or a different GPU backend.
-See `SLIDERS-AND-SNAPSHOT-REVIEW.md` for tests and measurement limits.
-
-PR #9 adds bounded numeric/range/operator/Boolean/text canvas creation, a typed
-Panel component and draft-only multiline editing. Connected empty trees override
-stored text rather than displaying stale data. PR #10 adds resize handles with
-isolated drafts, exact optional canvas dimensions, low-zoom panel readability and
-preview/wire-cache work avoidance. Native text normalization preserves unchanged
-original line endings; edited text uses LF. The original PR #10 revision implemented only the bottom-right resize handle;
-font/alignment options and scrolling behavior remained incomplete. See `PANEL-LAYOUT-REVIEW.md` for tests and remaining boundaries.
-
-The panel-layout continuation adds resizable Text/Panel bounds, display-only resize
-drafts, size interchange, retained text previews, bounded screen-space grid generation
-and cached connection-name snapshots. It is not an identical panel UI or a full
-large-coordinate renderer. The new Uno scenarios have not run in the current local
-environment; see `PANEL-LAYOUT-AND-CANVAS-REVIEW.md` for the qualification boundary.
-
-The reconciled local review adds four edge/four corner resizing with anchored
-position/size changes and previewed incoming/outgoing ports. It preserves the
-current PR #10 changes and prior local grid/lifetime/connection-cache fixes.
-The startup observation race is covered by seventeen unit contracts, and additional
-all-edge pointer campaigns are mandatory in the Uno workflow. New platform UI
-qualification and remote publication remain pending; see
-`RECONCILED-PANEL-REVIEW.md`. This does not imply identical original UI behavior.
-
-The ellipse/loft continuation adds an exact planar rational Ellipse primitive,
-typed component and world-XY command/toolbar action. The existing loft matrix is
-factored once per call and reused for every homogeneous U column, with cancellation
-and explicit work limits. It does not add the other Rhino loft styles, automatic
-seam alignment, closed/periodic lofting, arbitrary trim or solid support. See
-`ELLIPSE-AND-LOFT.md` for current evidence and numerical boundaries.
-
-The integrated panel-display review adds persistent path/index/wrap controls for
-Text and Panel, with stale-owner checks, exact interchange and output/wire-cache
-reuse. Span-based preview formatting fixes partial Unicode clusters at bounded
-scan cutoffs and avoids per-character strings. It retains the ellipse/loft and
-ordered-document work from PR #12. Six actual Uno input campaigns are mandatory;
-font/alignment options, full complex-script shaping and scrolling every item are
-still unfinished. See `PANEL-DISPLAY-AND-TEXT-REVIEW.md`; historical local-only
-qualification notes above describe their respective older revisions.
+Use the exact commit and tree in CI artifacts for qualification status. Historical
+reports describe their recorded revisions, including earlier local-only blockers,
+not the newest main. Performance harnesses retain raw timing/allocation samples
+and their workload scopes; CPU solver/preview results are not FPS, GPU or complete
+application speedups. See [typography](PANEL-TYPOGRAPHY.md),
+[panel display](PANEL-DISPLAY-AND-TEXT-REVIEW.md), [loft](ELLIPSE-AND-LOFT.md),
+[sections](SECTIONS-AND-RUNTIME.md), [surface analysis](SURFACE-ANALYSIS.md),
+[data trees](DATA-TREES.md) and [build instructions](BUILD.md).

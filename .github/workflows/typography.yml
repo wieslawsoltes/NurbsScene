@@ -1,0 +1,37 @@
+name: Panel typography and native raster contracts
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  typography:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      DOTNET_TieredCompilation: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Style persistence and measured placement contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/typography
+          dotnet run --project tests/dotnet/NurbsScene.TypographyContracts -c Release 2>&1 | tee artifacts/typography/core.log
+      - name: Actual native raster, cache lifetime and same-process CPU comparison
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet run --project tests/dotnet/NurbsScene.TypographyRasterContracts -c Release -- artifacts/typography 2>&1 | tee artifacts/typography/raster.log
+          git rev-parse HEAD HEAD^{tree} > artifacts/typography/tested-revision.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: typography-${{ github.run_id }}
+          path: artifacts/typography/

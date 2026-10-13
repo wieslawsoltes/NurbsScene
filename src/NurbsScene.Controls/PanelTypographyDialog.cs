@@ -54,7 +54,7 @@ public sealed class PanelTypographyDialog : ContentDialog
         {
             Edit = null; _error.Text = "";
             if (double.TryParse(_size.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out var size) && double.IsFinite(size) && size >= 6 && size <= 72) preview.FontSize = size;
-            preview.FontWeight = _bold.IsChecked == true ? Windows.UI.Text.FontWeights.Bold : Windows.UI.Text.FontWeights.Normal;
+            preview.FontWeight = _bold.IsChecked == true ? Microsoft.UI.Text.FontWeights.Bold : Microsoft.UI.Text.FontWeights.Normal;
             preview.FontStyle = _italic.IsChecked == true ? Windows.UI.Text.FontStyle.Italic : Windows.UI.Text.FontStyle.Normal;
             preview.TextAlignment = _horizontal.SelectedIndex switch { 1 => TextAlignment.Center, 2 => TextAlignment.Right, _ => TextAlignment.Left };
             preview.VerticalAlignment = _vertical.SelectedIndex switch { 1 => VerticalAlignment.Center, 2 => VerticalAlignment.Bottom, _ => VerticalAlignment.Top };

@@ -44,8 +44,9 @@ public sealed class PanelTextPlacementCache
         // Full family validation is done at graph/import/edit boundaries, not by
         // re-enumerating the immutable family on every paint.
         if (!double.IsFinite(width) || !double.IsFinite(height) || width <= 0 || height <= 0 ||
-            !double.IsFinite(layout.FontSize) || layout.FontSize <= 0 || !double.IsFinite(layout.LineHeight) || layout.LineHeight <= 0 ||
-            !double.IsFinite(layout.FirstBaseline) || !double.IsFinite(layout.FooterInset) ||
+            !double.IsFinite(layout.FontSize) || layout.FontSize <= 0 || layout.FontSize > 1024 || !double.IsFinite(layout.LineHeight) || layout.LineHeight <= 0 ||
+            !double.IsFinite(layout.FirstBaseline) || layout.FirstBaseline < 0 || !double.IsFinite(layout.FooterInset) || layout.FooterInset < 0 ||
+            layout.Rows < 1 || layout.Rows > PanelPreviewCache.MaximumRows || layout.Columns < 1 || layout.Columns > PanelPreviewCache.MaximumColumns ||
             !Enum.IsDefined(style.Horizontal) || !Enum.IsDefined(style.Vertical)) throw new ArgumentException("Invalid text placement layout.");
         metrics.Validate();
         if (preview.Lines.IsDefault || preview.Lines.Length > PanelPreviewCache.MaximumRows) throw new ArgumentException("Invalid preview row budget.");

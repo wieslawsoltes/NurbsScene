@@ -77,7 +77,7 @@ Test("invalid sizes and enums cannot mutate a graph", () => {
     Check(g.Revision==revision && ReferenceEquals(g.GetNode(p.Id),p));
 });
 Test("font names are bounded and sanitized at import and update boundaries", () => {
-    foreach(var name in new[]{" padded","padded ","line\nbreak","nul\0","bad\ud800",new string('a',129)}) Throws<ArgumentException>(()=>(custom with{FontFamily=name}).Validate());
+    foreach(var name in new[]{" padded","padded ","line\nbreak","nul\0","bad\ud800","https://font","font#name","font/file",@"font\file",new string('a',129)}) Throws<ArgumentException>(()=>(custom with{FontFamily=name}).Validate());
     Throws<ArgumentException>(()=>(custom with{FontFamily=null!}).Validate());
     foreach(var name in new[]{"","Noto Sans","日本語","a-b 123"})(custom with{FontFamily=name}).Validate();
 });
@@ -169,6 +169,12 @@ Test("randomized alignment stays inside measured body intervals", () => {
         var style=new PanelTextStyle(Horizontal:(PanelHorizontalAlignment)random.Next(3),Vertical:(PanelVerticalAlignment)random.Next(3));
         var p=Place(style,w,h);foreach(var r in p.Rows){Check(r.X>=p.Clip.X-1e-9 && r.X+r.Advance<=p.Clip.X+p.Clip.Width+1e-9);Check(r.Baseline+metrics.Ascent>=p.Clip.Y-1e-9 && r.Baseline+metrics.Descent<=p.Clip.Y+p.Clip.Height+1e-9);}
     }
+});
+Test("invalid public layout offsets and budgets cannot extend the panel body", () => {
+    var c=new PanelTextPlacementCache();var good=c.Get(preview,new(),300,220,layout,metrics,1,Measure);
+    foreach(var invalid in new[]{layout with{FooterInset=-100},layout with{FirstBaseline=-1},layout with{Rows=65},layout with{Columns=129},layout with{FontSize=1025}})
+        Throws<ArgumentException>(()=>c.Get(preview,new(),300,220,invalid,metrics,1,Measure));
+    Check(ReferenceEquals(good,c.Current)&&c.MeasurementBuilds==1);
 });
 var failed=0;foreach(var(name,run)in tests)try{run();Console.WriteLine("PASS "+name);}catch(Exception e){failed++;Console.WriteLine("FAIL "+name+"\n"+e);}
 Console.WriteLine(JsonSerializer.Serialize(new{suite="typography",total=tests.Count,passed=tests.Count-failed,failed}));return failed==0?0:1;
