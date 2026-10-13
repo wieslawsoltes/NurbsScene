@@ -41,5 +41,5 @@ public sealed partial class GraphCanvas
     /// <summary>The immutable preview from the most recent actual panel draw.
     /// Observation does not shape text, evaluate a component or invalidate paint.</summary>
     public PanelPreview? GetRenderedPanelPreview(string nodeId)
-        => _panelPreviews.TryGetValue(nodeId, out var preview) ? preview.Current : null;
+        => _panelWindows.TryGetValue(nodeId, out var preview) ? preview.Current?.Preview : null;
 }
