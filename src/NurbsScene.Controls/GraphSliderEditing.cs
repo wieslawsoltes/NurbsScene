@@ -26,7 +26,7 @@ public sealed partial class GraphEditorControl
     }
     private async Task EditNumberSliderAsync(string id)
     {
-        if(_sliderEditorDisposed||Session is null||XamlRoot is null||_numberSliderDialog is not null||Canvas.IsInteracting)return;
+        if(_sliderEditorDisposed||Session is null||XamlRoot is null||_numberSliderDialog is not null||_panelTypographyDialog is not null||_textPanelDialog is not null||Canvas.IsInteracting)return;
         var session=Session;var graph=session.Graph;
         try
         {
@@ -59,7 +59,12 @@ public sealed partial class GraphCanvas
             // including repeated clicks; opening settings must not change values.
             if(_worldLast.Y<node.Y+16){CancelGesture();ReleasePointerCaptures();SelectNode(node.Id);SliderEditRequested?.Invoke(node.Id);}
         }
-        else if(ResizeHit(node,_worldLast)==PanelResizeEdges.None)HandleValueDoubleTap(node);
+        else if(ResizeHit(node,_worldLast)==PanelResizeEdges.None)
+        {
+            if((node.Component is "Panel" or "Text") && (_lastPointerModifiers & VirtualKeyModifiers.Control)!=0)
+            {CancelGesture();ReleasePointerCaptures();SelectNode(node.Id);PanelTypographyRequested?.Invoke(node.Id);}
+            else HandleValueDoubleTap(node);
+        }
         e.Handled=true;
     }
     private void DrawNumberSlider(SKCanvas canvas,GraphNode node,SKRect rect)

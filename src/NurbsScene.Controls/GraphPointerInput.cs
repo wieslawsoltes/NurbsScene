@@ -9,6 +9,7 @@ namespace NurbsScene.Controls;
 
 public sealed partial class GraphCanvas
 {
+    private VirtualKeyModifiers _lastPointerModifiers;
     private void InitializePointerInput()
     {
         PointerPressed+=Pressed;PointerMoved+=Moved;PointerReleased+=Released;
@@ -17,7 +18,7 @@ public sealed partial class GraphCanvas
     }
     private void Pressed(object sender,PointerRoutedEventArgs e)
     {
-        if(_session is null)return;ClearPanelResize();var point=e.GetCurrentPoint(this);_start=_last=point.Position;_worldStart=_worldLast=World(point.Position);_moved=false;_before=null;_slider=null;_wire=null;
+        if(_session is null)return;_lastPointerModifiers=e.KeyModifiers;ClearPanelResize();var point=e.GetCurrentPoint(this);_start=_last=point.Position;_worldStart=_worldLast=World(point.Position);_moved=false;_before=null;_slider=null;_wire=null;
         Focus(FocusState.Pointer);CapturePointer(e.Pointer);var node=NodeAt(_worldStart);var port=PortAt(_worldStart);var shift=(e.KeyModifiers&VirtualKeyModifiers.Shift)!=0;
         _rightPan=point.Properties.IsRightButtonPressed;
         if(point.Properties.IsMiddleButtonPressed||_rightPan)_gesture="pan";

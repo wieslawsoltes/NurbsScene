@@ -32,6 +32,7 @@ public sealed partial class GraphEditorControl
         Toggle("Draw paths", "DrawPaths", options.DrawPaths, o => o with { DrawPaths = !o.DrawPaths });
         Toggle("Draw indices", "DrawIndices", options.DrawIndices, o => o with { DrawIndices = !o.DrawIndices });
         Toggle("Wrap items", "WrapItems", options.WrapItems, o => o with { WrapItems = !o.WrapItems });
+        AddTypographyMenus(menu, expected, node);
     }
 }
 

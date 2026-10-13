@@ -41,7 +41,7 @@ public partial class App
                     // Bounds include a TextBox's header. Observe the actual
                     // focused draft so input tests cannot silently type into a
                     // previous field after clicking a header or template border.
-                    var draft=element is TextBox textBox&&AutomationProperties.GetAutomationId(element).StartsWith("Slider",StringComparison.Ordinal)
+                    var draft=element is TextBox textBox&&(AutomationProperties.GetAutomationId(element).StartsWith("Slider",StringComparison.Ordinal)||AutomationProperties.GetAutomationId(element).StartsWith("Typography",StringComparison.Ordinal))
                         ? textBox.Text : null;
                     if(draft?.Length>256)draft=draft[..256];
                     return new{x=p.X,y=p.Y,width=element.ActualWidth,height=element.ActualHeight,enabled=element is not Control c||c.IsEnabled,
@@ -59,6 +59,7 @@ public partial class App
                     for(var i=0;i<VisualTreeHelper.GetChildrenCount(value);i++)Visit(VisualTreeHelper.GetChild(value,i));
                 }
                 Visit(view);
+                if(view.GraphEditor.PanelTypographyEditorIsOpen&&view.GraphEditor.PanelTypographyEditor is{} typographyDialog)Visit(typographyDialog);
                 if(view.GraphEditor.ValueEditorIsOpen&&view.GraphEditor.ValueEditor is{} valueDialog)Visit(valueDialog);
                 if(view.GraphEditor.NumberSliderEditorIsOpen&&view.GraphEditor.NumberSliderEditor is{} sliderDialog)Visit(sliderDialog);
                 // Native menu/flyout presenters live in the popup root rather
@@ -100,7 +101,7 @@ public partial class App
                     }
                     FindPreview(view.GraphEditor);
                 }
-                var snapshot=new{status="ready",sample=++sample,controls,views,nodes,wires,previewLines,values=ObserveCanvasValues(view),lastGeometry=ObserveLastGeometry(view),state=new{
+                var snapshot=new{status="ready",sample=++sample,controls,views,nodes,wires,previewLines,values=ObserveCanvasValues(view),lastGeometry=ObserveLastGeometry(view),typography=ObserveTypography(view),state=new{
                     objects=controller.Document.Objects.Count,layers=controller.Document.Layers.Count,
                     selected=controller.Document.Selection.Count,documentRevision=controller.Document.Revision,
                     nodeCount=controller.Graph.Nodes.Count,wireCount=controller.Graph.Wires.Count,graphRevision=controller.Graph.Revision,

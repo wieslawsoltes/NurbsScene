@@ -34,16 +34,16 @@ public sealed partial class GraphCanvas
     }
     private void DrawDataPanel(SKCanvas canvas, GraphNode node, SKRect rect, NodeResult? result)
     {
-        var layout = PanelDisplayLayout.Create(new(rect.Left, rect.Top, rect.Width, rect.Height), _zoom);
+        var style = PanelTextStyle.For(node);
+        var layout = PanelDisplayLayout.Create(new(rect.Left, rect.Top, rect.Width, rect.Height), _zoom, style.Size);
         _panelDisplayLayouts[node.Id] = layout;
-        if (!layout.Readable) return;
+        if (!layout.Readable) { _panelTypography.Forget(node.Id); return; }
         if (!_panelPreviews.TryGetValue(node.Id, out var cache)) _panelPreviews[node.Id] = cache = new();
         var builds = cache.BuildCount; var preview = cache.Get(node, result, layout.Rows, layout.Columns); ValuePreviewBuilds += cache.BuildCount - builds;
         var font = (float)layout.FontSize;
         Text(canvas, node.Name ?? (node.Component == "Text" ? "Text" : "Panel"), rect.Left + 8, rect.Top + (float)layout.HeadingBaseline, new(94,92,54), font);
-        for (var i = 0; i < preview.Lines.Length; i++)
-            Text(canvas, preview.Lines[i], rect.Left + 8, rect.Top + (float)(layout.FirstBaseline + i * layout.LineHeight), new(62,60,40), font);
-        Text(canvas, preview.Footer, rect.Left + 8, rect.Bottom - (float)layout.FooterInset, new(112,105,69), font * .9f);
+        var drawn = _panelTypography.Draw(canvas, node.Id, preview, style, rect, layout, TypographySource(node, result));
+        Text(canvas, drawn.Placement.Clipped && !preview.Truncated ? preview.Footer + " · …" : preview.Footer, rect.Left + 8, rect.Bottom - (float)layout.FooterInset, new(112,105,69), font * .9f);
     }
 }
 
@@ -74,6 +74,7 @@ public sealed partial class GraphEditorControl
     private void InitializeValueEditing()
     {
         AutomationProperties.SetAutomationId(_creationInfo, "CanvasCreationInfo");
+        Canvas.PanelTypographyRequested += id => { if (Session is { } s) QueuePanelTypography(s.Graph, id); };
         Canvas.TextEditRequested += id => { if (Session is { } s) QueueTextEdit(s.Graph, id); };
     }
     private void QueueTextEdit(Graph expected, string id) => DispatcherQueue.TryEnqueue(() =>
@@ -82,7 +83,7 @@ public sealed partial class GraphEditorControl
     });
     private async Task EditTextAsync(Graph expected, string id)
     {
-        if (_valueEditorDisposed || Session is null || !ReferenceEquals(Session.Graph, expected) || _textPanelDialog is not null || XamlRoot is null) return;
+        if (_valueEditorDisposed || Session is null || !ReferenceEquals(Session.Graph, expected) || _textPanelDialog is not null || _panelTypographyDialog is not null || _numberSliderDialog is not null || XamlRoot is null) return;
         var session = Session;
         try
         {
@@ -121,5 +122,5 @@ public sealed partial class GraphEditorControl
         _inspector.Children.Insert(Math.Min(2, _inspector.Children.Count), ClassicChrome.Button(node.Component == "Boolean" ? "Toggle value" : "Edit text…",
             () => { if (node.Component == "Boolean") ToggleValue(expected, node); else QueueTextEdit(expected, node.Id); }, "InspectorEditValue"));
     }
-    private void DisposeValueEditor() { _valueEditorDisposed = true; _textPanelDialog?.Hide(); }
+    private void DisposeValueEditor() { _valueEditorDisposed = true; _textPanelDialog?.Hide(); _panelTypographyDialog?.Hide(); }
 }

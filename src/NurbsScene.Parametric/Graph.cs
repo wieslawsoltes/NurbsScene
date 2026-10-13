@@ -110,6 +110,8 @@ public sealed partial class Graph(ComponentRegistry registry)
     public void Update(GraphNode node)
     {
         node.CanvasSize?.Validate();
+        node.PanelStyle?.Validate();
+        if(node.PanelStyle is not null && node.Component is not ("Panel" or "Text"))throw new ArgumentException("Typography belongs to text panels only.");
         if(!double.IsFinite(node.X)||!double.IsFinite(node.Y)||node.Matching is not("longest" or "shortest" or "cross"))throw new ArgumentException("Invalid node position or matching mode.");
         lock(_gate){var previous=GetNode(node.Id);if(previous==node)return;if(previous.Parameters!=node.Parameters)node=node with{Parameters=ParameterValues.Freeze(node.Parameters)};if(previous.Component!=node.Component)throw new InvalidOperationException("Cannot replace a component type in place.");_nodes[node.Id]=node;_nodesView=null;if(previous.Parameters!=node.Parameters||previous.Enabled!=node.Enabled||previous.Matching!=node.Matching)Invalidate(node.Id);Revision++;}NotifyChanged();
     }

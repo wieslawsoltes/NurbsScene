@@ -18,6 +18,7 @@ from test_panel_layout_ui import verify_panel_layout_ui
 from test_panel_edges_ui import verify_panel_edges_ui
 from test_loft_ellipse_ui import verify_loft_ellipse_ui
 from test_panel_display_ui import verify_panel_display_ui
+from test_typography_ui import verify_typography_ui
 
 ROOT = Path(__file__).resolve().parents[2]
 EVIDENCE = ROOT / "evidence"
@@ -34,7 +35,8 @@ async def main(url):
                  ("panels", verify_panels),
                  ("panel-edges", verify_panel_edges_ui),
                  ("ellipse-loft", verify_loft_ellipse_ui),
-                 ("panel-display", verify_panel_display_ui))
+                 ("panel-display", verify_panel_display_ui),
+                 ("typography", verify_typography_ui))
     all_checks, reports, campaign_reports, errors, logs = [], [], [], [], []
     def write(name, data):
         (EVIDENCE / name).write_text(json.dumps(data, indent=2))
