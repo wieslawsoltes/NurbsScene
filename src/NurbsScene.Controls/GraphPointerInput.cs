@@ -16,13 +16,30 @@ public sealed partial class GraphCanvas
     private GraphDragPositions? _dragPositions;
     private HashSet<string>? _marqueeBefore;
     private GraphSelectionMode _marqueeMode;
+    private GraphCanvasView? _navigationBefore;
+
+    private GraphCanvasView NavigationView => new(_zoom, _panX, _panY);
+    private void ApplyNavigation(GraphCanvasView view)
+    {
+        if (view == NavigationView) return;
+        _zoom = view.Zoom; _panX = view.PanX; _panY = view.PanY;
+        ViewChanged?.Invoke(); Invalidate();
+    }
+    private void MoveNavigation(Point screen)
+    {
+        if (_navigationBefore is not { } origin || !_moved) return;
+        ApplyNavigation(_gesture == "zoom"
+            ? GraphCanvasNavigation.DragZoom(origin, new(_start.X, _start.Y), new(screen.X, screen.Y))
+            : GraphCanvasNavigation.PanBy(origin, new(screen.X - _start.X, screen.Y - _start.Y)));
+        _worldLast = World(screen);
+    }
 
     private static bool Shift(VirtualKeyModifiers modifiers) => (modifiers & VirtualKeyModifiers.Shift) != 0;
     private static GraphSelectionMode SelectionMode(VirtualKeyModifiers modifiers)
         => GraphSelectionModifiers.Mode(Shift(modifiers), (modifiers & VirtualKeyModifiers.Control) != 0);
     private void ClearPointerDrafts()
     {
-        _activePointerId = null; _pointerButton = 0; _dragPositions = null; _marqueeBefore = null;
+        _activePointerId = null; _pointerButton = 0; _dragPositions = null; _marqueeBefore = null; _navigationBefore = null;
     }
     private void InitializePointerInput()
     {
@@ -57,7 +74,11 @@ public sealed partial class GraphCanvas
         {
             var node = NodeAt(_worldStart); var port = PortAt(_worldStart);
             _rightPan = point.Properties.IsRightButtonPressed;
-            if (point.Properties.IsMiddleButtonPressed || _rightPan) _gesture = "pan";
+            if (point.Properties.IsMiddleButtonPressed || _rightPan)
+            {
+                _gesture = _rightPan && (e.KeyModifiers & VirtualKeyModifiers.Control) != 0 ? "zoom" : "pan";
+                _navigationBefore = NavigationView;
+            }
             else if (port is not null) { _wire = port; _gesture = "wire"; }
             else if (node is not null)
             {
@@ -123,7 +144,7 @@ public sealed partial class GraphCanvas
         _moved |= Math.Abs(point.X - _start.X) + Math.Abs(point.Y - _start.Y) > 2;
         try
         {
-            if (_gesture == "pan") { _panX += (float)(point.X - _last.X); _panY += (float)(point.Y - _last.Y); }
+            if (_gesture is "pan" or "zoom") MoveNavigation(point);
             else if (_gesture == "resize" && _moved) _panelResize?.Move((point.X - _start.X) / _zoom, (point.Y - _start.Y) / _zoom);
             else if (_gesture == "nodes" && _moved) MoveSelectedNodes(point, e.KeyModifiers);
             else if (_gesture == "slider" && _slider is not null) Scrub(_session.Graph.GetNode(_slider), _worldLast.X);
@@ -151,10 +172,10 @@ public sealed partial class GraphCanvas
             // move event was coalesced or never delivered by the host.
             _moved |= Math.Abs(screen.X - _start.X) + Math.Abs(screen.Y - _start.Y) > 2;
             Observe("Released", screen);
-            if (_gesture == "pan")
+            if (_gesture == "zoom") MoveNavigation(screen);
+            else if (_gesture == "pan")
             {
-                _panX += (float)(screen.X - _last.X); _panY += (float)(screen.Y - _last.Y);
-                _worldLast = World(screen);
+                MoveNavigation(screen);
                 if (_rightPan && !_moved)
                 {
                     var node = NodeAt(_worldLast);
@@ -201,8 +222,9 @@ public sealed partial class GraphCanvas
     }
     private void CancelGesture()
     {
-        var before = _before; var selection = _marqueeBefore;
+        var before = _before; var selection = _marqueeBefore; var navigation = _navigationBefore;
         ClearPanelResize(); ClearPointerDrafts(); _before = null; _gesture = ""; _wire = null; _slider = null;
+        if (navigation is { } view) ApplyNavigation(view);
         if (before is not null && _session is not null) _session.RestoreUncommitted(before);
         if (selection is not null)
         {

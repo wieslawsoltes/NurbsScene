@@ -40,8 +40,7 @@ public sealed partial class GraphCanvas : SKCanvasElement,IDisposable
     {
         if(!float.IsFinite(zoom))throw new ArgumentException("Finite zoom required.");
         CancelGesture();ReleasePointerCaptures();
-        var center=new Point(ActualWidth/2,ActualHeight/2);var world=World(center);_zoom=Math.Clamp(zoom,.15f,3.5f);
-        _panX=(float)(center.X-world.X*_zoom);_panY=(float)(center.Y-world.Y*_zoom);ViewChanged?.Invoke();Invalidate();
+        ApplyNavigation(GraphCanvasNavigation.ZoomAt(NavigationView,new(ActualWidth/2,ActualHeight/2),zoom));
     }
     public CanvasPoint ScreenPoint(string nodeId,bool output,int index)
     {
@@ -109,7 +108,13 @@ public sealed partial class GraphCanvas : SKCanvasElement,IDisposable
         Loaded+=(_,_)=>Subscribe();Unloaded+=(_,_)=>{CancelGesture();ReleasePointerCaptures();Unsubscribe();_panelTypography.Clear();};SizeChanged+=(_,_)=>Invalidate();
         InitializePointerInput();
         RightTapped+=(_,e)=>e.Handled=true;
-        PointerWheelChanged+=(_,e)=>{if(_activePointerId is not null){e.Handled=true;return;}var point=e.GetCurrentPoint(this);var world=World(point.Position);_zoom=Math.Clamp(_zoom*(float)Math.Exp(point.Properties.MouseWheelDelta*.001),.15f,3.5f);_panX=(float)point.Position.X-(float)world.X*_zoom;_panY=(float)point.Position.Y-(float)world.Y*_zoom;ViewChanged?.Invoke();Invalidate();e.Handled=true;};
+        PointerWheelChanged+=(_,e)=>
+        {
+            e.Handled=true;if(_activePointerId is not null)return;
+            var point=e.GetCurrentPoint(this);
+            try { ApplyNavigation(GraphCanvasNavigation.ZoomBy(NavigationView,new(point.Position.X,point.Position.Y),point.Properties.MouseWheelDelta*.001)); }
+            catch(ArgumentOutOfRangeException error) { Message?.Invoke(error.Message); }
+        };
         DoubleTapped+=OnCanvasDoubleTapped;
         KeyDown+=(_,e)=>{if(e.Key==VirtualKey.Delete){DeleteSelected();e.Handled=true;}else if(e.Key==VirtualKey.Escape){CancelGesture();ReleasePointerCaptures();e.Handled=true;}else if(e.Key==VirtualKey.F){Fit();e.Handled=true;}else if(e.Key==VirtualKey.Space){SearchRequested?.Invoke();e.Handled=true;}};
     }
@@ -136,7 +141,7 @@ public sealed partial class GraphCanvas : SKCanvasElement,IDisposable
     private Point PortPoint(GraphNode node,bool output,int index){var p=Layout(node).Port(output,index);return new(p.X,p.Y);}
     private Point PortPoint(PortHit port)
     {
-        var n=Drawing().Nodes.First(n=>n.Node.Id==port.Node);var ports=port.Output?n.Definition.Outputs:n.Definition.Inputs;
+        Drawing();var n=_layouts[port.Node];var ports=port.Output?n.Definition.Outputs:n.Definition.Inputs;
         for(var i=0;i<ports.Length;i++)if(ports[i].Name==port.Port){var p=n.Port(port.Output,i);return new(p.X,p.Y);}
         throw new ArgumentException("Missing port.");
     }
