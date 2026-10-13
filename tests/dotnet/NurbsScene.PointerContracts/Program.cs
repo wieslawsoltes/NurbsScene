@@ -117,6 +117,158 @@ Test("10000 warm drag-buffer updates and selected clicks allocate no managed byt
     for(var i=0;i<10000;i++){d.Update(new(i,i/2d),true);GraphSelectionModifiers.Click(s,"a",GraphSelectionMode.Add);}
     var bytes=GC.GetAllocatedBytesForCurrentThread()-before;Check(bytes==0);Console.WriteLine($"METRIC warm-drag-selection-10000={bytes} B");
 });
+
+GraphPortHit? ReferenceHit(GraphDrawing drawing, CanvasPoint point, double tolerance)
+{
+    var distance=tolerance*tolerance;GraphPortHit? best=null;
+    for(var n=drawing.Nodes.Length-1;n>=0;n--)
+    {
+        var node=drawing.Nodes[n];
+        for(var side=0;side<2;side++)
+        {
+            var ports=side==1?node.Definition.Outputs:node.Definition.Inputs;
+            for(var i=0;i<ports.Length;i++)
+            {
+                var port=node.Port(side==1,i);var dx=port.X-point.X;var dy=port.Y-point.Y;var squared=dx*dx+dy*dy;
+                if(!double.IsFinite(squared)||squared>distance||squared==distance&&best is not null)continue;
+                distance=squared;best=new(node.Node.Id,ports[i].Name,side==1);
+            }
+        }
+    }
+    return best;
+}
+PresentedNode Presented(string id, int inputs, int outputs, CanvasBox bounds, bool slider=false)
+{
+    var component=slider?"Number":"Custom";
+    var definition=new ComponentDefinition(component,"Test","Hit testing fixture",
+        Enumerable.Range(0,inputs).Select(i=>new PortDefinition("I"+i)).ToImmutableArray(),
+        Enumerable.Range(0,outputs).Select(i=>new PortDefinition("O"+i)).ToImmutableArray(),
+        _=>throw new NotSupportedException("Presentation fixture is never solved."));
+    return new(new GraphNode(id,component,bounds.X,bounds.Y,ImmutableDictionary<string,object?>.Empty),definition,bounds);
+}
+Test("anchored zoom retains the world point under the pointer",()=>{
+    var view=new GraphCanvasView(.8f,20,-15);var anchor=new CanvasPoint(350,120);
+    var next=GraphCanvasNavigation.ZoomAt(view,anchor,1.6);
+    Check(Math.Abs((anchor.X-next.PanX)/next.Zoom-(anchor.X-view.PanX)/view.Zoom)<1e-4);
+    Check(Math.Abs((anchor.Y-next.PanY)/next.Zoom-(anchor.Y-view.PanY)/view.Zoom)<1e-4);
+});
+Test("vertical drag uses its origin and horizontal movement is a no-op",()=>{
+    var view=new GraphCanvasView(.8f,20,30);var anchor=new CanvasPoint(200,200);
+    Check(GraphCanvasNavigation.DragZoom(view,anchor,new(600,200))==view);
+    var upward=GraphCanvasNavigation.DragZoom(view,anchor,new(200,150));
+    Check(upward.Zoom>view.Zoom);
+    var downward=GraphCanvasNavigation.DragZoom(view,anchor,new(200,250));
+    Check(downward.Zoom<view.Zoom);
+    for(var i=0;i<100;i++)GraphCanvasNavigation.DragZoom(view,anchor,new(200,200-i));
+    Check(GraphCanvasNavigation.DragZoom(view,anchor,new(200,150))==upward);
+    Check(GraphCanvasNavigation.DragZoom(view,anchor,anchor)==view);
+});
+Test("zoom clamps before exponentiation and clamped no-ops retain exact translations",()=>{
+    var view=new GraphCanvasView(.8f,20,30);var anchor=new CanvasPoint(200,200);
+    var large=GraphCanvasNavigation.ZoomBy(view,anchor,double.MaxValue);
+    var small=GraphCanvasNavigation.ZoomBy(view,anchor,-double.MaxValue);
+    Check(large.Zoom==GraphCanvasNavigation.MaximumZoom&&small.Zoom==GraphCanvasNavigation.MinimumZoom);
+    Check(GraphCanvasNavigation.ZoomBy(large,anchor,100)==large);
+    Check(GraphCanvasNavigation.ZoomBy(small,anchor,-100)==small);
+    Check(GraphCanvasNavigation.ZoomAt(view,anchor,double.MaxValue).Zoom==GraphCanvasNavigation.MaximumZoom);
+    Check(GraphCanvasNavigation.ZoomAt(view,anchor,-1).Zoom==GraphCanvasNavigation.MinimumZoom);
+});
+Test("canvas pan is origin-based and preserves zoom",()=>{
+    var view=new GraphCanvasView(.8f,20,30);
+    Check(GraphCanvasNavigation.PanBy(view,new(15,-10))==new GraphCanvasView(.8f,35,20));
+    Check(GraphCanvasNavigation.PanBy(view,default)==view);
+    Check(GraphCanvasNavigation.PanBy(view,new(15,-10))==GraphCanvasNavigation.PanBy(view,new(15,-10)));
+});
+Test("navigation rejects nonfinite state coordinates and unrepresentable translations",()=>{
+    var view=new GraphCanvasView(.8f,20,30);
+    Throws<ArgumentOutOfRangeException>(()=>GraphCanvasNavigation.ZoomAt(default,default,1));
+    Throws<ArgumentOutOfRangeException>(()=>GraphCanvasNavigation.ZoomAt(view,default,double.NaN));
+    Throws<ArgumentOutOfRangeException>(()=>GraphCanvasNavigation.ZoomBy(view,default,double.PositiveInfinity));
+    Throws<ArgumentOutOfRangeException>(()=>GraphCanvasNavigation.PanBy(view,new(double.MaxValue,0)));
+    Throws<ArgumentOutOfRangeException>(()=>GraphCanvasNavigation.ZoomAt(view,new(double.MaxValue,0),2));
+    Throws<ArgumentOutOfRangeException>(()=>GraphCanvasNavigation.DragZoom(view,default,new(0,double.NaN)));
+    Throws<ArgumentOutOfRangeException>(()=>GraphCanvasNavigation.PanBy(new(.8f,float.NaN,0),default));
+    Check(view==new GraphCanvasView(.8f,20,30));
+});
+Test("1000 randomized anchored zooms preserve bounded native precision",()=>{
+    var random=new Random(88213);
+    for(var i=0;i<1000;i++)
+    {
+        var view=new GraphCanvasView((float)(.15+random.NextDouble()*3.35),random.Next(-1000,1001),random.Next(-1000,1001));
+        var point=new CanvasPoint(random.Next(0,1601),random.Next(0,1101));
+        var next=GraphCanvasNavigation.ZoomAt(view,point,.15+random.NextDouble()*3.35);
+        var x=(point.X-view.PanX)/view.Zoom;var y=(point.Y-view.PanY)/view.Zoom;
+        Check(Math.Abs(x*next.Zoom+next.PanX-point.X)<.003&&Math.Abs(y*next.Zoom+next.PanY-point.Y)<.003);
+    }
+});
+Test("10000 warmed navigation calculations allocate no managed bytes",()=>{
+    var view=new GraphCanvasView(.8f,20,30);var anchor=new CanvasPoint(200,200);
+    for(var i=0;i<100;i++)GraphCanvasNavigation.DragZoom(view,anchor,new(200,150));
+    var before=GC.GetAllocatedBytesForCurrentThread();
+    var last=view;
+    for(var i=0;i<10000;i++)last=GraphCanvasNavigation.DragZoom(view,anchor,new(200,150));
+    var allocated=GC.GetAllocatedBytesForCurrentThread()-before;
+    Check(allocated==0&&last.Zoom>view.Zoom);
+    Console.WriteLine($"METRIC navigation-10000={allocated} B");
+});
+Test("nearest port preserves exact radial boundaries row and side ties",()=>{
+    var n=Presented("a",12,12,new(10,20,0,280));var drawing=new GraphDrawing([n],[]);
+    foreach(var point in new[]{new CanvasPoint(10,39),new(10,48.5),new(5,39),new(6,42),new(10,248)})
+        foreach(var tolerance in new[]{0,5,9.5,60,10000})
+            Check(GraphHitTesting.PortAt(drawing,point,tolerance)==ReferenceHit(drawing,point,tolerance));
+    Check(GraphHitTesting.PortAt(drawing,new(10,48.5),9.5)==new GraphPortHit("a","I0",false));
+    Check(GraphHitTesting.PortAt(drawing,new(6,42),5)==new GraphPortHit("a","I0",false));
+});
+Test("overlapping nodes keep frontmost identity and slider rows keep first identity",()=>{
+    var behind=Presented("behind",64,64,new(0,0,180,1400));
+    var front=Presented("front",64,64,new(0,0,180,38),true);
+    var drawing=new GraphDrawing([behind,front],[]);
+    Check(GraphHitTesting.PortAt(drawing,new(0,19),0)==new GraphPortHit("front","I0",false));
+    Check(GraphHitTesting.PortAt(drawing,new(180,19),9)==new GraphPortHit("front","O0",true));
+    Check(GraphHitTesting.PortAt(drawing,new(0,38),9)==new GraphPortHit("behind","I1",false));
+});
+Test("binary64 collapsed port-row plateaus retain the earliest row",()=>{
+    foreach(var y in new[]{1e18,-1e18,1e20,-1e20,double.MaxValue,-double.MaxValue})
+    {
+        var n=Presented("large",1024,0,new(0,y,180,20000));var drawing=new GraphDrawing([n],[]);
+        foreach(var offset in new[]{-8192d,-4096d,-1024d,0d,512d,1024d,4096d,8192d,20000d})
+        {
+            var point=new CanvasPoint(0,y+offset);
+            Check(GraphHitTesting.PortAt(drawing,point,10000)==ReferenceHit(drawing,point,10000));
+        }
+    }
+});
+Test("10000 randomized nearest-port queries match the exhaustive reference",()=>{
+    var random=new Random(40921);var nodes=ImmutableArray.CreateBuilder<PresentedNode>();
+    for(var i=0;i<45;i++)nodes.Add(Presented("n"+i,random.Next(0,129),random.Next(0,129),
+        new(random.Next(-1000,1001),random.Next(-1000,1001),random.Next(-180,181),2600),i%11==0));
+    var drawing=new GraphDrawing(nodes.ToImmutable(),[]);
+    for(var i=0;i<10000;i++)
+    {
+        var point=new CanvasPoint(random.NextDouble()*2500-1250,random.NextDouble()*4000-1250);
+        var tolerance=i%3==0?60:random.NextDouble()*20;
+        var actual=GraphHitTesting.PortAt(drawing,point,tolerance);var expected=ReferenceHit(drawing,point,tolerance);
+        Check(actual==expected);
+    }
+});
+Test("malformed presentation ports do not fabricate NaN or infinite hits",()=>{
+    var valid=Presented("valid",1,0,new(0,0,156,56));
+    foreach(var bounds in new[]{new CanvasBox(double.NaN,0,156,56),new(0,double.PositiveInfinity,156,56),new(double.PositiveInfinity,0,156,56)})
+    {
+        var drawing=new GraphDrawing([valid,Presented("bad",2,2,bounds)],[]);
+        Check(GraphHitTesting.PortAt(drawing,new(0,19),0)==new GraphPortHit("valid","I0",false));
+        Check(GraphHitTesting.PortAt(drawing,new(500,500),5)is null);
+    }
+});
+Test("10000 off-column hit-test misses allocate no managed bytes",()=>{
+    var drawing=new GraphDrawing([Presented("a",1024,1024,new(0,0,180,20000))],[]);
+    for(var i=0;i<100;i++)GraphHitTesting.PortAt(drawing,new(-100,100),9);
+    var before=GC.GetAllocatedBytesForCurrentThread();GraphPortHit? hit=null;
+    for(var i=0;i<10000;i++)hit=GraphHitTesting.PortAt(drawing,new(-100,100),9);
+    var allocated=GC.GetAllocatedBytesForCurrentThread()-before;Check(hit is null&&allocated==0);
+    Console.WriteLine($"METRIC port-miss-10000={allocated} B");
+});
+
 var failed=0;
 foreach(var(name,run) in tests) try { run(); Console.WriteLine("PASS "+name); } catch(Exception e) { failed++; Console.WriteLine("FAIL "+name+"\n"+e); }
 Console.WriteLine(JsonSerializer.Serialize(new{suite="pointer-selection",total=tests.Count,passed=tests.Count-failed,failed}));
