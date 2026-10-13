@@ -77,3 +77,38 @@ and offline-browser checks do not substitute for native Uno acceptance.
 No new solids, arbitrary trims, SubD, formats/plugins, component catalog, full text
 shaping, complete docking or direct Uno WebGPU implementation is claimed. Panel
 scrolling is separate work. See [the inventory](PARITY.md) for product boundaries.
+
+
+## Parallel acceptance without a weaker release gate
+
+The original serial Uno run 38461270948 saved all 271 passing native UI assertions,
+all eight completed campaigns and zero page errors, but GitHub concluded the job
+as cancelled at its 30-minute envelope. The downloaded evidence archive SHA256 is
+`bf50b1fd8714819dd85ba3549439dafbd2b724dbc946ef1734e4c5f85ea2c727`.
+Those assertion results are retained; the cancelled workflow is not called green
+and its artifact is not used to bypass main/Pages qualification.
+
+The workflow now compiles the browser application once and runs the eight existing
+independent campaigns as parallel jobs. The campaign registry is shared by the
+runner, CI matrix and aggregate gate. Omitting `--campaign` still runs the complete
+local campaign. No UI assertion, per-action deadline, modeling/framebuffer check,
+restoration check or browser input operation was removed or loosened. Every shard
+retains the original observer contracts. Matrix fail-fast is disabled to preserve
+independent failure evidence; a failed shard still prevents qualification.
+
+The build records exact commit/tree identities and SHA256 for every site file,
+including `.nojekyll`. Each shard verifies all downloaded bytes and attaches the
+manifest it actually checked. The final gate requires successful desktop/build
+and all matrix jobs, then independently validates one report for every registered
+campaign on the identical publication, minimum UI/modeling assertion counts,
+restored sessions, native framebuffer data and zero page/GPU/graph errors.
+Missing, duplicate, cancelled, inconsistent or mismatched-source evidence rejects.
+Only this gate can upload the `qualified-uno-browser` artifact. The existing Pages
+workflow remains unchanged and still requires successful current-main acceptance.
+
+Twenty-six pure artifact-gate contracts exercise these acceptance rules using
+synthetic files. They are not browser, rendering or actual Uno tests. Build and
+individual campaign jobs each retain a finite 20-minute job budget instead of
+extending the old serial deadline. The final artifact gate has a 10-minute budget.
+This parallelization trades additional runner use and artifact transfers for lower
+wall-clock latency; no fixed CI speedup is promised before a completed run.

@@ -29,7 +29,7 @@ async def verify_panels(page):
     checks.extend(await verify_panel_layout_ui(page))
     return checks
 
-async def main(url):
+async def main(url, campaign=None):
     EVIDENCE.mkdir(exist_ok=True)
     campaigns = (("workspace", verify_workspace_ui),
                  ("inputs-sliders", verify_graph_inputs_ui),
@@ -39,6 +39,13 @@ async def main(url):
                  ("panel-display", verify_panel_display_ui),
                  ("typography", verify_typography_ui),
                  ("pointer-selection", verify_pointer_ui))
+    registered = [entry["name"] for entry in json.loads((ROOT / "tests/browser/uno-campaigns.json").read_text())["campaigns"]]
+    if registered != [name for name, _ in campaigns]:
+        raise ValueError("Native runner and mandatory campaign registry disagree")
+    if campaign is not None:
+        if campaign not in registered:
+            raise ValueError("Unknown native campaign: " + campaign)
+        campaigns = tuple(item for item in campaigns if item[0] == campaign)
     all_checks, reports, campaign_reports, errors, logs = [], [], [], [], []
     def write(name, data):
         (EVIDENCE / name).write_text(json.dumps(data, indent=2))
@@ -113,4 +120,6 @@ async def main(url):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--url", default="http://127.0.0.1:8766/")
-    asyncio.run(main(parser.parse_args().url))
+    parser.add_argument("--campaign", help="Run one registered CI shard; omission retains the complete local campaign")
+    args = parser.parse_args()
+    asyncio.run(main(args.url, args.campaign))
