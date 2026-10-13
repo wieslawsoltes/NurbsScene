@@ -54,6 +54,11 @@ The graph editor provides executable search, typed wiring, numeric sliders,
 copy/paste/duplicate, arrangement, preview, baking and undo/redo. Authored icons and
 controls follow familiar conventions without claiming identical original artwork.
 
+Canvas selection uses Shift to add, Control to remove and Control+Shift to toggle.
+Shift-drag follows 45-degree guides; Control+right-drag zooms about its starting
+point. Escape cancels a selection, move or navigation draft. See
+[canvas navigation and input](docs/CANVAS-NAVIGATION-AND-HIT-TESTING.md).
+
 Panels support multiline text, connected data, all-edge resizing, persistent
 path/index/wrap options, and a native typography dialog (context menu or
 Ctrl+double-click). Font/style/alignment are display-only metadata; bounded native

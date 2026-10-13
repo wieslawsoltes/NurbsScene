@@ -1,5 +1,11 @@
 # Canvas input review — 2026-10-13
 
+> Historical local handoff report. All 347 recorded source files were subsequently
+> published in PR #15, with identical tree `118b26a81eb1755d10839cf176f1763b1b54d796`.
+> The read-only connector and DNS restrictions below describe that earlier
+> session. See [the continued navigation review](CANVAS-NAVIGATION-AND-HIT-TESTING.md)
+> and per-commit CI for newer changes and qualification.
+
 ## Delivery status
 
 This is a **local, unqualified managed/Uno candidate**, not a published release.

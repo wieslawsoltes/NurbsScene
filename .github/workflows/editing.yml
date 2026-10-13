@@ -41,6 +41,17 @@ jobs:
           dotnet run --project "$baseline/tests/editing-performance" -c Release -- "$GITHUB_WORKSPACE/artifacts/editing/baseline.json"
           dotnet run --project tests/editing-performance -c Release -- "$GITHUB_WORKSPACE/artifacts/editing/candidate.json"
           git rev-parse HEAD HEAD^{tree} > artifacts/editing/tested-revision.txt
+      - name: Compare identical nearest-port workloads before navigation review
+        shell: bash
+        run: |
+          set -euo pipefail
+          baseline="$RUNNER_TEMP/nurbsscene-pointer-baseline"
+          git worktree add --detach "$baseline" 0eba9b93df3c82f1e788a7bceb5e7802f8727383
+          mkdir -p "$baseline/tests/pointer-performance"
+          cp tests/pointer-performance/*.cs tests/pointer-performance/*.csproj "$baseline/tests/pointer-performance/"
+          dotnet run --project "$baseline/tests/pointer-performance" -c Release -- "$GITHUB_WORKSPACE/artifacts/editing/pointer-baseline.json"
+          dotnet run --project tests/pointer-performance -c Release -- "$GITHUB_WORKSPACE/artifacts/editing/pointer-candidate.json"
+          git -C "$baseline" rev-parse HEAD HEAD^{tree} > artifacts/editing/pointer-baseline-revision.txt
       - uses: actions/upload-artifact@v4
         if: always()
         with:
