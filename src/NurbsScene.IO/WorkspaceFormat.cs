@@ -24,6 +24,8 @@ public static class WorkspaceFormat
         public NodeCanvasSize? CanvasSize { get; init; }
         [System.Text.Json.Serialization.JsonIgnore(Condition=System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
         public PanelDisplayOptions? PanelDisplay { get; init; }
+        [System.Text.Json.Serialization.JsonIgnore(Condition=System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        public PanelTextStyle? PanelStyle { get; init; }
     }
     public sealed record DocumentData(string Name, string Units, double AbsoluteTolerance, double AngleTolerance, string ActiveLayer, Layer[] Layers, ObjectData[] Objects, string[] Selection);
     public sealed record GraphData(NodeData[] Nodes, Wire[] Wires);
@@ -87,7 +89,7 @@ public static class WorkspaceFormat
     {
         var d=document.Snapshot();var snapshot=graph.Snapshot();
         var data=new WorkspaceData(Format,1,new(d.Name,d.Units,d.AbsoluteTolerance,d.AngleTolerance,d.ActiveLayer,d.Layers,d.Objects.Select(o=>new ObjectData(o.Id,o.Name,o.LayerId,o.Color,o.Visible,o.Locked,o.Source,EncodeGeometry(o.Geometry))).ToArray(),d.Selection),
-            new(snapshot.Nodes.Select(n=>new NodeData(n.Id,n.Component,n.X,n.Y,n.Parameters.ToDictionary(kv=>kv.Key,kv=>EncodeValue(kv.Value)),n.Name,n.Enabled,n.Preview,n.Matching){CanvasSize=n.CanvasSize,PanelDisplay=n.PanelDisplay}).ToArray(),snapshot.Wires));
+            new(snapshot.Nodes.Select(n=>new NodeData(n.Id,n.Component,n.X,n.Y,n.Parameters.ToDictionary(kv=>kv.Key,kv=>EncodeValue(kv.Value)),n.Name,n.Enabled,n.Preview,n.Matching){CanvasSize=n.CanvasSize,PanelDisplay=n.PanelDisplay,PanelStyle=n.PanelStyle}).ToArray(),snapshot.Wires));
         var json=JsonSerializer.Serialize(data,Options);if(Encoding.UTF8.GetByteCount(json)>MaximumBytes)throw new InvalidOperationException("Workspace exceeds the export budget.");return json;
     }
     public static Workspace Deserialize(INurbsEvaluator evaluator,ComponentRegistry registry,string json)
@@ -102,7 +104,7 @@ public static class WorkspaceFormat
         var objects=d.Objects.Select(o=>new SceneObject(o.Id,o.Name,DecodeGeometry(evaluator,o.Geometry),o.LayerId,o.Color,o.Visible,o.Locked,o.Source)).ToArray();
         if(objects.Any(o=>o.Color is{} c&&!c.IsValid))throw new FormatException("Invalid object color.");
         var document=SceneDocument.FromSnapshot(new(d.Name,d.Units,d.AbsoluteTolerance,d.AngleTolerance,d.ActiveLayer,d.Layers,objects,d.Selection??[]));
-        var graph=Graph.FromSnapshot(registry,new(g.Nodes.Select(n=>new GraphNode(n.Id,n.Component,n.X,n.Y,n.Parameters.ToImmutableDictionary(kv=>kv.Key,kv=>DecodeValue(evaluator,kv.Value)),n.Name,n.Enabled,n.Preview,n.Matching){CanvasSize=n.CanvasSize,PanelDisplay=n.PanelDisplay}).ToArray(),g.Wires));
+        var graph=Graph.FromSnapshot(registry,new(g.Nodes.Select(n=>new GraphNode(n.Id,n.Component,n.X,n.Y,n.Parameters.ToImmutableDictionary(kv=>kv.Key,kv=>DecodeValue(evaluator,kv.Value)),n.Name,n.Enabled,n.Preview,n.Matching){CanvasSize=n.CanvasSize,PanelDisplay=n.PanelDisplay,PanelStyle=n.PanelStyle}).ToArray(),g.Wires));
         // Both graphs are prepared and validated before a caller replaces its active workspace.
         return new(document,graph);
     }
