@@ -68,8 +68,8 @@ async def verify_graph_editing_ui(page):
     checks.append('Left-drag window selection selects enclosed components')
     node=next(n for n in (await read())['nodes'] if n['name']=='Width')
     await page.keyboard.down('Shift');await page.mouse.click(node['x']+node['width']/2,node['y']+5);await page.keyboard.up('Shift')
-    await wait(f'globalThis.nurbsSceneUi.state.graphSelected.length==={count-1}')
-    checks.append('Shift-click removes an already selected node')
+    await wait(f'globalThis.nurbsSceneUi.state.graphSelected.length==={count}')
+    checks.append('Shift-click preserves an already selected node')
     await drag((box['x']+8,box['y']+8),(box['x']+55,box['y']+30),button='right')
     check(not (await read())['state']['contextMenuOpen'],'Right-drag pans without opening the context menu')
     await click('GraphFit');data=await read();rise=next(n for n in data['nodes'] if n['name']=='Rise');paths=data['state']['graphPathBuilds']

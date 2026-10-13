@@ -29,7 +29,9 @@ unimplemented solid operations.
 
 The real Uno runner retains managed modeling and differential framebuffer checks
 in every isolated input campaign. Workspace, inputs/sliders, panels, panel edges,
-ellipse/loft, panel display and typography are all mandatory. Repeated modeling
+ellipse/loft, panel display, typography and pointer selection are all mandatory.
+The new pointer-selection campaign is registered but has not run in this local
+delivery; see [canvas input candidate status](CANVAS-INPUT-REVIEW.md). Repeated modeling
 checks across campaigns are not distinct features. Software GL can satisfy these
 checks; no physical-GPU performance conclusion follows. Desktop compilation is not
 execution across every desktop OS/device. The separate JavaScript harness and
