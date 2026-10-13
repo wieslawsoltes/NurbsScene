@@ -7,6 +7,7 @@ namespace NurbsScene.Presentation;
 /// No authoritative data, graph history or serialized metadata is changed.</summary>
 public sealed record PanelWindow(PanelPreview Preview, int First, int Visible, int Total, int MaximumOffset)
 {
+    public string DisplayFooter { get; } = MaximumOffset > 0 ? $"{First + 1}–{First + Visible} / {Total} · {Preview.Footer}" : Preview.Footer;
     public bool CanScroll => MaximumOffset > 0;
     public int PageStep => Math.Max(1, Visible - 1);
 }
