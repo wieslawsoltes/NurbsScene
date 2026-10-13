@@ -50,9 +50,13 @@ public sealed class PanelTextPlacementCache
             !Enum.IsDefined(style.Horizontal) || !Enum.IsDefined(style.Vertical)) throw new ArgumentException("Invalid text placement layout.");
         metrics.Validate();
         if (preview.Lines.IsDefault || preview.Lines.Length > PanelPreviewCache.MaximumRows) throw new ArgumentException("Invalid preview row budget.");
-        var remeasure = _advances.IsDefault || _lines != preview.Lines || _fontIdentity != fontIdentity || _size != layout.FontSize;
+        // A re-solve may return a new immutable array containing identical rows.
+        // Compare contents only when identity changes, then adopt the new identity
+        // so subsequent paints retain the constant-time path.
+        var sameLines = _lines == preview.Lines || (!_lines.IsDefault && _lines.AsSpan().SequenceEqual(preview.Lines.AsSpan()));
+        var remeasure = _advances.IsDefault || !sameLines || _fontIdentity != fontIdentity || _size != layout.FontSize;
         if (!remeasure && _placement is not null && _horizontal == style.Horizontal && _vertical == style.Vertical &&
-            _width == width && _height == height && _layout == layout && _metrics == metrics) return _placement;
+            _width == width && _height == height && _layout == layout && _metrics == metrics) { _lines = preview.Lines; return _placement; }
         // Prepare before publishing: a throwing/invalid native measurement cannot
         // poison the prior cache or publish a half-measured preview.
         var advances = _advances;

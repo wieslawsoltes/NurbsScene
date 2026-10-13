@@ -63,3 +63,32 @@ References:
 - https://api.skia.org/classSkTextBlob.html (retained runs and simple mapping limits)
 - https://discourse.mcneel.com/t/no-grasshopper-panel-text-options-in-rhino-8-sr6/181096
   (panel property editing and alignment entry points as behavioral references)
+
+## Solve/paint handoff and equal-output cache review
+
+Run 38383104816 passed the six existing input campaigns but failed the typography
+campaign's cache assertion at Left/Bottom following Undo. Its waiter required a
+completed solve and equal style properties, but those conditions do not establish
+that the renderer consumed that solve: history reconstructs the graph and numerical
+revision values may be reused. A waiting/previous frame can look identical.
+
+A successful native draw now publishes a `PanelPaintStamp` of its exact owner,
+node and result identities, zoom and bounds. Qualification observes this stamp;
+it waits for the current solved inputs to have actually been drawn before taking
+cache-counter baselines. Reading the stamp does not draw, solve, force focus or
+change the document. The original alignment and cache-count assertions remain.
+Progress and before/after counters are saved even when a campaign fails. Local
+browser reproduction was attempted but navigation was blocked by the environment's
+administrator policy; that policy was not modified.
+
+Separately, re-solving can create a new immutable row array with identical text.
+Both measured placement and native glyph caches now compare content only when
+array identity changes, then adopt the new identity. Equal rows reuse widths,
+positions and glyphs; equal-length different text, font identity or size changes
+still invalidate the appropriate cache. Four managed regressions fail on the prior
+cache and pass with this change. Additional native raster contracts check equal
+pixels, source publication and invalidation. Temporary native font-style requests
+are deterministically disposed rather than left for finalization.
+
+These changes do not claim a successful Uno run until its final-head evidence
+passes, nor do they alter the renderer's documented shaping/fallback limitations.

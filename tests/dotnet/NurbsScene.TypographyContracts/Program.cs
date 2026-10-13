@@ -176,5 +176,6 @@ Test("invalid public layout offsets and budgets cannot extend the panel body", (
         Throws<ArgumentException>(()=>c.Get(preview,new(),300,220,invalid,metrics,1,Measure));
     Check(ReferenceEquals(good,c.Current)&&c.MeasurementBuilds==1);
 });
+TypographyReviewContracts.Register(tests, registry);
 var failed=0;foreach(var(name,run)in tests)try{run();Console.WriteLine("PASS "+name);}catch(Exception e){failed++;Console.WriteLine("FAIL "+name+"\n"+e);}
 Console.WriteLine(JsonSerializer.Serialize(new{suite="typography",total=tests.Count,passed=tests.Count-failed,failed}));return failed==0?0:1;

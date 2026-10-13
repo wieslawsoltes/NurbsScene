@@ -87,6 +87,7 @@ Test("renderer disposal is idempotent and refuses further drawing",()=>{
     var r=new PanelTypographyRenderer();Image(r,style);r.Dispose();r.Dispose();
     Check(r.RetainedPanels==0&&r.RetainedTypefaces==0);Throws<ObjectDisposedException>(()=>Image(r,style));
 });
+TypographyRasterReview.Register(tests);
 var failed=0;foreach(var(name,run)in tests)try{run();Console.WriteLine("PASS "+name);}catch(Exception e){failed++;Console.WriteLine("FAIL "+name+"\n"+e);}
 Console.WriteLine(JsonSerializer.Serialize(new{suite="native-typography-raster",total=tests.Count,passed=tests.Count-failed,failed}));
 if(failed!=0)return 1;

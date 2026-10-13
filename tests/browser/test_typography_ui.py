@@ -27,6 +27,7 @@ async def verify_typography_ui(page):
     def check(ok,name):
         if not ok:raise AssertionError(name)
         checks.append(name);print('TYPOGRAPHY CHECK '+name,flush=True)
+        (ROOT/'evidence/uno-typography-progress.json').write_text(json.dumps({'checks':checks},indent=2))
     await click('GraphDockBottom');original=await click('GraphFit');b=original['controls']['GraphCanvas']
     await page.mouse.click(b['x']+2,b['y']+2);await page.keyboard.press('Control+A');await page.keyboard.press('Delete')
     await wait_for_ui(page,'value.state.nodeCount===0')
@@ -42,7 +43,9 @@ async def verify_typography_ui(page):
         await page.mouse.dblclick(n['x']+n['width']/2,n['y']+8,delay=80);await page.keyboard.up('Control')
         return await wait_for_ui(page,'value.typography.editorOpen')
     async def rendered():
-        return await wait_for_ui(page,'value.values.solvedRevision===value.state.graphRevision && value.typography.panels.some(p=>p.id==='+key+'&&p.rendered!==null&&p.style.size===p.rendered.style.size&&p.style.horizontal===p.rendered.style.horizontal&&p.style.vertical===p.rendered.style.vertical)')
+        # A completed solve can precede the next paint after Undo. Equal style and
+        # revision numbers do not prove which graph/result the renderer consumed.
+        return await wait_for_ui(page,'value.values.solvedRevision===value.state.graphRevision && value.typography.panels.some(p=>p.id==='+key+'&&p.current&&p.rendered!==null&&p.style.size===p.rendered.style.size&&p.style.horizontal===p.rendered.style.horizontal&&p.style.vertical===p.rendered.style.vertical)')
     data=await rendered();check(not panel(data)['hasStyle'],'Legacy panel begins with absent typography metadata')
     # Exercise every native alignment combination, undoing only actual changes
     # between cases. No-op clicks must not invent history or clear defaults.
@@ -61,7 +64,9 @@ async def verify_typography_ui(page):
                   'Native alignment menu places measured text '+horizontal+'/'+vertical)
             check(d['typography']['glyphBuilds']==start['typography']['glyphBuilds'] and
                   d['typography']['measurements']==start['typography']['measurements'],
-                  'Alignment '+horizontal+'/'+vertical+' retains native glyphs and measurements')
+                  'Alignment '+horizontal+'/'+vertical+' retains native glyphs and measurements: '+json.dumps({
+                      'before':{k:start['typography'][k] for k in ('glyphBuilds','measurements','placements')},
+                      'after':{k:d['typography'][k] for k in ('glyphBuilds','measurements','placements')}}))
             edits=d['state']['graphRevision']-start['state']['graphRevision']
             for _ in range(edits):await click('GraphUndo')
     data=await rendered()

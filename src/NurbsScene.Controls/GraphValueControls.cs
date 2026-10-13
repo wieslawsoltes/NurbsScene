@@ -42,7 +42,7 @@ public sealed partial class GraphCanvas
         var builds = cache.BuildCount; var preview = cache.Get(node, result, layout.Rows, layout.Columns); ValuePreviewBuilds += cache.BuildCount - builds;
         var font = (float)layout.FontSize;
         Text(canvas, node.Name ?? (node.Component == "Text" ? "Text" : "Panel"), rect.Left + 8, rect.Top + (float)layout.HeadingBaseline, new(94,92,54), font);
-        var drawn = _panelTypography.Draw(canvas, node.Id, preview, style, rect, layout);
+        var drawn = _panelTypography.Draw(canvas, node.Id, preview, style, rect, layout, TypographySource(node, result));
         Text(canvas, drawn.Placement.Clipped && !preview.Truncated ? preview.Footer + " · …" : preview.Footer, rect.Left + 8, rect.Bottom - (float)layout.FooterInset, new(112,105,69), font * .9f);
     }
 }

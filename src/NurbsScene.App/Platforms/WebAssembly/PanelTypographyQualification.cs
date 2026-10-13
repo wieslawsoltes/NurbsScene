@@ -15,7 +15,7 @@ public partial class App
         var canvas=view.GraphEditor.Canvas;
         var panels=view.Controller.Graph.Nodes.Where(n=>n.Component is "Panel" or "Text").Take(32).Select(n=>{
             var rendered=canvas.RenderedTypography(n.Id);
-            return new {id=n.Id,hasStyle=n.PanelStyle is not null,style=Style(PanelTextStyle.For(n)),
+            return new {id=n.Id,current=canvas.TypographyIsCurrent(n.Id),hasStyle=n.PanelStyle is not null,style=Style(PanelTextStyle.For(n)),
                 rendered=rendered is null?null:new {style=Style(rendered.Style),family=rendered.ResolvedFamily,
                     size=rendered.FontSize,ascent=rendered.Metrics.Ascent,descent=rendered.Metrics.Descent,
                     clip=rendered.Placement.Clip,clipped=rendered.Placement.Clipped,

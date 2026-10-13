@@ -58,6 +58,14 @@ public sealed partial class GraphCanvas
     private readonly PanelTypographyRenderer _panelTypography = new();
     public event Action<string>? PanelTypographyRequested;
     public PanelRenderedTypography? RenderedTypography(string id) => _panelTypography.Observe(id);
+    private PanelPaintStamp TypographySource(GraphNode node, NodeResult? result) => new(_session!.Graph, node, result,
+        _zoom, _panelResize?.NodeId == node.Id ? _panelResize.Bounds : PanelLayout.Bounds(node));
+    public bool TypographyIsCurrent(string id)
+    {
+        if (_session is null || !_session.Graph.TryGetNode(id, out var node) || node.Component is not ("Panel" or "Text")) return false;
+        var result = _session.Graph.LastResult?.Nodes.GetValueOrDefault(id);
+        return result is not null && _panelTypography.IsCurrent(id, TypographySource(node, result));
+    }
     public long PanelGlyphBuilds => _panelTypography.GlyphBuilds;
     public long PanelMeasurementBuilds => _panelTypography.MeasurementBuilds;
     public long PanelPlacementBuilds => _panelTypography.PlacementBuilds;

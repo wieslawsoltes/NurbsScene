@@ -30,6 +30,7 @@ public sealed class PanelTypographyRenderer : IDisposable
         public double FontSize;
         public SKTextBlob?[] Blobs = [];
         public PanelRenderedTypography? Rendered;
+        public PanelPaintStamp? Source;
         public void Dispose() { foreach (var blob in Blobs) blob?.Dispose(); Blobs = []; }
     }
     private readonly Dictionary<FaceKey, Face> _faces = [];
@@ -47,11 +48,15 @@ public sealed class PanelTypographyRenderer : IDisposable
     public int RetainedTypefaces => _faces.Count;
     public PanelTypographyRenderer() => _measure = text => _font.MeasureText(text);
     public PanelRenderedTypography? Observe(string id) => _panels.GetValueOrDefault(id)?.Rendered;
+    /// <summary>Only a successful draw publishes its source stamp. Reading it never
+    /// evaluates a graph or paints, and a previous identical-looking frame fails.</summary>
+    public bool IsCurrent(string id, PanelPaintStamp source) => _panels.TryGetValue(id, out var entry) &&
+        entry.Source is { } painted && painted.Matches(source);
     public void Forget(string id) { if (_panels.Remove(id, out var entry)) entry.Dispose(); }
     public void Clear() { foreach (var e in _panels.Values) e.Dispose(); _panels.Clear(); }
 
     public PanelRenderedTypography Draw(SKCanvas canvas, string id, PanelPreview preview, PanelTextStyle style,
-        SKRect bounds, PanelDisplayLayout layout)
+        SKRect bounds, PanelDisplayLayout layout, PanelPaintStamp? source = null)
     {
         ObjectDisposedException.ThrowIf(_disposed, this); ArgumentNullException.ThrowIfNull(canvas);
         ArgumentNullException.ThrowIfNull(id); ArgumentNullException.ThrowIfNull(preview); ArgumentNullException.ThrowIfNull(style);
@@ -68,7 +73,7 @@ public sealed class PanelTypographyRenderer : IDisposable
                 _font.Typeface = SKTypeface.Default; _faces.Remove(victim.Key);
                 if (victim.Value.Owned && !_faces.Values.Any(other => ReferenceEquals(other.Value, victim.Value.Value))) victim.Value.Value.Dispose();
             }
-            var requested = new SKFontStyle(style.Bold ? SKFontStyleWeight.Bold : SKFontStyleWeight.Normal,
+            using var requested = new SKFontStyle(style.Bold ? SKFontStyleWeight.Bold : SKFontStyleWeight.Normal,
                 SKFontStyleWidth.Normal, style.Italic ? SKFontStyleSlant.Italic : SKFontStyleSlant.Upright);
             var value = SKTypeface.FromFamilyName(style.FontFamily.Length == 0 ? null : style.FontFamily, requested) ?? SKTypeface.Default;
             _faces.Add(key, face = new(value, ++_identity, !ReferenceEquals(value, SKTypeface.Default)));
@@ -90,7 +95,8 @@ public sealed class PanelTypographyRenderer : IDisposable
         var placement = entry.Cache.Get(preview, style, bounds.Width, bounds.Height, layout, metrics, face.Identity, _measure);
         MeasurementBuilds += entry.Cache.MeasurementBuilds - oldMeasures;
         PlacementBuilds += entry.Cache.LayoutBuilds - oldLayouts;
-        if (entry.Lines != preview.Lines || entry.FaceIdentity != face.Identity || entry.FontSize != layout.FontSize)
+        var sameLines = entry.Lines == preview.Lines || (!entry.Lines.IsDefault && entry.Lines.AsSpan().SequenceEqual(preview.Lines.AsSpan()));
+        if (!sameLines || entry.FaceIdentity != face.Identity || entry.FontSize != layout.FontSize)
         {
             var blobs = new SKTextBlob?[preview.Lines.Length];
             try
@@ -102,6 +108,7 @@ public sealed class PanelTypographyRenderer : IDisposable
             entry.Dispose(); entry.Blobs = blobs; entry.Lines = preview.Lines;
             entry.FaceIdentity = face.Identity; entry.FontSize = layout.FontSize; GlyphBuilds++;
         }
+        else entry.Lines = preview.Lines; // adopt equal rows without repeated content scans
         if (entry.Rendered is null || !ReferenceEquals(entry.Rendered.Placement, placement) || entry.Rendered.Style != style)
             entry.Rendered = new(style, face.Value.FamilyName, layout.FontSize, metrics, placement);
         canvas.Save();
@@ -117,6 +124,7 @@ public sealed class PanelTypographyRenderer : IDisposable
             }
         }
         finally { canvas.Restore(); }
+        entry.Source = source;
         return entry.Rendered;
     }
     public void Dispose()
