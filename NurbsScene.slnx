@@ -34,4 +34,5 @@
   <Project Path="tests/dotnet/NurbsScene.PanelDisplayContracts/NurbsScene.PanelDisplayContracts.csproj" />
   <Project Path="tests/dotnet/NurbsScene.TypographyContracts/NurbsScene.TypographyContracts.csproj" />
   <Project Path="tests/dotnet/NurbsScene.TypographyRasterContracts/NurbsScene.TypographyRasterContracts.csproj" />
+  <Project Path="tests/dotnet/NurbsScene.PointerContracts/NurbsScene.PointerContracts.csproj" />
 </Solution>

@@ -25,6 +25,11 @@ jobs:
           set -euo pipefail
           mkdir -p artifacts/editing
           dotnet run --project tests/dotnet/NurbsScene.EditingContracts -c Release 2>&1 | tee artifacts/editing/contracts.log
+      - name: Selection modifiers and constrained drag contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet run --project tests/dotnet/NurbsScene.PointerContracts -c Release 2>&1 | tee artifacts/editing/pointer-contracts.log
       - name: Compare identical presentation workloads with previous main
         shell: bash
         run: |

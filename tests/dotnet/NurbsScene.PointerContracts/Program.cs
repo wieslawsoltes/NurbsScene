@@ -39,6 +39,7 @@ Test("Control+Shift toggles once and drag follows final membership", () => {
     HashSet<string> s = ["a"];
     Check(GraphSelectionModifiers.Click(s,"a",GraphSelectionMode.Toggle) == new GraphSelectionChange(true,false));
     Check(GraphSelectionModifiers.Click(s,"b",GraphSelectionMode.Toggle) == new GraphSelectionChange(true,true));
+    Check(s.SetEquals(["b"]));
 });
 Test("marquee add remove replace and toggle preserve set semantics", () => {
     HashSet<string> s = ["a","b"];
