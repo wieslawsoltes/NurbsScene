@@ -62,7 +62,7 @@ public sealed partial class GraphCanvas
         // rollback snapshot. Only the pointer that owns capture may update it.
         if (_activePointerId is not null) { e.Handled = true; return; }
         _lastPointerModifiers = e.KeyModifiers;
-        ClearPanelResize(); ClearPointerDrafts();
+        CancelPanelScroll(false); ClearPanelResize(); ClearPointerDrafts();
         var point = e.GetCurrentPoint(this);
         _start = _last = point.Position; _worldStart = _worldLast = World(point.Position);
         _moved = false; _before = null; _slider = null; _wire = null;
@@ -79,6 +79,7 @@ public sealed partial class GraphCanvas
                 _gesture = _rightPan && (e.KeyModifiers & VirtualKeyModifiers.Control) != 0 ? "zoom" : "pan";
                 _navigationBefore = NavigationView;
             }
+            else if (node is not null && TryBeginPanelScroll(node, _worldStart)) { }
             else if (port is not null) { _wire = port; _gesture = "wire"; }
             else if (node is not null)
             {
@@ -145,6 +146,7 @@ public sealed partial class GraphCanvas
         try
         {
             if (_gesture is "pan" or "zoom") MoveNavigation(point);
+            else if (_gesture == "panel-scroll") MovePanelScroll(_worldLast.Y);
             else if (_gesture == "resize" && _moved) _panelResize?.Move((point.X - _start.X) / _zoom, (point.Y - _start.Y) / _zoom);
             else if (_gesture == "nodes" && _moved) MoveSelectedNodes(point, e.KeyModifiers);
             else if (_gesture == "slider" && _slider is not null) Scrub(_session.Graph.GetNode(_slider), _worldLast.X);
@@ -183,6 +185,7 @@ public sealed partial class GraphCanvas
                     context = screen;
                 }
             }
+            else if (_gesture == "panel-scroll") MovePanelScroll(_worldLast.Y);
             else if (_gesture == "resize" && _panelResize is { } resize && _moved)
             { resize.Move((screen.X - _start.X) / _zoom, (screen.Y - _start.Y) / _zoom); resize.Commit(_session); }
             else if (_gesture == "nodes" && _moved) MoveSelectedNodes(screen, e.KeyModifiers);
@@ -204,7 +207,7 @@ public sealed partial class GraphCanvas
         catch (Exception error) { CancelGesture(); Message?.Invoke(error.Message); }
         finally
         {
-            ClearPanelResize(); ClearPointerDrafts(); _gesture = ""; _wire = null; _before = null; _slider = null;
+            CancelPanelScroll(false); ClearPanelResize(); ClearPointerDrafts(); _gesture = ""; _wire = null; _before = null; _slider = null;
             ReleasePointerCapture(e.Pointer); Invalidate(); SelectionChanged?.Invoke(); e.Handled = true;
         }
         if (context is { } point) ContextMenuRequested?.Invoke(point);
@@ -222,6 +225,7 @@ public sealed partial class GraphCanvas
     }
     private void CancelGesture()
     {
+        CancelPanelScroll(true);
         var before = _before; var selection = _marqueeBefore; var navigation = _navigationBefore;
         ClearPanelResize(); ClearPointerDrafts(); _before = null; _gesture = ""; _wire = null; _slider = null;
         if (navigation is { } view) ApplyNavigation(view);

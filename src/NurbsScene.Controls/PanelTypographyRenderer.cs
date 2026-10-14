@@ -63,26 +63,7 @@ public sealed class PanelTypographyRenderer : IDisposable
         if (!float.IsFinite(bounds.Left) || !float.IsFinite(bounds.Top) || !float.IsFinite(bounds.Right) || !float.IsFinite(bounds.Bottom) ||
             !float.IsFinite(bounds.Width) || !float.IsFinite(bounds.Height) || bounds.Width <= 0 || bounds.Height <= 0 ||
             !double.IsFinite(layout.FontSize) || layout.FontSize <= 0 || layout.FontSize > 1024) throw new ArgumentException("Invalid native text bounds or font size.");
-        if (!ReferenceEquals(_validatedStyle, style)) { style.Validate(); _validatedStyle = style; }
-        var key = new FaceKey(style.FontFamily, style.Bold, style.Italic);
-        if (!_faces.TryGetValue(key, out var face))
-        {
-            if (_faces.Count == MaximumTypefaces)
-            {
-                var victim = _faces.MinBy(p => p.Value.Used);
-                _font.Typeface = SKTypeface.Default; _faces.Remove(victim.Key);
-                if (victim.Value.Owned && !_faces.Values.Any(other => ReferenceEquals(other.Value, victim.Value.Value))) victim.Value.Value.Dispose();
-            }
-            using var requested = new SKFontStyle(style.Bold ? SKFontStyleWeight.Bold : SKFontStyleWeight.Normal,
-                SKFontStyleWidth.Normal, style.Italic ? SKFontStyleSlant.Italic : SKFontStyleSlant.Upright);
-            var value = SKTypeface.FromFamilyName(style.FontFamily.Length == 0 ? null : style.FontFamily, requested) ?? SKTypeface.Default;
-            _faces.Add(key, face = new(value, ++_identity, !ReferenceEquals(value, SKTypeface.Default)));
-        }
-        face.Used = ++_clock; _font.Typeface = face.Value; _font.Size = (float)layout.FontSize;
-        // Some hosts only have a regular face. Synthetic style is explicit and
-        // applied to both native measurements and the retained glyph run.
-        _font.Embolden = style.Bold && !face.Value.IsBold;
-        _font.SkewX = style.Italic && !face.Value.IsItalic ? -.2f : 0;
+        var face = ConfigureFont(style, layout.FontSize);
         var fm = _font.Metrics;
         var metrics = new PanelFontMetrics(fm.Ascent, fm.Descent);
         if (!_panels.TryGetValue(id, out var entry))
@@ -126,6 +107,43 @@ public sealed class PanelTypographyRenderer : IDisposable
         finally { canvas.Restore(); }
         entry.Source = source;
         return entry.Rendered;
+    }
+    /// <summary>Resolve the same native font used by Draw before selecting the
+    /// visible item window. No glyphs, placements or completed-paint stamps are
+    /// published by measurement alone. Warm calls reuse the bounded face cache.</summary>
+    public PanelFontMetrics GetFontMetrics(PanelTextStyle style, double size)
+    {
+        ConfigureFont(style, size);
+        var fm = _font.Metrics;
+        return new(fm.Ascent, fm.Descent);
+    }
+    private Face ConfigureFont(PanelTextStyle style, double size)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        ArgumentNullException.ThrowIfNull(style);
+        if (!double.IsFinite(size) || size <= 0 || size > 1024)
+            throw new ArgumentOutOfRangeException(nameof(size));
+        if (!ReferenceEquals(_validatedStyle, style)) { style.Validate(); _validatedStyle = style; }
+        var key = new FaceKey(style.FontFamily, style.Bold, style.Italic);
+        if (!_faces.TryGetValue(key, out var face))
+        {
+            if (_faces.Count == MaximumTypefaces)
+            {
+                var victim = _faces.MinBy(p => p.Value.Used);
+                _font.Typeface = SKTypeface.Default; _faces.Remove(victim.Key);
+                if (victim.Value.Owned && !_faces.Values.Any(other => ReferenceEquals(other.Value, victim.Value.Value))) victim.Value.Value.Dispose();
+            }
+            using var requested = new SKFontStyle(style.Bold ? SKFontStyleWeight.Bold : SKFontStyleWeight.Normal,
+                SKFontStyleWidth.Normal, style.Italic ? SKFontStyleSlant.Italic : SKFontStyleSlant.Upright);
+            var value = SKTypeface.FromFamilyName(style.FontFamily.Length == 0 ? null : style.FontFamily, requested) ?? SKTypeface.Default;
+            _faces.Add(key, face = new(value, ++_identity, !ReferenceEquals(value, SKTypeface.Default)));
+        }
+        face.Used = ++_clock; _font.Typeface = face.Value; _font.Size = (float)size;
+        // Some hosts only have a regular face. Synthetic style is explicit and
+        // applied to both native measurements and the retained glyph run.
+        _font.Embolden = style.Bold && !face.Value.IsBold;
+        _font.SkewX = style.Italic && !face.Value.IsItalic ? -.2f : 0;
+        return face;
     }
     public void Dispose()
     {

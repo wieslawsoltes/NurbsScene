@@ -59,7 +59,7 @@ public sealed partial class GraphCanvas
     public event Action<string>? PanelTypographyRequested;
     public PanelRenderedTypography? RenderedTypography(string id) => _panelTypography.Observe(id);
     private PanelPaintStamp TypographySource(GraphNode node, NodeResult? result) => new(_session!.Graph, node, result,
-        _zoom, _panelResize?.NodeId == node.Id ? _panelResize.Bounds : PanelLayout.Bounds(node));
+        _zoom, _panelResize?.NodeId == node.Id ? _panelResize.Bounds : PanelLayout.Bounds(node)) { ScrollOffset = PanelOffset(node.Id) };
     public bool TypographyIsCurrent(string id)
     {
         if (_session is null || !_session.Graph.TryGetNode(id, out var node) || node.Component is not ("Panel" or "Text")) return false;

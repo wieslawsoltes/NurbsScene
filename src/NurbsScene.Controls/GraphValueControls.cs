@@ -9,7 +9,7 @@ namespace NurbsScene.Controls;
 
 public sealed partial class GraphCanvas
 {
-    private readonly Dictionary<string, PanelPreviewCache> _panelPreviews = [];
+    private readonly Dictionary<string, PanelWindowCache> _panelWindows = [];
     private readonly Dictionary<string, PanelDisplayLayout> _panelDisplayLayouts = [];
     public PanelDisplayLayout? PanelDrawing(string id) => _panelDisplayLayouts.TryGetValue(id, out var layout) && layout.Readable ? layout : null;
     public long ValuePreviewBuilds { get; private set; }
@@ -37,13 +37,8 @@ public sealed partial class GraphCanvas
         var style = PanelTextStyle.For(node);
         var layout = PanelDisplayLayout.Create(new(rect.Left, rect.Top, rect.Width, rect.Height), _zoom, style.Size);
         _panelDisplayLayouts[node.Id] = layout;
-        if (!layout.Readable) { _panelTypography.Forget(node.Id); return; }
-        if (!_panelPreviews.TryGetValue(node.Id, out var cache)) _panelPreviews[node.Id] = cache = new();
-        var builds = cache.BuildCount; var preview = cache.Get(node, result, layout.Rows, layout.Columns); ValuePreviewBuilds += cache.BuildCount - builds;
-        var font = (float)layout.FontSize;
-        Text(canvas, node.Name ?? (node.Component == "Text" ? "Text" : "Panel"), rect.Left + 8, rect.Top + (float)layout.HeadingBaseline, new(94,92,54), font);
-        var drawn = _panelTypography.Draw(canvas, node.Id, preview, style, rect, layout, TypographySource(node, result));
-        Text(canvas, drawn.Placement.Clipped && !preview.Truncated ? preview.Footer + " · …" : preview.Footer, rect.Left + 8, rect.Bottom - (float)layout.FooterInset, new(112,105,69), font * .9f);
+        if (!layout.Readable) { _panelTypography.Forget(node.Id); _panelScrollbars.Remove(node.Id); return; }
+        DrawScrollingPanel(canvas, node, rect, result, style, layout);
     }
 }
 
