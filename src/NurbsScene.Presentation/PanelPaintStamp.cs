@@ -8,7 +8,8 @@ namespace NurbsScene.Presentation;
 public readonly record struct PanelPaintStamp(Graph Owner, GraphNode Node, NodeResult? Result,
     double Zoom, CanvasBox Bounds)
 {
+    public int ScrollOffset { get; init; }
     public bool Matches(PanelPaintStamp other) => ReferenceEquals(Owner, other.Owner) &&
         ReferenceEquals(Node, other.Node) && ReferenceEquals(Result, other.Result) &&
-        Zoom == other.Zoom && Bounds == other.Bounds;
+        Zoom == other.Zoom && Bounds == other.Bounds && ScrollOffset == other.ScrollOffset;
 }
