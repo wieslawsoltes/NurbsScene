@@ -62,16 +62,16 @@ class QualificationContracts(unittest.TestCase):
             self.collect()
         self.assertFalse(self.output.exists(), "A partial acceptance aggregate must not be published")
 
-    def test_all_eight_campaigns_aggregate_without_losing_assertions(self):
+    def test_all_nine_campaigns_aggregate_without_losing_assertions(self):
         result = self.collect()
-        self.assertEqual(len(result["checks"]), 271)
+        self.assertEqual(len(result["checks"]), 291)
         self.assertEqual([r["campaign"] for r in result["campaigns"]], self.names)
-        self.assertEqual(result["modelingChecksPerCampaign"], [29] * 8)
-        self.assertEqual(len(list((self.output / "campaigns").glob("*/uno-ui.json"))), 8)
+        self.assertEqual(result["modelingChecksPerCampaign"], [29] * 9)
+        self.assertEqual(len(list((self.output / "campaigns").glob("*/uno-ui.json"))), 9)
         self.assertEqual(GATE.read_json(self.output / "uno-publication.json"), self.manifest)
 
     def test_original_campaign_registry_remains_mandatory(self):
-        self.assertEqual(self.names, ["workspace", "inputs-sliders", "panels", "panel-edges", "ellipse-loft", "panel-display", "typography", "pointer-selection"])
+        self.assertEqual(self.names, ["workspace", "inputs-sliders", "panels", "panel-edges", "ellipse-loft", "panel-display", "typography", "pointer-selection", "panel-scrolling"])
         self.assertEqual(self.registry["minimumModelingChecks"], 29)
 
     def test_hidden_site_files_are_part_of_exact_content_verification(self):
