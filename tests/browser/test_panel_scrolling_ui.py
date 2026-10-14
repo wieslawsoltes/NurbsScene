@@ -51,7 +51,9 @@ async def verify_panel_scrolling_ui(page):
         return c['x']+bar['X']+bar['Width']/2, c['y']+bar['Y']+bar['Height']*fraction
     await page.mouse.dblclick(*(await title()), delay=80)
     await wait_for_ui(page, 'value.values.editorOpen'); await click('PanelTextInput', editor=True)
-    await wait_for_ui(page, 'value.controls.PanelTextInput.focused')
+    editing = await wait_for_ui(page, 'value.controls.PanelTextInput.focused')
+    check(not editing['controls']['GraphCanvas']['focused'] and editing['state']['graphFocus']=='Unfocused',
+          'A focused text editor does not falsely report its graph canvas as focused')
     await page.keyboard.press('Control+A')
     text = '\n'.join('item-'+str(i).zfill(6) for i in range(60))
     await page.keyboard.insert_text(text); before = await read_ui(page); await click('PanelTextApply')
@@ -65,7 +67,9 @@ async def verify_panel_scrolling_ui(page):
     baseline = {k:d['state'][k] for k in ('graphRevision','graphPathBuilds','graphErrors')}
     solved = d['values']['solvedRevision']; indexes = d['values']['panelIndexBuilds']
     check(d['state']['graphRedo'], 'Undo establishes real redo history before scrollbar interaction')
-    await wait_for_ui(page, 'value.controls.GraphCanvas.focused')
+    focused = await wait_for_ui(page, 'value.controls.GraphCanvas.focused')
+    check(focused['state']['graphFocus']!='Unfocused' and focused['state']['focusedElement']=='NurbsScene.Controls.GraphCanvas',
+          'Canvas focus observation agrees with native focus state and root-local identity')
     d = await scroll_key('End'); p = panel(d)
     check(p['scroll']['Offset']==p['scroll']['Maximum'] and p['drawnLines'][-1]=='item-000059',
           'End reaches the final authoritative item without blank overscroll')

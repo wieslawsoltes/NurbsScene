@@ -64,7 +64,7 @@ class QualificationContracts(unittest.TestCase):
 
     def test_all_nine_campaigns_aggregate_without_losing_assertions(self):
         result = self.collect()
-        self.assertEqual(len(result["checks"]), 291)
+        self.assertEqual(len(result["checks"]), 293)
         self.assertEqual([r["campaign"] for r in result["campaigns"]], self.names)
         self.assertEqual(result["modelingChecksPerCampaign"], [29] * 9)
         self.assertEqual(len(list((self.output / "campaigns").glob("*/uno-ui.json"))), 9)

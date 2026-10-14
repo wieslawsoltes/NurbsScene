@@ -36,7 +36,7 @@
     },
     {
       "name": "panel-scrolling",
-      "minimumUiChecks": 20
+      "minimumUiChecks": 22
     }
   ]
 }
