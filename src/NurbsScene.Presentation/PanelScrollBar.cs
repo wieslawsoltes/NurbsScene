@@ -8,11 +8,14 @@ public readonly record struct PanelScrollBar(CanvasBox Track, CanvasBox Grip, in
     {
         ArgumentNullException.ThrowIfNull(window);
         if (!double.IsFinite(track.X) || !double.IsFinite(track.Y) || !double.IsFinite(track.Width) || !double.IsFinite(track.Height) ||
-            track.Width <= 0 || track.Height <= 0 || !double.IsFinite(minimumGrip) || minimumGrip <= 0 ||
+            track.Width <= 0 || track.Height <= 0 || !double.IsFinite(track.X + track.Width) || !double.IsFinite(track.Y + track.Height) ||
+            !double.IsFinite(minimumGrip) || minimumGrip <= 0 ||
             window.First < 0 || window.MaximumOffset < window.First || window.Total < 0 || window.Visible < 0 || window.Visible > window.Total)
             throw new ArgumentException("Invalid scrollbar geometry or item window.");
-        var height = Math.Clamp(track.Height * window.Visible / Math.Max(1, window.Total), Math.Min(minimumGrip, track.Height), track.Height);
-        var y = track.Y + (track.Height - height) * window.First / Math.Max(1, window.MaximumOffset);
+        // Form bounded fractions before scaling: finite extreme tracks must not
+        // overflow intermediate products and fabricate a full-height grip.
+        var height = Math.Clamp(track.Height * (window.Visible / (double)Math.Max(1, window.Total)), Math.Min(minimumGrip, track.Height), track.Height);
+        var y = track.Y + (track.Height - height) * (window.First / (double)Math.Max(1, window.MaximumOffset));
         return new(track, new(track.X, y, track.Width, height), window.First, window.MaximumOffset);
     }
     public int Drag(double pointerY, double grabOffset)

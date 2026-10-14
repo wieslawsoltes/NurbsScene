@@ -32,6 +32,20 @@ internal static class PanelWindowLayoutContracts
             Throws<ArgumentException>(() => PanelWindowLayout.RowBudget(300,layout with { Rows = 0 },new(-10,2)));
             Check(PanelWindowLayout.RowBudget(double.MaxValue,layout,new(-10,2))==layout.Rows);
         });
+        Test("finite extreme scroll tracks preserve proportional grip and offset", () => {
+            var height = double.MaxValue / 2;
+            var window = new PanelWindow(new([], ""), 40, 10, 100, 90);
+            var bar = PanelScrollBar.Create(new(0,0,10,height),window,12);
+            Check(Math.Abs(bar.Grip.Height / height - .1) < 1e-15);
+            Check(Math.Abs(bar.Grip.Y / height - .4) < 1e-15);
+            Check(bar.Drag(bar.Grip.Y + bar.Grip.Height / 2,bar.Grip.Height / 2)==40);
+            Check(bar.Drag(double.MaxValue,0)==90 && bar.Drag(-double.MaxValue,0)==0);
+        });
+        Test("scroll tracks reject unrepresentable finite endpoint sums", () => {
+            var window = new PanelWindow(new([], ""), 40, 10, 100, 90);
+            Throws<ArgumentException>(() => PanelScrollBar.Create(new(double.MaxValue,0,double.MaxValue,100),window,12));
+            Throws<ArgumentException>(() => PanelScrollBar.Create(new(0,double.MaxValue,10,double.MaxValue),window,12));
+        });
         Test("window index survives new result identity sharing the same immutable tree", () => {
             var tree = Items(1000); var c = new PanelWindowCache();
             c.Get(node, Result(tree), 8, 24, 600); var next = c.Get(node, Result(tree), 8, 24, 601);

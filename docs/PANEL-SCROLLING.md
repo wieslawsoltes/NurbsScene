@@ -57,10 +57,15 @@ The inherited 100,000-branch index-versus-linear lookup harness retains raw samp
 and the source revision. It measures CPU record lookup, not total application
 throughput, physical GPU performance, FPS or a pre-release renderer comparison.
 
+The standalone scrollbar geometry also computes bounded ratios before scaling,
+so finite extreme track sizes cannot overflow intermediate products into a
+false full-height grip. Unrepresentable endpoint sums reject explicitly. Two
+additional contracts cover proportionality, drag saturation and endpoint rejection.
+
 ## Acceptance
 
 The final source must pass its own 23 workflows, desktop/WebAssembly builds,
-19 managed scrolling contracts, 22 native typography/raster contracts, 32 observer
+21 managed scrolling contracts, 22 native typography/raster contracts, 32 observer
 contracts, 26 artifact-gate contracts and all nine real-input campaigns. Scrolling
 adds 19 native assertions plus session restoration, for a combined 291 input
 assertions. Repeated modeling/framebuffer checks are not additional product
