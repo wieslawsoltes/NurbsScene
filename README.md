@@ -59,11 +59,11 @@ Shift-drag follows 45-degree guides; Control+right-drag zooms about its starting
 point. Escape cancels a selection, move or navigation draft. See
 [canvas navigation and input](docs/CANVAS-NAVIGATION-AND-HIT-TESTING.md).
 
-Panels support multiline text, connected data, all-edge resizing, persistent
+Panels support multiline text, connected data, virtualized item scrolling, all-edge resizing, persistent
 path/index/wrap options, and a native typography dialog (context menu or
 Ctrl+double-click). Font/style/alignment are display-only metadata; bounded native
 text caches reuse glyphs and measurements. See [typography](docs/PANEL-TYPOGRAPHY.md)
-and [Unicode/display options](docs/PANEL-DISPLAY-AND-TEXT-REVIEW.md) for limits.
+[item scrolling](docs/PANEL-SCROLLING.md), and [Unicode/display options](docs/PANEL-DISPLAY-AND-TEXT-REVIEW.md) for limits.
 
 Curves/surfaces retain homogeneous controls and knots; display meshes never replace
 the modeling representation. Modeling includes rational ellipses, interpolation,

@@ -74,8 +74,8 @@ public sealed partial class GraphCanvas : SKCanvasElement,IDisposable
                 {_wirePaths[id].Path.Dispose();_wirePaths.Remove(id);}
             }
             if(_panelDisplayLayouts.Count>0)
-                foreach(var id in _panelDisplayLayouts.Keys.Where(id=>!_layouts.ContainsKey(id)).ToArray())
-                {_panelPreviews.Remove(id);_panelDisplayLayouts.Remove(id);_panelTypography.Forget(id);}
+                foreach(var id in _panelDisplayLayouts.Keys.Where(id=>!_layouts.TryGetValue(id,out var live)||live.Node.Component is not ("Panel" or "Text")).ToArray())
+                {ForgetPanelPresentation(id);}
             _drawing=next;
         }
         return next;
@@ -83,7 +83,7 @@ public sealed partial class GraphCanvas : SKCanvasElement,IDisposable
     public GraphSession? Session
     {
         get=>_session;
-        set{CancelGesture();ReleasePointerCaptures();Unsubscribe();_panelTypography.Clear();_session=value;Subscribe();_selection.Clear();SelectionChanged?.Invoke();Invalidate();}
+        set{ObjectDisposedException.ThrowIf(_canvasDisposed,this);CancelGesture();ReleasePointerCaptures();Unsubscribe();ClearPanelPresentation();_session=value;Subscribe();_selection.Clear();SelectionChanged?.Invoke();Invalidate();}
     }
     public IReadOnlySet<string> Selection=>new HashSet<string>(_selection);
     public int SelectionCount=>_selection.Count;
@@ -105,24 +105,25 @@ public sealed partial class GraphCanvas : SKCanvasElement,IDisposable
     public GraphCanvas()
     {
         IsTabStop=true;
-        Loaded+=(_,_)=>Subscribe();Unloaded+=(_,_)=>{CancelGesture();ReleasePointerCaptures();Unsubscribe();_panelTypography.Clear();};SizeChanged+=(_,_)=>Invalidate();
+        Loaded+=(_,_)=>Subscribe();Unloaded+=(_,_)=>{CancelGesture();ReleasePointerCaptures();Unsubscribe();ClearPanelPresentation();};SizeChanged+=(_,_)=>Invalidate();
         InitializePointerInput();
         RightTapped+=(_,e)=>e.Handled=true;
         PointerWheelChanged+=(_,e)=>
         {
-            e.Handled=true;if(_activePointerId is not null)return;
+            e.Handled=true;if(_activePointerId is not null||TryPanelWheel(e))return;
             var point=e.GetCurrentPoint(this);
             try { ApplyNavigation(GraphCanvasNavigation.ZoomBy(NavigationView,new(point.Position.X,point.Position.Y),point.Properties.MouseWheelDelta*.001)); }
             catch(ArgumentOutOfRangeException error) { Message?.Invoke(error.Message); }
         };
         DoubleTapped+=OnCanvasDoubleTapped;
-        KeyDown+=(_,e)=>{if(e.Key==VirtualKey.Delete){DeleteSelected();e.Handled=true;}else if(e.Key==VirtualKey.Escape){CancelGesture();ReleasePointerCaptures();e.Handled=true;}else if(e.Key==VirtualKey.F){Fit();e.Handled=true;}else if(e.Key==VirtualKey.Space){SearchRequested?.Invoke();e.Handled=true;}};
+        KeyDown+=(_,e)=>{if(TryPanelScrollKey(e.Key)){e.Handled=true;}else if(e.Key==VirtualKey.Delete){DeleteSelected();e.Handled=true;}else if(e.Key==VirtualKey.Escape){CancelGesture();ReleasePointerCaptures();e.Handled=true;}else if(e.Key==VirtualKey.F){Fit();e.Handled=true;}else if(e.Key==VirtualKey.Space){SearchRequested?.Invoke();e.Handled=true;}};
     }
-    private void Subscribe(){if(_subscribed||_session is null)return;_subscribed=true;_session.Replaced+=Replaced;_graph=_session.Graph;_graph.Changed+=GraphChanged;_graph.Solved+=Solved;}
+    private void Subscribe(){if(_canvasDisposed||_subscribed||_session is null)return;_subscribed=true;_session.Replaced+=Replaced;_graph=_session.Graph;_graph.Changed+=GraphChanged;_graph.Solved+=Solved;}
     private void Unsubscribe(){if(!_subscribed)return;_subscribed=false;if(_session is not null)_session.Replaced-=Replaced;if(_graph is not null){_graph.Changed-=GraphChanged;_graph.Solved-=Solved;}_graph=null;}
-    private void Replaced(){_panelTypography.Clear();ClearPanelResize();_before=null;_gesture="";_wire=null;_slider=null;ClearPointerDrafts();ReleasePointerCaptures();if(_graph is not null){_graph.Changed-=GraphChanged;_graph.Solved-=Solved;}_graph=_session!.Graph;_graph.Changed+=GraphChanged;_graph.Solved+=Solved;_selection.IntersectWith(_graph.Nodes.Select(n=>n.Id));SelectionChanged?.Invoke();Invalidate();}
+    private void Replaced(){ClearPanelPresentation();ClearPanelResize();_before=null;_gesture="";_wire=null;_slider=null;ClearPointerDrafts();ReleasePointerCaptures();if(_graph is not null){_graph.Changed-=GraphChanged;_graph.Solved-=Solved;}_graph=_session!.Graph;_graph.Changed+=GraphChanged;_graph.Solved+=Solved;_selection.IntersectWith(_graph.Nodes.Select(n=>n.Id));SelectionChanged?.Invoke();Invalidate();}
     private void GraphChanged()
     {
+        CancelStalePanelScroll();
         if ((_gesture is "nodes" or "slider") && !_applyingPointerEdit)
             AbandonStalePointerEdit();
         // Dropping a stale resize draft never rolls back independent host edits.
@@ -134,7 +135,7 @@ public sealed partial class GraphCanvas : SKCanvasElement,IDisposable
         if(_session is not null&&_selection.Count>0){var count=_selection.Count;_selection.IntersectWith(Drawing().Nodes.Select(n=>n.Node.Id));if(count!=_selection.Count)SelectionChanged?.Invoke();}
         Invalidate();
     }
-    private void Solved(GraphResult result)=>Invalidate();
+    private void Solved(GraphResult result){CancelStalePanelScroll();Invalidate();}
     private Point World(Point point)=>new((point.X-_panX)/_zoom,(point.Y-_panY)/_zoom);
     private PresentedNode Layout(GraphNode node){Drawing();return _layouts[node.Id];}
     private SKRect Rect(GraphNode node){var b=Layout(node).Bounds;return new((float)b.X,(float)b.Y,(float)(b.X+b.Width),(float)(b.Y+b.Height));}
@@ -246,5 +247,6 @@ public sealed partial class GraphCanvas : SKCanvasElement,IDisposable
         if(!float.IsFinite(zoom)||!float.IsFinite(panX)||!float.IsFinite(panY)){Message?.Invoke("Definition coordinates exceed the canvas rendering range. The previous view was retained.");return;}
         _zoom=zoom;_panX=panX;_panY=panY;ViewChanged?.Invoke();Invalidate();
     }
-    public void Dispose(){CancelGesture();ReleasePointerCaptures();_panelTypography.Dispose();ClearPanelResize();_panelPreviews.Clear();_panelDisplayLayouts.Clear();Unsubscribe();foreach(var path in _wirePaths.Values)path.Path.Dispose();_wirePaths.Clear();_paths.Clear();_treeDash.Dispose();_font.Dispose();_paint.Dispose();}
+    private bool _canvasDisposed;
+    public void Dispose(){if(_canvasDisposed)return;_canvasDisposed=true;CancelGesture();ReleasePointerCaptures();ClearPanelPresentation();_panelTypography.Dispose();ClearPanelResize();Unsubscribe();foreach(var path in _wirePaths.Values)path.Path.Dispose();_wirePaths.Clear();_paths.Clear();_treeDash.Dispose();_font.Dispose();_paint.Dispose();}
 }

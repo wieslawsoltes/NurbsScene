@@ -1,0 +1,32 @@
+name: Panel item scrolling and indexed lookup contracts
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  panel-scrolling:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      DOTNET_TieredCompilation: '0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - name: Item windows, scrollbar geometry, lifecycle and CPU lookup comparison
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts/panel-scrolling
+          dotnet run --project tests/dotnet/NurbsScene.PanelScrollingContracts -c Release -- artifacts/panel-scrolling/lookup.json 2>&1 | tee artifacts/panel-scrolling/contracts.log
+          git rev-parse HEAD HEAD^{tree} > artifacts/panel-scrolling/tested-revision.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: panel-scrolling-${{ github.run_id }}
+          path: artifacts/panel-scrolling/

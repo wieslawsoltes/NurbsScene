@@ -35,6 +35,11 @@ public partial class App
             {
                 if(Uno.Foundation.WebAssemblyRuntime.InvokeJS("globalThis.nurbsSceneUiFinish === true ? 'yes' : 'no'")=="yes")break;
                 var controls=new Dictionary<string,object>();double? sliderInspectorValue=null;
+                // Canvas elements derive from FrameworkElement, not Control.
+                // Read the root-local focus owner once for the complete sample;
+                // do not infer focus from selection or dispatch Focus() here.
+                // https://learn.microsoft.com/en-us/windows/windows-app-sdk/api/winrt/microsoft.ui.xaml.input.focusmanager.getfocusedelement
+                var focusedElement=view.XamlRoot is{} root?Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(root):null;
                 object Box(FrameworkElement element)
                 {
                     var p=element.TransformToVisual(view).TransformPoint(new(0,0));
@@ -45,7 +50,7 @@ public partial class App
                         ? textBox.Text : null;
                     if(draft?.Length>256)draft=draft[..256];
                     return new{x=p.X,y=p.Y,width=element.ActualWidth,height=element.ActualHeight,enabled=element is not Control c||c.IsEnabled,
-                        focused=element is Control input&&input.FocusState!=FocusState.Unfocused,text=draft};
+                        focused=(element is Control input&&input.FocusState!=FocusState.Unfocused)||ReferenceEquals(element,focusedElement),text=draft};
                 }
                 void Visit(DependencyObject value)
                 {
@@ -105,7 +110,7 @@ public partial class App
                     objects=controller.Document.Objects.Count,layers=controller.Document.Layers.Count,
                     selected=controller.Document.Selection.Count,documentRevision=controller.Document.Revision,
                     nodeCount=controller.Graph.Nodes.Count,wireCount=controller.Graph.Wires.Count,graphRevision=controller.Graph.Revision,
-                    graphFocus=graph.FocusState.ToString(),focusedElement=view.XamlRoot is{} root?Microsoft.UI.Xaml.Input.FocusManager.GetFocusedElement(root)?.GetType().FullName:null,
+                    graphFocus=graph.FocusState.ToString(),focusedElement=focusedElement?.GetType().FullName,
                     pointerObservations=graph.PointerObservations,
                     graphSelected=graph.Selection.ToArray(),graphUndo=controller.GraphSession.CanUndo,graphRedo=controller.GraphSession.CanRedo,
                     graphErrors=controller.Graph.LastResult?.ErrorCount??0,graphLayoutBuilds=graph.LayoutBuilds,graphPathBuilds=graph.PathBuilds,

@@ -4,6 +4,7 @@
     <ProjectReference Include="../../../src/NurbsScene.Presentation/NurbsScene.Presentation.csproj"/>
     <PackageReference Include="SkiaSharp" Version="3.119.2"/>
     <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="3.119.2"/>
+    <Compile Include="../../../src/NurbsScene.Controls/PanelWindowRenderer.cs" Link="PanelWindowRenderer.cs"/>
     <Compile Include="../../../src/NurbsScene.Controls/PanelTypographyRenderer.cs" Link="PanelTypographyRenderer.cs"/>
   </ItemGroup>
 </Project>

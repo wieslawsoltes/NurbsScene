@@ -2,13 +2,41 @@
   "schema": 1,
   "minimumModelingChecks": 29,
   "campaigns": [
-    {"name": "workspace", "minimumUiChecks": 45},
-    {"name": "inputs-sliders", "minimumUiChecks": 31},
-    {"name": "panels", "minimumUiChecks": 35},
-    {"name": "panel-edges", "minimumUiChecks": 43},
-    {"name": "ellipse-loft", "minimumUiChecks": 29},
-    {"name": "panel-display", "minimumUiChecks": 14},
-    {"name": "typography", "minimumUiChecks": 35},
-    {"name": "pointer-selection", "minimumUiChecks": 39}
+    {
+      "name": "workspace",
+      "minimumUiChecks": 45
+    },
+    {
+      "name": "inputs-sliders",
+      "minimumUiChecks": 31
+    },
+    {
+      "name": "panels",
+      "minimumUiChecks": 35
+    },
+    {
+      "name": "panel-edges",
+      "minimumUiChecks": 43
+    },
+    {
+      "name": "ellipse-loft",
+      "minimumUiChecks": 29
+    },
+    {
+      "name": "panel-display",
+      "minimumUiChecks": 14
+    },
+    {
+      "name": "typography",
+      "minimumUiChecks": 35
+    },
+    {
+      "name": "pointer-selection",
+      "minimumUiChecks": 39
+    },
+    {
+      "name": "panel-scrolling",
+      "minimumUiChecks": 22
+    }
   ]
 }

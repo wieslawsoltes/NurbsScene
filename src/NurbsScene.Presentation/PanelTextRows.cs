@@ -12,6 +12,8 @@ internal sealed class PanelTextRows(int rows, int columns, bool wrap)
     private readonly ImmutableArray<string>.Builder _lines = ImmutableArray.CreateBuilder<string>(rows);
     private readonly StringBuilder _line = new(Math.Max(16, columns));
     private int _scanned, _count, _lastElementStart;
+    public int Count => _lines.Count;
+    public int ScannedCodeUnits => _scanned;
     public bool Truncated { get; private set; }
     public bool IsFull => _lines.Count == rows || _scanned == PanelPreviewCache.MaximumScannedCodeUnits;
     public void Truncate() => Truncated = true;

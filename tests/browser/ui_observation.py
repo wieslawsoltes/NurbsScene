@@ -7,6 +7,7 @@ is dispatched, model mutated, timeout extended, or failed campaign retried here.
 """
 from typing import Any
 import math
+import json
 
 # Preserve PR10's published readiness predicate and helper name for callers.
 READY_EXPRESSION = """(() => {
@@ -69,6 +70,24 @@ def solution_condition(*, editor_closed: bool = False, after_revision: int | Non
         expression += " && value.values.editorPending === false"
     if after_revision is not None:
         expression += " && value.state.graphRevision > " + str(after_revision)
+    return expression
+
+
+def scroll_condition(panel_id: str, *, after_sequence: int | None = None, active: bool | None = None) -> str:
+    """Acknowledge actual native input and its completed paint, not desired rows
+    or offsets. No-op/clamped input is still acknowledged and can be asserted."""
+    if not isinstance(panel_id, str) or not panel_id:
+        raise ValueError("A panel identity is required")
+    if after_sequence is not None and (type(after_sequence) is not int or not 0 <= after_sequence < 2**53):
+        raise ValueError("An exact nonnegative input sequence is required")
+    if active is not None and type(active) is not bool:
+        raise ValueError("A Boolean capture constraint is required")
+    expression = solution_condition(editor_closed=True)
+    if after_sequence is not None:
+        expression += " && Number.isSafeInteger(value.values.panelScrollSequence) && value.values.panelScrollSequence > " + str(after_sequence)
+    if active is not None:
+        expression += " && value.values.panelScrollActive === " + ("true" if active else "false")
+    expression += " && !!value.typography && value.typography.panels.some(p=>p.id===" + json.dumps(panel_id) + " && p.current)"
     return expression
 
 
