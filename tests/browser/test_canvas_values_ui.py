@@ -3,11 +3,12 @@ Uses only native pointer/keyboard input; read hooks are bounded observations.
 """
 import json
 from pathlib import Path
-from ui_observation import settle, wait_for_ui, read_ui
+from ui_observation import settle, wait_for_ui, read_ui, wait_for_solved_ui
 ROOT=Path(__file__).resolve().parents[2]
 
 async def verify_canvas_values_ui(page):
     checks=[]
+    last_panel_snapshot=None
     async def read():
         return await read_ui(page)
     async def wait(expr):
@@ -21,7 +22,16 @@ async def verify_canvas_values_ui(page):
     async def undo():
         await click('GraphUndo');await click('GraphFit');return await settle(page)
     async def node(identity):return next(n for n in (await read())['nodes'] if n['id']==identity)
-    async def panel(identity):return next(n for n in (await read())['values']['panels'] if n['id']==identity)
+    async def panel(identity):
+        nonlocal last_panel_snapshot
+        last_panel_snapshot=await wait_for_solved_ui(page,editor_closed=True)
+        return next(n for n in last_panel_snapshot['values']['panels'] if n['id']==identity)
+    async def apply_text():
+        nonlocal last_panel_snapshot
+        before=await read()
+        await click('PanelTextApply')
+        last_panel_snapshot=await wait_for_solved_ui(page,editor_closed=True,after_revision=before['state']['graphRevision'])
+        return last_panel_snapshot
     def check(value,name):
         if not value:raise AssertionError(name)
         checks.append(name);print('CANVAS CHECK '+name,flush=True)
@@ -56,12 +66,12 @@ async def verify_canvas_values_ui(page):
         n=await create('//seed');pid=n['id'];p=await panel(pid)
         check(n['component']=='Panel' and p['items']==['seed'],'Text shorthand creates a typed, evaluated data panel')
         await open_text(pid);await text('PanelTextInput','one\ntwo\n');await page.screenshot(path=str(ROOT/'evidence/uno-text-panel-dialog.png'))
-        await click('PanelTextApply');await wait('!globalThis.nurbsSceneUi.values.editorOpen');p=await panel(pid)
+        await apply_text();p=await panel(pid)
         check(p['items']==['one','two',''] and p['itemCount']==3,'Native text editor preserves line items and the trailing empty row')
         await open_text(pid);revision=(await read())['state']['graphRevision'];await text('PanelTextInput','discard this')
         await click('PanelTextCancel');d=await wait('!globalThis.nurbsSceneUi.values.editorOpen')
         check(d['state']['graphRevision']==revision and (await panel(pid))['items']==['one','two',''],'Cancelling panel text editing preserves graph and output')
-        await open_text(pid);await click('PanelSingleItem');await click('PanelTextApply');await wait('!globalThis.nurbsSceneUi.values.editorOpen')
+        await open_text(pid);await click('PanelSingleItem');await apply_text()
         check((await panel(pid))['items']==['one\ntwo\n'],'Single-item mode retains multiline text in one typed item')
         await undo();check((await panel(pid))['itemCount']==3,'Panel mode is a single independently undoable edit')
         await undo();check((await panel(pid))['items']==['seed'],'Panel text has one independent undo record')
@@ -88,5 +98,5 @@ async def verify_canvas_values_ui(page):
               'New canvas workflows restore the original definition with no graph or GPU error')
         (ROOT/'evidence/uno-canvas-values-ui.json').write_text(json.dumps({'status':'passed','checks':checks,'final':final['state']},indent=2))
     except Exception as error:
-        (ROOT/'evidence/uno-canvas-values-ui.json').write_text(json.dumps({'status':'failed','checks':checks,'error':str(error),'observed':await page.evaluate('globalThis.nurbsSceneUi')},indent=2));raise
+        (ROOT/'evidence/uno-canvas-values-ui.json').write_text(json.dumps({'status':'failed','checks':checks,'error':str(error),'assertedPanelSnapshot':last_panel_snapshot,'observed':await page.evaluate('globalThis.nurbsSceneUi')},indent=2));raise
     return checks

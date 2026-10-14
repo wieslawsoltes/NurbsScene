@@ -232,6 +232,90 @@ async def verify_pointer_ui(page):
     await page.mouse.up()
     await original_positions()
     check(True, 'Zoom extents cancels an active draft before changing the canvas transform')
+    # View gestures are isolated from graph edits and operate about the real
+    # pointer-down anchor. Bounds are observed, never set by the test.
+    await click_control('GraphFit')
+    navigation_start = await read_ui(page)
+    box = navigation_start['controls']['GraphCanvas']
+    anchor = (box['x'] + box['width'] * .65, box['y'] + box['height'] * .55)
+    original_width = await width_node()
+    history = {key: navigation_start['state'][key] for key in
+               ('graphRevision', 'graphUndo', 'graphRedo', 'graphPathBuilds', 'graphLayoutBuilds', 'meshBuilds')}
+    previous_selection = selected(navigation_start)
+    await page.keyboard.down('Control')
+    await page.mouse.move(*anchor)
+    await page.mouse.down(button='right')
+    await page.mouse.move(anchor[0], anchor[1] - 55, steps=8)
+    await settle(page)
+    zoomed = await width_node()
+    check(zoomed['width'] > original_width['width'], 'Ctrl+right-drag upward zooms the actual canvas')
+    ratio = zoomed['width'] / original_width['width']
+    check(abs(zoomed['x'] - (anchor[0] - (anchor[0] - original_width['x']) * ratio)) < .05
+          and abs(zoomed['y'] - (anchor[1] - (anchor[1] - original_width['y']) * ratio)) < .05,
+          'Right-drag zoom keeps the original world point under its pointer-down anchor')
+    await page.screenshot(path=str(ROOT / 'evidence/uno-pointer-navigation.png'))
+    await page.keyboard.up('Control')
+    await page.mouse.move(anchor[0] + 20, anchor[1] - 55)
+    await page.mouse.up(button='right')
+    after_zoom = await settle(page)
+    committed = await width_node()
+    check(all(abs(committed[k] - zoomed[k]) < 1e-6 for k in ('x', 'y', 'width'))
+          and not after_zoom['state']['contextMenuOpen'],
+          'Captured zoom does not turn into panning or open a context menu after Control is released')
+    check(selected(after_zoom) == previous_selection and positions(after_zoom) == initial_positions
+          and all(after_zoom['state'][key] == value for key, value in history.items()),
+          'Navigation preserves selection, graph history, numerical meshes and native wire paths')
+
+    await click_control('GraphFit')
+    original_width = await width_node()
+    await page.keyboard.down('Control')
+    await page.mouse.move(*anchor)
+    await page.mouse.down(button='right')
+    await page.mouse.move(anchor[0], anchor[1] - 50, steps=5)
+    await settle(page)
+    check((await width_node())['width'] > original_width['width'], 'Second zoom has a visible draft before cancellation')
+    await page.keyboard.press('Escape')
+    await page.keyboard.up('Control')
+    await page.mouse.move(anchor[0], anchor[1] - 75)
+    await page.mouse.up(button='right')
+    await settle(page)
+    restored_view = await width_node()
+    check(all(abs(restored_view[k] - original_width[k]) < 1e-6 for k in ('x', 'y', 'width')),
+          'Escape restores the pre-zoom transform and drops the captured continuation')
+
+    await page.mouse.move(*anchor)
+    await page.mouse.down(button='right')
+    await page.mouse.move(anchor[0] + 35, anchor[1] + 15, steps=5)
+    await settle(page)
+    panned = await width_node()
+    check(abs(panned['x'] - original_width['x'] - 35) < .05 and abs(panned['y'] - original_width['y'] - 15) < .05,
+          'Right-drag panning follows its original screen-space displacement')
+    await page.keyboard.press('Escape')
+    await page.mouse.up(button='right')
+    await settle(page)
+    restored_view = await width_node()
+    check(all(abs(restored_view[k] - original_width[k]) < 1e-6 for k in ('x', 'y', 'width')),
+          'Escape restores a panning draft without editing the definition')
+
+    await page.mouse.move(*anchor)
+    await page.mouse.wheel(0, -100000)
+    await settle(page)
+    maximum = await width_node()
+    check(abs(maximum['width'] / 180 - 3.5) < 1e-6, 'Large wheel input reaches the finite maximum zoom')
+    await page.mouse.wheel(0, -100000)
+    await settle(page)
+    clamped = await width_node()
+    check(all(abs(clamped[k] - maximum[k]) < 1e-6 for k in ('x', 'y', 'width')),
+          'Repeated clamped wheel input does not drift the native canvas translation')
+    await page.mouse.wheel(0, 100000)
+    await settle(page)
+    minimum = await width_node()
+    check(abs(minimum['width'] / 180 - .15) < 1e-6, 'Large opposite wheel input reaches the finite minimum zoom')
+    await click_control('GraphFit')
+    final_navigation = await settle(page)
+    check(positions(final_navigation) == initial_positions
+          and all(final_navigation['state'][key] == value for key, value in history.items()),
+          'Zoom bounds and view restoration preserve all authoritative graph state')
     final = await settle(page)
     check(final['state']['graphErrors'] == 0 and final['state']['gpuError'] is None,
           'Selection and gesture campaign leaves the definition and GPU error-free')

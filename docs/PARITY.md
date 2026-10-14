@@ -15,7 +15,7 @@ parity. Tests establish the recorded contracts, not complete product compatibili
 | Documents | Stable object/layer/pick order, immutable views, locking, selection, transactional undo/redo | Full object types, blocks, references, annotations, construction history and large-project qualification |
 | Interchange | Exact managed `.nscene`, separate JS dialect, display OBJ/STL | `.3dm`, `.gh`, `.ghx`, STEP/IGES and plugin compatibility; STL is not a solid certificate |
 | Uno UI | Compact toolbars/icons, four viewports, right/bottom definition docking, command recall, grid/ortho/end snaps, native inspectors and dialogs | Identical visual/functional parity, full docking, Osnap/CPlane/gumball, accessibility and input-device matrix |
-| Graph UI | Typed wires, shelves/search, clipboard/duplicate, arrangement, numeric range/precision editing, all-edge panel resize, paths/indices/wrap and font/style/alignment metadata | Complete panel scrolling, measured paragraph wrapping, full script shaping/bidi/glyph fallback, every original component interaction |
+| Graph UI | Typed wires, shelves/search, clipboard/duplicate, modifier selection, constrained dragging, anchored right-drag zoom, arrangement, numeric range/precision editing, all-edge panel resize, paths/indices/wrap and font/style/alignment metadata | Complete panel scrolling, measured paragraph wrapping, full script shaping/bidi/glyph fallback, every original component interaction |
 | Rendering | GL/WebGL2 depth rendering, shared-state restoration, knot-aware meshes, origin re-encoding, spatial picking, clip-aware selection; separate JS WebGPU | Direct Uno WebGPU, certified adaptive tessellation, production materials/lighting/transparency and full hardware matrix |
 | Other systems | Not implemented | SubD, complete meshing, rendering plugins, layouts/printing and scripting ecosystem |
 
@@ -30,8 +30,8 @@ unimplemented solid operations.
 The real Uno runner retains managed modeling and differential framebuffer checks
 in every isolated input campaign. Workspace, inputs/sliders, panels, panel edges,
 ellipse/loft, panel display, typography and pointer selection are all mandatory.
-The new pointer-selection campaign is registered but has not run in this local
-delivery; see [canvas input candidate status](CANVAS-INPUT-REVIEW.md). Repeated modeling
+See [current navigation/input scope](CANVAS-NAVIGATION-AND-HIT-TESTING.md) and the
+[historical canvas input report](CANVAS-INPUT-REVIEW.md). Repeated modeling
 checks across campaigns are not distinct features. Software GL can satisfy these
 checks; no physical-GPU performance conclusion follows. Desktop compilation is not
 execution across every desktop OS/device. The separate JavaScript harness and

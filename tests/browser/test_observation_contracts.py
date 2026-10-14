@@ -6,7 +6,7 @@ import asyncio
 import json
 import subprocess
 import unittest
-from ui_observation import observation_predicate, require_snapshot, wait_for_ui, wait_for_restored, settle
+from ui_observation import observation_predicate, require_snapshot, wait_for_ui, wait_for_restored, settle, solution_condition, wait_for_solved_ui
 
 READY = {'status': 'ready', 'sample': 3, 'controls': {}, 'state': {}}
 
@@ -56,6 +56,38 @@ class PredicateContracts(unittest.TestCase):
         self.assertEqual(predicates([observation_predicate()], ['__undefined__', None]), [[False, False]])
 
 
+class SolutionPredicateContracts(unittest.TestCase):
+    def solved(self, revision=20, **values):
+        return READY | {'state': {'graphRevision': revision}, 'values': {'solvedRevision': revision, 'editorPending': False, **values}}
+
+    def test_unloaded_dialog_is_not_a_committed_edit(self):
+        pending=self.solved(editorOpen=False,editorPending=True)
+        closed=self.solved(editorOpen=False)
+        expression=observation_predicate(solution_condition(editor_closed=True))
+        self.assertEqual(predicates([expression],[pending,closed]),[[False,closed]])
+
+    def test_committed_graph_with_older_solution_remains_pending(self):
+        old=self.solved(solvedRevision=19)
+        missing=self.solved(solvedRevision=None)
+        current=self.solved(items=['wrong completed value'])
+        expression=observation_predicate(solution_condition())
+        self.assertEqual(predicates([expression],[old,missing,current]),[[False,False,current]])
+        # A completed wrong output must reach the original assertion, not be
+        # hidden by waiting until a desired text/value appears.
+
+    def test_apply_requires_an_actual_revision_transition(self):
+        before=self.solved(19)
+        after=self.solved(20)
+        expression=observation_predicate(solution_condition(editor_closed=True,after_revision=19))
+        self.assertEqual(predicates([expression],[before,after]),[[False,after]])
+
+    def test_missing_values_and_invalid_revision_constraints_fail_closed(self):
+        self.assertEqual(predicates([observation_predicate(solution_condition())],[READY]),[[False]])
+        for revision in (True,-1,2**53,'20'):
+            with self.subTest(revision=revision),self.assertRaises(ValueError):solution_condition(after_revision=revision)
+        with self.assertRaises(ValueError):solution_condition(editor_closed='false')
+
+
 class Handle:
     def __init__(self, value):self.value=value;self.disposed=False
     async def json_value(self):return self.value
@@ -88,6 +120,20 @@ class AdapterContracts(unittest.IsolatedAsyncioTestCase):
         page=FakePage([{'status':'restored'}]);self.assertEqual(await wait_for_restored(page),{'status':'restored'})
         self.assertEqual(page.calls[0][1],15000)
         with self.assertRaises(AssertionError):await wait_for_restored(FakePage([{'status':'ready'}]))
+
+
+    async def test_solved_wait_returns_the_exact_handle_with_the_original_deadline(self):
+        snapshot=READY|{'state':{'graphRevision':20},'values':{'solvedRevision':20,'editorPending':False}}
+        page=FakePage([snapshot])
+        self.assertIs(await wait_for_solved_ui(page,editor_closed=True,after_revision=19),snapshot)
+        self.assertEqual(len(page.calls),1);self.assertEqual(page.calls[0][1],20000)
+        self.assertIn('editorPending === false',page.calls[0][0]);self.assertIn('graphRevision > 19',page.calls[0][0])
+        self.assertTrue(page.handles[0].disposed)
+
+    async def test_solved_wait_propagates_native_failure_without_retry(self):
+        page=FakePage([{'status':'failed','error':'Native solve failed'}])
+        with self.assertRaisesRegex(AssertionError,'Native solve failed'):await wait_for_solved_ui(page,editor_closed=True)
+        self.assertEqual(len(page.calls),1);self.assertTrue(page.handles[0].disposed)
 
     async def test_timeout_propagates_without_retry(self):
         class TimedOut:

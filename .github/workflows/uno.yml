@@ -25,26 +25,73 @@ jobs:
         with:
           name: uno-desktop-build-${{ github.run_id }}
           path: artifacts/uno-desktop/
-  browser:
+  browser-build:
     runs-on: ubuntu-latest
-    # Compile once, then run all seven isolated mandatory input campaigns.
-    timeout-minutes: 30
+    timeout-minutes: 20
+    outputs:
+      campaigns: ${{ steps.registry.outputs.campaigns }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-dotnet@v4
-        with:
-          global-json-file: global.json
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Source and all-campaign gate contracts
+        run: python -m unittest discover -s tests/browser -p 'test_qualification_contracts.py' -v
+      - name: Read the mandatory campaign registry
+        id: registry
+        shell: bash
+        run: |
+          set -euo pipefail
+          campaigns=$(python tools/uno-qualification.py matrix)
+          printf 'campaigns=%s\n' "$campaigns" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
       - run: dotnet workload install wasm-tools
-      - name: Compile and publish Uno WebAssembly
+      - name: Compile the single shared Uno WebAssembly publication
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p evidence
           dotnet publish src/NurbsScene.App -c Release -f net10.0-browserwasm -p:NurbsSceneQualification=true 2>&1 | tee evidence/uno-build.log
           python tools/stage-uno-site.py
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          python tools/uno-qualification.py create --site artifacts/site --commit "$GITHUB_SHA" --tree "$(git rev-parse HEAD^{tree})"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: uno-browser-build-${{ github.run_id }}
+          path: evidence/
+      - uses: actions/upload-artifact@v4
+        with:
+          # Candidate only: no failed/partial campaign set can publish a qualified site.
+          name: candidate-uno-browser-${{ github.sha }}
+          path: artifacts/site/
+          include-hidden-files: true
+          retention-days: 3
+  browser:
+    needs: browser-build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        campaign: ${{ fromJSON(needs.browser-build.outputs.campaigns) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          name: candidate-uno-browser-${{ github.sha }}
+          path: artifacts/site/
+      - name: Verify every publication byte and exact tested revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          python tools/uno-qualification.py verify --site artifacts/site --commit "$GITHUB_SHA" --tree "$(git rev-parse HEAD^{tree})" --evidence evidence
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -54,25 +101,49 @@ jobs:
       - run: python -m playwright install --with-deps chromium
       - name: Real Uno browser and framebuffer regressions
         shell: bash
+        env:
+          CAMPAIGN: ${{ matrix.campaign }}
         run: |
           set -euo pipefail
           python -m http.server 8766 --bind 127.0.0.1 --directory artifacts/site > evidence/http.log 2>&1 &
           server=$!
           trap 'kill "$server"' EXIT
-          python tests/browser/test_uno.py
+          python tests/browser/test_uno.py --campaign "$CAMPAIGN"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: uno-browser-evidence-${{ github.run_id }}
+          name: uno-campaign-${{ github.run_id }}-${{ matrix.campaign }}
           path: evidence/
+          retention-days: 7
+  browser-qualification:
+    needs: [desktop, browser-build, browser]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          name: candidate-uno-browser-${{ github.sha }}
+          path: artifacts/site/
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: uno-campaign-${{ github.run_id }}-*
+          path: campaign-evidence/
+      - name: Require every native campaign on the identical publication
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          python tools/uno-qualification.py collect --site artifacts/site --commit "$GITHUB_SHA" --tree "$(git rev-parse HEAD^{tree})" --evidence campaign-evidence --output qualified-evidence
       - uses: actions/upload-artifact@v4
-        if: success()
+        with:
+          name: uno-browser-evidence-${{ github.run_id }}
+          path: qualified-evidence/
+      - uses: actions/upload-artifact@v4
         with:
           name: qualified-uno-browser-${{ github.sha }}
           path: artifacts/site/
-      - uses: actions/upload-artifact@v4
-        if: failure()
-        with:
-          name: unqualified-uno-browser-${{ github.sha }}
-          path: artifacts/site/
-          retention-days: 3
+          include-hidden-files: true

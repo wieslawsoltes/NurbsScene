@@ -54,6 +54,28 @@ async def wait_for_ui(page, expression: str = "true", *, timeout: int = 20000) -
     return await _wait(page, observation_predicate(expression), "ready", timeout)
 
 
+def solution_condition(*, editor_closed: bool = False, after_revision: int | None = None) -> str:
+    """Wait for completion, not for expected output values. Dialog visibility
+    alone does not prove its ShowAsync continuation has committed, and a graph
+    edit schedules evaluation separately. Preserve incorrect completed results
+    for the caller's original assertions instead of waiting for them to change.
+    """
+    if type(editor_closed) is not bool:
+        raise ValueError("A Boolean editor-lifetime constraint is required")
+    if after_revision is not None and (type(after_revision) is not int or after_revision < 0 or after_revision > 2**53 - 1):
+        raise ValueError("A nonnegative exact prior revision is required")
+    expression = "!!value.values && Number.isSafeInteger(value.state.graphRevision) && value.values.solvedRevision === value.state.graphRevision"
+    if editor_closed:
+        expression += " && value.values.editorPending === false"
+    if after_revision is not None:
+        expression += " && value.state.graphRevision > " + str(after_revision)
+    return expression
+
+
+async def wait_for_solved_ui(page, *, editor_closed: bool = False, after_revision: int | None = None) -> dict:
+    return await wait_for_ui(page, solution_condition(editor_closed=editor_closed, after_revision=after_revision))
+
+
 async def wait_ready(page, timeout: int = 30000) -> dict:
     """Compatible PR10 entry point, using the race-free snapshot handle."""
     try:
