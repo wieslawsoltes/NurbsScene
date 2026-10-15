@@ -18,6 +18,11 @@ public sealed class CadViewport : GLCanvasElement
     private bool _dragged;
     private Point _start,_last;
     private string _gesture="";
+    private uint? _pointerId;
+    private int _pointerButton;
+    private ViewportGesture? _navigation;
+    private double _originX,_originY;
+    private long _pressedAt;
     private ViewportRectangle? _active;
     private int _pixelWidth=1,_pixelHeight=1;
     private TaskCompletionSource<byte[]>? _capture;
@@ -38,12 +43,17 @@ public sealed class CadViewport : GLCanvasElement
     public event Action<PickResult?,bool>? ObjectPicked;
     public event Action<Vec3>? ConstructionPointPicked;
     public event Action? LayoutChanged;
+    public event Action? RepeatRequested;
+    public event Action<Point>? ContextMenuRequested;
+    public event Action<PickResult?,VirtualKeyModifiers>? ObjectSelectionRequested;
     public CadViewport():base(null!)
     {
-        IsTabStop=true;SizeChanged+=(_,_)=>Invalidate();
-        PointerPressed+=Pressed;PointerMoved+=Moved;PointerReleased+=Released;PointerCanceled+=(_,e)=>{_gesture="";_active=null;ReleasePointerCapture(e.Pointer);};
+        IsTabStop=true;SizeChanged+=(_,_)=>{CancelNavigation();Invalidate();};Unloaded+=(_,_)=>CancelNavigation();
+        PointerPressed+=Pressed;PointerMoved+=Moved;PointerReleased+=Released;
+        PointerCanceled+=(_,e)=>{if(_pointerId==e.Pointer.PointerId)CancelNavigation();};
+        PointerCaptureLost+=(_,e)=>{if(_pointerId==e.Pointer.PointerId)CancelNavigation();};
         PointerExited+=(_,_)=>{if(_gesture==""){CursorHit=null;CursorMoved?.Invoke(null);}};
-        PointerWheelChanged+=Wheel;DoubleTapped+=(_,e)=>{var view=At(e.GetPosition(this));if(view is not null)Maximize(view.Name);e.Handled=true;};
+        PointerWheelChanged+=Wheel;
         RegisterPropertyChangedCallback(IsGLInitializedProperty,(_,_)=>{if(IsLoaded&&IsGLInitialized==false&&LastError is null)Report("Uno could not initialize a GPU context. No substitute renderer is active.");});
     }
     public ViewportRectangle[] Viewports=>ViewportLayout.Create(_pixelWidth,_pixelHeight,Cameras,Maximized);
@@ -51,10 +61,10 @@ public sealed class CadViewport : GLCanvasElement
     {
         if(!Cameras.ContainsKey(name))throw new ArgumentException("Unknown viewport.");
         if(ActiveViewport==name&&(Maximized is null||Maximized==name))return;
-        ActiveViewport=name;if(Maximized is not null)Maximized=name;LayoutChanged?.Invoke();ViewChanged?.Invoke();Invalidate();
+        CancelNavigation();ActiveViewport=name;if(Maximized is not null)Maximized=name;LayoutChanged?.Invoke();ViewChanged?.Invoke();Invalidate();
     }
-    public void Maximize(string name){if(!Cameras.ContainsKey(name))throw new ArgumentException("Unknown viewport.");ActiveViewport=name;Maximized=Maximized==name?null:name;LayoutChanged?.Invoke();ViewChanged?.Invoke();Invalidate();}
-    public void RestoreFourViews(){Maximized=null;LayoutChanged?.Invoke();ViewChanged?.Invoke();Invalidate();}
+    public void Maximize(string name){if(!Cameras.ContainsKey(name))throw new ArgumentException("Unknown viewport.");CancelNavigation();ActiveViewport=name;Maximized=Maximized==name?null:name;LayoutChanged?.Invoke();ViewChanged?.Invoke();Invalidate();}
+    public void RestoreFourViews(){CancelNavigation();Maximized=null;LayoutChanged?.Invoke();ViewChanged?.Invoke();Invalidate();}
     public void Fit()
     {
         foreach(var view in ViewportLayout.Create(Math.Max(1,(int)ActualWidth),Math.Max(1,(int)ActualHeight),Cameras,Maximized))
@@ -88,43 +98,87 @@ public sealed class CadViewport : GLCanvasElement
     }
     private Point Pixels(Point p)=>new(p.X*_pixelWidth/Math.Max(1,ActualWidth),p.Y*_pixelHeight/Math.Max(1,ActualHeight));
     private ViewportRectangle? At(Point p){p=Pixels(p);return Viewports.FirstOrDefault(v=>p.X>=v.X&&p.Y>=v.Y&&p.X<v.X+v.Width&&p.Y<v.Y+v.Height);}
+    public bool CancelNavigation()
+    {
+        if(_pointerId is null)return false;
+        var navigation=_navigation;_pointerId=null;_navigation=null;_gesture="";_active=null;
+        navigation?.Restore();ReleasePointerCaptures();NotifyViewChanged();return true;
+    }
+    public void NotifyViewChanged(){ViewChanged?.Invoke();Invalidate();}
     private void Pressed(object sender,PointerRoutedEventArgs e)
     {
-        var p=e.GetCurrentPoint(this);_active=At(p.Position);if(_active is null)return;Activate(_active.Name);
-        _start=_last=p.Position;_dragged=false;_gesture=p.Properties.IsRightButtonPressed||e.Pointer.PointerDeviceType.ToString()=="Touch"?"orbit":p.Properties.IsMiddleButtonPressed?"pan":"select";
-        CapturePointer(e.Pointer);Focus(FocusState.Pointer);e.Handled=true;
+        if(_pointerId is not null){e.Handled=true;return;}
+        var p=e.GetCurrentPoint(this);var active=At(p.Position);if(active is null)return;
+        var touch=e.Pointer.PointerDeviceType.ToString()=="Touch";
+        if(!touch&&!p.Properties.IsLeftButtonPressed&&!p.Properties.IsRightButtonPressed&&!p.Properties.IsMiddleButtonPressed)return;
+        Activate(active.Name);Focus(FocusState.Pointer);if(!CapturePointer(e.Pointer))return;
+        _active=active;_pointerId=e.Pointer.PointerId;_pointerButton=p.Properties.IsRightButtonPressed?3:p.Properties.IsMiddleButtonPressed?2:1;
+        _start=_last=p.Position;_dragged=false;_pressedAt=Environment.TickCount64;
+        _gesture=_pointerButton!=1?"navigate":"select";
+        if(_gesture=="navigate"||touch)
+        {
+            var sx=ActualWidth/_pixelWidth;var sy=ActualHeight/_pixelHeight;
+            _originX=active.X*sx;_originY=active.Y*sy;
+            var mode=ViewportGesture.Resolve(active.Camera.Perspective,(e.KeyModifiers&VirtualKeyModifiers.Shift)!=0,
+                (e.KeyModifiers&VirtualKeyModifiers.Control)!=0,_pointerButton==2);
+            _navigation=new(active.Camera,mode,p.Position.X-_originX,p.Position.Y-_originY,active.Width*sx,active.Height*sy);
+        }
+        e.Handled=true;
     }
+    private bool StillPressed(bool left,bool middle,bool right)=>_pointerButton switch{3=>right,2=>middle,_=>left};
     private void Moved(object sender,PointerRoutedEventArgs e)
     {
-        var p=e.GetCurrentPoint(this).Position;
+        var point=e.GetCurrentPoint(this);var p=point.Position;
+        if(_pointerId is not null&&_pointerId!=e.Pointer.PointerId)return;
         try{UpdateCursor(p);}catch(Exception error){DiagnosticsChanged?.Invoke(error.Message);}
-        if(_active is null||_gesture=="")return;var dx=p.X-_last.X;var dy=p.Y-_last.Y;
+        if(_pointerId is null||_active is null)return;
+        if(e.Pointer.PointerDeviceType.ToString()=="Mouse"&&!StillPressed(point.Properties.IsLeftButtonPressed,point.Properties.IsMiddleButtonPressed,point.Properties.IsRightButtonPressed)){CancelNavigation();return;}
         _dragged|=Math.Abs(p.X-_start.X)+Math.Abs(p.Y-_start.Y)>3;
-        if(_gesture=="orbit"&&_active.Camera.Perspective)_active.Camera.Orbit(dx,dy);
-        else if(_gesture is "pan" or "orbit")_active.Camera.Pan(dx,dy,_active.Height*Math.Max(1,ActualHeight)/_pixelHeight);
-        _last=p;ViewChanged?.Invoke();Invalidate();e.Handled=true;
+        if(_dragged&&_navigation is not null)
+            try{_navigation.Move(p.X-_originX,p.Y-_originY);NotifyViewChanged();}
+            catch(Exception error){CancelNavigation();DiagnosticsChanged?.Invoke(error.Message);}
+        _last=p;e.Handled=true;
     }
     private void Released(object sender,PointerRoutedEventArgs e)
     {
-        if(_active is not null&&!_dragged&&_gesture=="select")
+        var release=e.GetCurrentPoint(this);
+        if(_pointerId!=e.Pointer.PointerId||StillPressed(release.Properties.IsLeftButtonPressed,release.Properties.IsMiddleButtonPressed,release.Properties.IsRightButtonPressed))return;
+        var active=_active;var gesture=_gesture;var button=_pointerButton;
+        var p=e.GetCurrentPoint(this).Position;
+        _pointerId=null;_navigation=null;_gesture="";_active=null;ReleasePointerCapture(e.Pointer);
+        if(active is not null&&!_dragged&&gesture=="select")
         {
-            var p=Pixels(e.GetCurrentPoint(this).Position);var x=p.X-_active.X;var y=p.Y-_active.Y;
+            var pixel=Pixels(p);var x=pixel.X-active.X;var y=pixel.Y-active.Y;
             try
             {
-                var hit=Aids.At(Scene,_active,x,y,ConstructionAnchor?.Invoke(),8*_pixelWidth/Math.Max(1,ActualWidth));
-                ObjectPicked?.Invoke(MeshPicker.Pick(Scene,_active,x,y,out _,7*_pixelWidth/Math.Max(1,ActualWidth)),(e.KeyModifiers&VirtualKeyModifiers.Shift)!=0);
+                var hit=Aids.At(Scene,active,x,y,ConstructionAnchor?.Invoke(),8*_pixelWidth/Math.Max(1,ActualWidth));
+                var picked=MeshPicker.Pick(Scene,active,x,y,out _,7*_pixelWidth/Math.Max(1,ActualWidth));
+                ObjectPicked?.Invoke(picked,(e.KeyModifiers&VirtualKeyModifiers.Shift)!=0);
+                ObjectSelectionRequested?.Invoke(picked,e.KeyModifiers);
                 if(hit is not null)ConstructionPointPicked?.Invoke(hit.Point);
             }
             catch(Exception error){DiagnosticsChanged?.Invoke(error.Message);}
         }
-        _gesture="";_active=null;ReleasePointerCapture(e.Pointer);e.Handled=true;
+        else if(!_dragged&&button==3)
+        {
+            if(Environment.TickCount64-_pressedAt>=500)ContextMenuRequested?.Invoke(p);
+            else RepeatRequested?.Invoke();
+        }
+        e.Handled=true;
     }
     private void UpdateCursor(Point position)
     {
         var view=At(position);if(view is null){CursorHit=null;CursorMoved?.Invoke(null);return;}
         var p=Pixels(position);CursorViewport=view.Name;CursorHit=Aids.At(Scene,view,p.X-view.X,p.Y-view.Y,ConstructionAnchor?.Invoke(),8*_pixelWidth/Math.Max(1,ActualWidth));CursorMoved?.Invoke(CursorHit);
     }
-    private void Wheel(object sender,PointerRoutedEventArgs e){var p=e.GetCurrentPoint(this);var view=At(p.Position);if(view is null)return;view.Camera.Zoom(-p.Properties.MouseWheelDelta);ViewChanged?.Invoke();Invalidate();e.Handled=true;}
+    private void Wheel(object sender,PointerRoutedEventArgs e)
+    {
+        if(_pointerId is not null){e.Handled=true;return;}
+        var p=e.GetCurrentPoint(this);var view=At(p.Position);if(view is null)return;
+        var pixel=Pixels(p.Position);Activate(view.Name);
+        ViewportGesture.ZoomAt(view.Camera,-p.Properties.MouseWheelDelta,pixel.X-view.X,pixel.Y-view.Y,view.Width,view.Height);
+        NotifyViewChanged();e.Handled=true;
+    }
 }
 
 /// <summary>Viewport titles activate on click and maximize on double-click.
@@ -152,10 +206,10 @@ public sealed class ViewportControl : Grid
             Item("Maximize / restore",()=>Canvas.Maximize(name));Item("Zoom extents",()=>{
                 var view=ViewportLayout.Create(Math.Max(1,(int)ActualWidth),Math.Max(1,(int)ActualHeight),Canvas.Cameras,Canvas.Maximized).Single(v=>v.Name==name);
                 if(view.Width>0&&view.Height>0)ViewportNavigation.Fit(view.Camera,Canvas.Scene.Bounds,view.Width,view.Height);
-                Canvas.Invalidate();_overlay.Invalidate();
+                Canvas.NotifyViewChanged();
             });
-            foreach(var mode in Enum.GetValues<DisplayMode>())Item(mode.ToString(),()=>{Canvas.Scene.Mode=mode;Canvas.Invalidate();});
-            drop.Flyout=menu;var group=new StackPanel{Orientation=Orientation.Horizontal,Background=ClassicChrome.Background};group.Children.Add(title);group.Children.Add(drop);_titleGroups[name]=group;_headers.Children.Add(group);
+            foreach(var mode in Enum.GetValues<DisplayMode>())Item(mode.ToString(),()=>{Canvas.Scene.Mode=mode;Canvas.NotifyViewChanged();});
+            drop.Flyout=menu;title.ContextFlyout=menu;var group=new StackPanel{Orientation=Orientation.Horizontal,Background=ClassicChrome.Background};group.Children.Add(title);group.Children.Add(drop);_titleGroups[name]=group;_headers.Children.Add(group);
         }
         Canvas.LayoutChanged+=Headers;Canvas.ViewChanged+=()=>_overlay.Invalidate();Canvas.CursorMoved+=_=>_overlay.Invalidate();SizeChanged+=(_,_)=>Headers();Headers();
     }

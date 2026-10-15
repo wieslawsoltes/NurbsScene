@@ -117,4 +117,5 @@ Test("invalid camera fitting is atomic and empty bounds are a no-op",()=>{
     ViewportNavigation.Fit(camera,Bounds3.Empty,200,200);
     Check(camera.Target==target&&camera.Distance==distance&&camera.Scale==scale);
 });
+WorkspaceShellContracts.Register(tests);
 int failed=0;foreach(var(name,test)in tests)try{test();Console.WriteLine("PASS "+name);}catch(Exception e){failed++;Console.WriteLine("FAIL "+name+"\n"+e);}Console.WriteLine(JsonSerializer.Serialize(new{suite="presentation",total=tests.Count,passed=tests.Count-failed,failed}));return failed==0?0:1;
