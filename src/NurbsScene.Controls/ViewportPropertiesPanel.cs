@@ -13,20 +13,22 @@ namespace NurbsScene.Controls;
 public sealed class ViewportPropertiesPanel : StackPanel,IDisposable
 {
     private readonly CadViewport _viewport;
+    private readonly Func<bool> _isActive;
     private readonly TextBlock _heading=ClassicChrome.Label("Viewport properties",13);
     private readonly TextBlock _projection=ClassicChrome.Label("",10),_size=ClassicChrome.Label("",10);
     private readonly TextBlock _error=new(){FontSize=11,TextWrapping=TextWrapping.Wrap,Foreground=ClassicChrome.Brush(150,40,35)};
     private readonly Dictionary<string,TextBox> _fields=[];
     private readonly ComboBox _display=new(){Header="Display mode (all viewports)",FontSize=11,HorizontalAlignment=HorizontalAlignment.Stretch};
-    private readonly Button _apply;
+    private readonly DispatcherTimer _refreshTimer=new(){Interval=TimeSpan.FromMilliseconds(50)};
     private string _camera="";
     private bool _draft,_refreshing,_disposed;
     private ViewportCameraSettings? _snapshot;
+    public bool IsPanelActive=>_isActive();
     public bool HasDraft=>_draft;
     public string Validation=>_error.Text;
-    public ViewportPropertiesPanel(CadViewport viewport)
+    public ViewportPropertiesPanel(CadViewport viewport,Func<bool>? isActive=null)
     {
-        ArgumentNullException.ThrowIfNull(viewport);_viewport=viewport;Spacing=7;
+        ArgumentNullException.ThrowIfNull(viewport);_viewport=viewport;_isActive=isActive??(()=>true);Spacing=7;
         AutomationProperties.SetAutomationId(this,"ViewportProperties");
         Children.Add(_heading);Children.Add(_projection);Children.Add(_size);
         _display.ItemsSource=Enum.GetNames<DisplayMode>();
@@ -43,15 +45,22 @@ public sealed class ViewportPropertiesPanel : StackPanel,IDisposable
             _fields.Add(key,box);Children.Add(box);
         }
         var actions=new StackPanel{Orientation=Orientation.Horizontal,Spacing=4};
-        _apply=ClassicChrome.Button("Apply",Apply,"ApplyViewportProperties");actions.Children.Add(_apply);
+        actions.Children.Add(ClassicChrome.Button("Apply",Apply,"ApplyViewportProperties"));
         actions.Children.Add(ClassicChrome.Button("Revert",()=>{_draft=false;_snapshot=null;Refresh();},"RevertViewportProperties"));Children.Add(actions);Children.Add(_error);
         Children.Add(new TextBlock{Text="Camera changes do not alter geometry or document undo. Orbit angles apply to Perspective; parallel views retain their named axes.",FontSize=10,TextWrapping=TextWrapping.Wrap});
-        _viewport.ViewChanged+=Refresh;_viewport.SizeChanged+=OnSizeChanged;Refresh();
+        _refreshTimer.Tick+=(_,_)=>{_refreshTimer.Stop();Refresh();};
+        _viewport.ViewChanged+=QueueRefresh;_viewport.SizeChanged+=OnSizeChanged;Refresh();
     }
-    private void OnSizeChanged(object sender,SizeChangedEventArgs e)=>Refresh();
+    private void OnSizeChanged(object sender,SizeChangedEventArgs e)=>QueueRefresh();
+    private void QueueRefresh()
+    {
+        if(_disposed||!IsPanelActive)return;
+        if(_camera!=_viewport.ActiveViewport){Refresh();return;}
+        if(!_refreshTimer.IsEnabled)_refreshTimer.Start();
+    }
     public void Refresh()
     {
-        if(_disposed)return;var camera=_viewport.Cameras[_viewport.ActiveViewport];
+        if(_disposed||!IsPanelActive)return;var camera=_viewport.Cameras[_viewport.ActiveViewport];
         _heading.Text=camera.Name+" viewport";_projection.Text=camera.Perspective?"Perspective projection":"Parallel projection";
         var rectangle=ViewportLayout.Create(Math.Max(1,(int)_viewport.ActualWidth),Math.Max(1,(int)_viewport.ActualHeight),_viewport.Cameras,_viewport.Maximized).FirstOrDefault(v=>v.Name==camera.Name);
         _size.Text=rectangle is null?"Not currently visible":$"Size: {rectangle.Width} × {rectangle.Height} DIP";
@@ -80,5 +89,5 @@ public sealed class ViewportPropertiesPanel : StackPanel,IDisposable
         }
         catch(Exception error){_error.Text=error.Message;}
     }
-    public void Dispose(){if(_disposed)return;_disposed=true;_viewport.ViewChanged-=Refresh;_viewport.SizeChanged-=OnSizeChanged;}
+    public void Dispose(){if(_disposed)return;_disposed=true;_refreshTimer.Stop();_viewport.ViewChanged-=QueueRefresh;_viewport.SizeChanged-=OnSizeChanged;}
 }

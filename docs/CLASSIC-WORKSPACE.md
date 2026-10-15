@@ -13,9 +13,14 @@ icons are original NurbsScene artwork; no proprietary icons, binaries or font
 files are included. This is closer to those interfaces, not pixel-identical or
 complete Rhino/Grasshopper UI parity.
 
+The [current full-workspace review](RHINO-UI-REVIEW.md) records region-by-region
+findings, the modeling-first shell changes and the remaining Rhino differences.
+
 ## Implemented interaction
 
-The compact workspace has a document title/dirty marker, command history and
+Ordinary startup is an empty modeling document; the pavilion is an explicit sample.
+The definition starts hidden for new preferences and can be opened from the toolbar
+or `Grasshopper` command. The compact workspace has a document title/dirty marker, command history and
 suggestions, six modeling toolbar categories, a two-column icon palette, four
 viewports and native view tabs, tabbed properties/layers/objects, and the definition
 panel. Toolbar metadata lists only implemented modeling commands; actions that
@@ -29,13 +34,19 @@ and bottom placement, hiding/restoring, and splitter resizing. Narrow windows
 stack the definition below modeling without overwriting the chosen wide-window
 dock preference. Automatic dock-mode changes refit the definition after layout,
 rather than leaving nodes offscreen. A versioned, validated local-settings record stores docking,
-panel visibility and split fraction. This is not arbitrary docking, detached
+panel/sidebar visibility, split fraction, inspector width/tab and history expansion.
+Version-one preferences migrate without discarding the existing layout. Both native
+splitters support keyboard resizing and Escape/capture-loss rollback. This is not arbitrary docking, detached
 native windows or full multi-monitor layout support.
 
 The command input has bounded history, draft-preserving Up/Down recall,
 case-insensitive command suggestions, empty-input repeat and Escape cancellation.
-The workspace provides Ctrl+S, F2 command focus, F7 display grid, F8 Ortho and F9
-Grid Snap. It does not implement every Rhino shortcut or command-line option.
+The workspace provides Ctrl+S, F2 selectable history expansion, F3 Properties,
+F7 display grid, F8 Ortho and F9 Grid Snap. Model-canvas typing starts command entry.
+Blank Enter, focused-canvas Space and short right click repeat the last successful
+repeatable model command, not an intervening layout/selection/history operation.
+Modifier navigation, anchored zoom and active camera property drafts are described
+in the current workspace review. It does not implement every Rhino shortcut or command-line option.
 
 Grid Snap and Ortho are actual construction constraints, not decorative labels.
 They apply to world-aligned XY, XZ and YZ construction planes, with configurable
@@ -95,13 +106,14 @@ dotnet run --project tests/presentation-performance -c Release -- drawing-cache.
 python tests/browser/test_uno.py
 ```
 
-The 25 UI-independent contracts cover command routing/recall, layout parsing,
+The 45 UI-independent contracts cover command routing/recall, layout parsing,
 construction constraints, endpoint filtering, cache invalidation/allocations,
 port layout, wire bounds, batched movement and interactive command anchors.
 Existing numerical/native/model/graph/package tests remain enabled.
 
 `test_workspace_ui.py` adds real mouse/keyboard workflows after the existing
-29 managed/GL browser checks. Its compile-time hook only observes actual Uno
+30 managed/GL browser checks. The additional `rhino-workspace` campaign retains
+all prior campaigns and exercises the modeling-first shell through native input. Its compile-time hook only observes actual Uno
 visual bounds and state; tests do not call commands through that hook, replace
 DOM content, mock a GPU or skip an unavailable renderer. A final flag restores
 the disposable test session. Right, bottom and narrow layouts are captured as

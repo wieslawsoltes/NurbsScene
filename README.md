@@ -48,13 +48,18 @@ compilation, software-GL browser checks and physical-GPU performance are distinc
 
 ## Modeling and visual programming
 
-The compact workspace has tabbed icon tools, command recall, four viewports,
-construction aids, property/layer/object tabs, and a right/bottom-docked definition.
+The compact modeling-first workspace starts with an empty document, four viewports,
+tabbed icon tools, selectable command history, native camera/object/layer properties,
+persistent keyboard-accessible splitters and an optional right/bottom-docked definition.
+Model-canvas typing starts command entry; short right-click/Space repeat, modifier
+navigation, cursor-anchored zoom and camera-draft validation use the actual controls.
+See the [Rhino-style UI/UX review](docs/RHINO-UI-REVIEW.md) for the delivered behavior,
+qualification requirements and remaining differences.
 The graph editor provides executable search, typed wiring, numeric sliders,
 copy/paste/duplicate, arrangement, preview, baking and undo/redo. Authored icons and
 controls follow familiar conventions without claiming identical original artwork.
 
-Canvas selection uses Shift to add, Control to remove and Control+Shift to toggle.
+Graph-canvas selection uses Shift to add, Control to remove and Control+Shift to toggle.
 Shift-drag follows 45-degree guides; Control+right-drag zooms about its starting
 point. Escape cancels a selection, move or navigation draft. See
 [canvas navigation and input](docs/CANVAS-NAVIGATION-AND-HIT-TESTING.md).

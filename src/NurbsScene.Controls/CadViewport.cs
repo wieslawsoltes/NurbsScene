@@ -67,6 +67,7 @@ public sealed class CadViewport : GLCanvasElement
     public void RestoreFourViews(){CancelNavigation();Maximized=null;LayoutChanged?.Invoke();ViewChanged?.Invoke();Invalidate();}
     public void Fit()
     {
+        CancelNavigation();
         foreach(var view in ViewportLayout.Create(Math.Max(1,(int)ActualWidth),Math.Max(1,(int)ActualHeight),Cameras,Maximized))
             if(view.Width>0&&view.Height>0)ViewportNavigation.Fit(view.Camera,Scene.Bounds,view.Width,view.Height);
         if(!Scene.Bounds.IsEmpty)Scene.Rebase(Scene.Bounds.Center);ViewChanged?.Invoke();Invalidate();
@@ -85,7 +86,7 @@ public sealed class CadViewport : GLCanvasElement
             var viewport=stackalloc int[4];gl.GetInteger(GetPName.Viewport,viewport);_pixelWidth=viewport[2];_pixelHeight=viewport[3];
             _renderer.Render(Scene,Viewports,_pixelWidth,_pixelHeight);
             if(_capture is{} capture){_capture=null;capture.TrySetResult(_renderer.CaptureRgba());}
-            if(_renderer.Frames==1)DiagnosticsChanged?.Invoke($"{Backend}; GPU frame submitted");
+            if(_renderer.Frames==1)DiagnosticsChanged?.Invoke(_renderer.Backend+"; GPU frame submitted");
         }
         catch(Exception error){_capture?.TrySetException(error);_capture=null;Report(error.Message);}
     }

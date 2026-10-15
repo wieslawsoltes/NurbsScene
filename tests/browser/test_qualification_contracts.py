@@ -38,9 +38,9 @@ class QualificationContracts(unittest.TestCase):
             record = {"campaign": name, "status": "passed", "checks": checks,
                       "final": {"state": {"gpuError": None, "graphErrors": 0}}}
             report = {"status": "passed", "checks": checks, "campaigns": [record], "pageErrors": [],
-                      "modelingChecksPerCampaign": [29]}
+                      "modelingChecksPerCampaign": [30]}
             modeling = {"application": "Uno Platform", "status": "passed", "pageErrors": [],
-                        "checks": ["model fixture " + str(i) for i in range(29)], "lastGpuError": None,
+                        "checks": ["model fixture " + str(i) for i in range(30)], "lastGpuError": None,
                         "gpuBackend": "WebGL2 fixture", "frames": 1, "surfacePixels": 1,
                         "gpuReadbackSha256": "A" * 64}
             GATE.write_json(folder / "uno-ui.json", report)
@@ -62,17 +62,17 @@ class QualificationContracts(unittest.TestCase):
             self.collect()
         self.assertFalse(self.output.exists(), "A partial acceptance aggregate must not be published")
 
-    def test_all_nine_campaigns_aggregate_without_losing_assertions(self):
+    def test_all_ten_campaigns_aggregate_without_losing_assertions(self):
         result = self.collect()
-        self.assertEqual(len(result["checks"]), 293)
+        self.assertEqual(len(result["checks"]), 349)
         self.assertEqual([r["campaign"] for r in result["campaigns"]], self.names)
-        self.assertEqual(result["modelingChecksPerCampaign"], [29] * 9)
-        self.assertEqual(len(list((self.output / "campaigns").glob("*/uno-ui.json"))), 9)
+        self.assertEqual(result["modelingChecksPerCampaign"], [30] * 10)
+        self.assertEqual(len(list((self.output / "campaigns").glob("*/uno-ui.json"))), 10)
         self.assertEqual(GATE.read_json(self.output / "uno-publication.json"), self.manifest)
 
     def test_original_campaign_registry_remains_mandatory(self):
-        self.assertEqual(self.names, ["workspace", "inputs-sliders", "panels", "panel-edges", "ellipse-loft", "panel-display", "typography", "pointer-selection", "panel-scrolling"])
-        self.assertEqual(self.registry["minimumModelingChecks"], 29)
+        self.assertEqual(self.names, ["workspace", "inputs-sliders", "panels", "panel-edges", "ellipse-loft", "panel-display", "typography", "pointer-selection", "panel-scrolling", "rhino-workspace"])
+        self.assertEqual(self.registry["minimumModelingChecks"], 30)
 
     def test_hidden_site_files_are_part_of_exact_content_verification(self):
         self.assertIn(".nojekyll", self.manifest["files"])

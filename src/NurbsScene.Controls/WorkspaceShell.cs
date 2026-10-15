@@ -42,11 +42,13 @@ public sealed partial class WorkspaceView
     }
     private void ConfigureShell()
     {
-        _viewportProperties=new(Viewport.Canvas);Inspector.EmptySelectionContent=_viewportProperties;
-        Inspector.TabChanged+=tab=>{if(!_disposed&&Preferences.InspectorTab!=tab)SetPreferences(Preferences with{InspectorTab=tab});};
+        _viewportProperties=new(Viewport.Canvas,()=>Preferences.InspectorVisible&&ActualWidth>=720
+            &&Preferences.InspectorTab=="Properties"&&Controller.Document.Selection.Count==0);
+        Inspector.EmptySelectionContent=_viewportProperties;
+        Inspector.TabChanged+=tab=>{if(!_disposed&&Preferences.InspectorTab!=tab)SetPreferences(Preferences with{InspectorTab=tab});_viewportProperties.Refresh();};
         Console.HistoryExpandedRequested+=expanded=>SetPreferences(Preferences with{HistoryExpanded=expanded});
         var cad=Viewport.Canvas;cad.RepeatRequested+=AcceptOrRepeat;cad.ContextMenuRequested+=ShowModelContext;
-        cad.ViewChanged+=Refresh;
+        cad.ViewChanged+=RefreshViewStatus;
         cad.KeyDown+=(_,e)=>{
             if(e.Key==VirtualKey.Control)_controlKey=true;if(e.Key==VirtualKey.Menu)_altKey=true;
             if(e.Key==VirtualKey.Escape){if(!cad.CancelNavigation())Run("Cancel");e.Handled=true;}
@@ -156,6 +158,13 @@ public sealed partial class WorkspaceView
         var layerContext=new MenuFlyout();layerContext.Items.Add(ShellItem("Layers panel…",()=>Run("Layers"),"StatusLayerContext"));_layerStatus.ContextFlyout=layerContext;
         _modeStatus=ClassicChrome.Button("Shaded",()=>{},"StatusDisplayMode");row.Children.Add(_modeStatus);var modes=new MenuFlyout();_modeStatus.Flyout=modes;
         foreach(var mode in Enum.GetNames<DisplayMode>()){var name=mode;modes.Items.Add(ShellItem(name,()=>Run(name),"StatusMode_"+name));}
+    }
+    private void RefreshViewStatus()
+    {
+        // Camera motion must not enumerate the complete document or rebuild its
+        // status-layer tooltip. Inspector camera drafts have their own coalescer.
+        if(_modeStatus is not null&&_modeStatus.Content?.ToString()!=Controller.Scene.Mode.ToString())
+            _modeStatus.Content=Controller.Scene.Mode.ToString();
     }
     private void RefreshStatus()
     {
