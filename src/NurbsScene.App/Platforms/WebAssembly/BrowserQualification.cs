@@ -39,6 +39,8 @@ public partial class App
         try
         {
             var controller=view.Controller;var canvas=view.Viewport.Canvas;
+            Check(controller.Document.Objects.Count==0&&controller.Graph.Nodes.Count==0,"Ordinary startup is an empty modeling document, not an auto-loaded sample");
+            controller.LoadPavilion(); // Explicit qualification fixture; ordinary startup stays empty.
             await Wait(()=>canvas.Frames>0||canvas.LastError is not null,"Uno GPU canvas did not initialize.");
             report["gpuBackend"]=canvas.Backend;report["lastGpuError"]=canvas.LastError;
             Check(canvas.LastError is null&&canvas.Frames>0,"Uno created a GPU context and submitted a frame: "+canvas.LastError);

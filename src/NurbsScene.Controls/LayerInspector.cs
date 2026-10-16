@@ -27,6 +27,9 @@ public sealed class LayerInspector : Grid
     public long LayerStructureChanges {get;private set;}
     public string ActiveTab {get;private set;}="Layers";
     public event Action<string>? Message;
+    public event Action<string>? TabChanged;
+    private FrameworkElement? _emptySelectionContent;
+    public FrameworkElement? EmptySelectionContent{get=>_emptySelectionContent;set{if(ReferenceEquals(value,_emptySelectionContent))return;_emptySelectionContent=value;_propertyKey="";Refresh();}}
     public SceneDocument? Document
     {
         get=>_document;
@@ -43,7 +46,9 @@ public sealed class LayerInspector : Grid
         toolbar.Children.Add(ClassicChrome.IconButton("Delete selected layer","Delete",()=>{if(_layers.SelectedItem is LayerRow row)Change("Delete layer",d=>d.RemoveLayer(row.Id));}));
         toolbar.Children.Add(ClassicChrome.Button("Set current",()=>{if(_layers.SelectedItem is LayerRow row)Change("Current layer",d=>d.ActiveLayer=row.Id);},"SetCurrentLayer"));
         _layerPanel.Children.Add(toolbar);
-        var header=ClassicChrome.Label("     Name                         On   Lock   Color");header.FontSize=10;header.Margin=new(7,4,0,4);_layerPanel.Children.Add(header);SetRow(header,1);
+        var header=new Grid{Margin=new(12,4,12,4)};
+        foreach(var width in new[]{new GridLength(16),new GridLength(1,GridUnitType.Star),new GridLength(28),new GridLength(32),new GridLength(24)})header.ColumnDefinitions.Add(new(){Width=width});
+        var captions=new[]{"","Name","On","Lock",""};for(var i=0;i<captions.Length;i++){var label=ClassicChrome.Label(captions[i],10);header.Children.Add(label);SetColumn(label,i);}_layerPanel.Children.Add(header);SetRow(header,1);
         _layers.ItemTemplate=(DataTemplate)XamlReader.Load("""
             <DataTemplate xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation">
               <Grid Height="28" MinWidth="180">
@@ -67,8 +72,9 @@ public sealed class LayerInspector : Grid
     public void ShowTab(string tab)
     {
         if(tab is not("Properties" or "Layers" or "Objects"))throw new ArgumentException("Unknown inspector tab.");
-        ActiveTab=tab;_layerPanel.Visibility=tab=="Layers"?Visibility.Visible:Visibility.Collapsed;_objects.Visibility=tab=="Objects"?Visibility.Visible:Visibility.Collapsed;_propertyScroll.Visibility=tab=="Properties"?Visibility.Visible:Visibility.Collapsed;
+        var changed=ActiveTab!=tab;ActiveTab=tab;_layerPanel.Visibility=tab=="Layers"?Visibility.Visible:Visibility.Collapsed;_objects.Visibility=tab=="Objects"?Visibility.Visible:Visibility.Collapsed;_propertyScroll.Visibility=tab=="Properties"?Visibility.Visible:Visibility.Collapsed;
         foreach(var b in _tabs.Children.OfType<Button>())b.Background=b.Content?.ToString()==tab?ClassicChrome.Brush(255,255,255):ClassicChrome.Background;
+        if(changed)TabChanged?.Invoke(tab);
     }
     private void OnChanged(DocumentChange change)=>Refresh();
     private void Change(string name,Action<SceneDocument> action){if(_document is null||_updating)return;try{_document.Transaction(name,()=>action(_document));}catch(Exception error){Message?.Invoke(error.Message);}}
@@ -98,6 +104,7 @@ public sealed class LayerInspector : Grid
             var key=selectedObjects.Length==1?selectedObjects[0].ToString():$"{_document.Name}:{objects.Count}:{selectedObjects.Length}:{_document.Units}";
             if(key==_propertyKey)return;_propertyKey=key;_properties.Children.Clear();
             void Label(string text)=>_properties.Children.Add(new TextBlock{Text=text,FontSize=11,TextWrapping=TextWrapping.Wrap,Foreground=ClassicChrome.Ink});
+            if(selectedObjects.Length==0&&_emptySelectionContent is not null){_properties.Children.Add(_emptySelectionContent);return;}
             if(selectedObjects.Length!=1){Label(selectedObjects.Length==0?"Document properties":$"{selectedObjects.Length} objects selected");Label($"Units: {_document.Units}");Label($"Absolute tolerance: {_document.AbsoluteTolerance:G}");Label($"Objects: {objects.Count}");return;}
             var value=selectedObjects[0];var owner=_document;
             var name=new TextBox{Header="Object name",Text=value.Name,FontSize=11,MinHeight=25};

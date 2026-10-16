@@ -25,7 +25,7 @@ public partial class App
         try
         {
             view.GraphEditor.Canvas.ObservePointerEvents=true;
-            view.SetPreferences(new(),false);controller.Scene.ShowGrid=true;controller.Scene.ShowIsocurves=true;
+            view.SetPreferences(new(DefinitionVisible:true,InspectorTab:"Layers"),false);controller.Scene.ShowGrid=true;controller.Scene.ShowIsocurves=true;
             view.Viewport.Canvas.RestoreFourViews();view.Viewport.Canvas.Fit();view.GraphEditor.Canvas.Fit();
             view.Console.ClearHistory();view.Console.WriteLine("NurbsScene — independent NURBS modeling and visual programming");
             await Task.Delay(250);
@@ -46,7 +46,7 @@ public partial class App
                     // Bounds include a TextBox's header. Observe the actual
                     // focused draft so input tests cannot silently type into a
                     // previous field after clicking a header or template border.
-                    var draft=element is TextBox textBox&&(AutomationProperties.GetAutomationId(element).StartsWith("Slider",StringComparison.Ordinal)||AutomationProperties.GetAutomationId(element).StartsWith("Typography",StringComparison.Ordinal))
+                    var draft=element is TextBox textBox&&(AutomationProperties.GetAutomationId(element).StartsWith("Slider",StringComparison.Ordinal)||AutomationProperties.GetAutomationId(element).StartsWith("Typography",StringComparison.Ordinal)||AutomationProperties.GetAutomationId(element).StartsWith("ViewportProperty",StringComparison.Ordinal))
                         ? textBox.Text : null;
                     if(draft?.Length>256)draft=draft[..256];
                     return new{x=p.X,y=p.Y,width=element.ActualWidth,height=element.ActualHeight,enabled=element is not Control c||c.IsEnabled,
@@ -69,7 +69,7 @@ public partial class App
                 if(view.GraphEditor.NumberSliderEditorIsOpen&&view.GraphEditor.NumberSliderEditor is{} sliderDialog)Visit(sliderDialog);
                 // Native menu/flyout presenters live in the popup root rather
                 // than under WorkspaceView. Observe only loaded controls.
-                foreach(var item in view.GraphEditor.ActionElements)if(item.IsLoaded)Visit(item);
+                foreach(var item in view.GraphEditor.ActionElements.Concat(view.ActionElements))if(item.IsLoaded)Visit(item);
                 if(view.GraphEditor.SearchIsOpen&&view.GraphEditor.SearchElement is{} search&&search.IsLoaded)Visit(search);
                 var cad=view.Viewport.Canvas;var graph=view.GraphEditor.Canvas;
                 controls["CadCanvas"]=Box(cad);controls["GraphCanvas"]=Box(graph);
@@ -107,7 +107,9 @@ public partial class App
                     FindPreview(view.GraphEditor);
                 }
                 var snapshot=new{status="ready",sample=++sample,controls,views,nodes,wires,previewLines,values=ObserveCanvasValues(view),lastGeometry=ObserveLastGeometry(view),typography=ObserveTypography(view),state=new{
-                    objects=controller.Document.Objects.Count,layers=controller.Document.Layers.Count,
+                    objects=controller.Document.Objects.Count,layers=controller.Document.Layers.Count,activeLayer=controller.Document.ActiveLayer,
+                    layerRows=controller.Document.Layers.Select(l=>new{id=l.Id,name=l.Name,visible=l.Visible,locked=l.Locked}).ToArray(),
+                    selectedLayers=controller.Document.Objects.Where(o=>controller.Document.Selection.Contains(o.Id)).Select(o=>o.LayerId).Distinct().ToArray(),
                     selected=controller.Document.Selection.Count,documentRevision=controller.Document.Revision,
                     nodeCount=controller.Graph.Nodes.Count,wireCount=controller.Graph.Wires.Count,graphRevision=controller.Graph.Revision,
                     graphFocus=graph.FocusState.ToString(),focusedElement=focusedElement?.GetType().FullName,
@@ -118,6 +120,9 @@ public partial class App
                     contextMenuOpen=view.GraphEditor.ContextMenuIsOpen,searchOpen=view.GraphEditor.SearchIsOpen,sliderEditorOpen=view.GraphEditor.NumberSliderEditorIsOpen,sliderValidation=view.GraphEditor.NumberSliderValidation,sliderInspectorValue,
                     shelfPageBuilds=view.GraphEditor.Shelf.PageBuildCount,shelfButtonBuilds=view.GraphEditor.Shelf.ButtonBuildCount,
                     toolbar=view.Toolbar.Category,category=view.GraphEditor.Shelf.Category,inspector=view.Inspector.ActiveTab,
+                    startupPreferences=preferences.Encode(),preferences=view.Preferences.Encode(),sidebarVisible=view.Preferences.SidebarVisible,inspectorWidth=view.Preferences.InspectorWidth,historyExpanded=view.Console.HistoryExpanded,commandInput=view.Console.InputText,commandHistoryCount=view.Console.HistoryCount,commandHistory=view.Console.HistoryText,
+                    modelContextMenuOpen=view.ModelContextMenuIsOpen,viewportPropertyDraft=view.ViewportPropertyDraft,viewportPropertyValidation=view.ViewportPropertyValidation,
+                    cameras=cad.Cameras.ToDictionary(p=>p.Key,p=>new{target=p.Value.Target.ToArray(),distance=p.Value.Distance,scale=p.Value.Scale,azimuth=p.Value.Azimuth,elevation=p.Value.Elevation,fov=p.Value.FieldOfView}),
                     dock=view.Preferences.Dock,definitionVisible=view.Preferences.DefinitionVisible,inspectorVisible=view.Preferences.InspectorVisible,
                     activeViewport=cad.ActiveViewport, maximized=cad.Maximized,gridSnap=view.Aids.GridSnap,ortho=view.Aids.Ortho,endSnap=view.Aids.EndSnap,
                     pending=controller.PendingCommand,anchor=controller.CommandAnchor?.ToArray(),lastName=last?.Name,lastPoints,
