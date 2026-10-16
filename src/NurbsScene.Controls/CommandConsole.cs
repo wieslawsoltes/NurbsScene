@@ -100,16 +100,21 @@ public sealed class CommandConsole : Grid
         }
         Find(_input)?.Select(_input.Text.Length,0);
     }
+    private bool _canvasFocusQueued;
     public void BeginCommand(string text)
     {
         ArgumentNullException.ThrowIfNull(text);
         if(text.Length==1)
         {
-            // A CharacterReceived handler can transfer focus before the host has
-            // finished dispatching that same character. Let the native editor
-            // accept it once, then supply it only when the host did not reroute it.
-            _input.Focus(FocusState.Programmatic);
-            DispatcherQueue.TryEnqueue(()=>{if(_input.Text.Length==0)SetText(text);CaretAtEnd();});
+            // Consume canvas characters explicitly, then move focus only after
+            // the current native character dispatch completes. Any characters
+            // arriving before that queued focus are appended here exactly once.
+            SetText(_input.Text+text);
+            if(!_canvasFocusQueued)
+            {
+                _canvasFocusQueued=true;
+                DispatcherQueue.TryEnqueue(()=>{_canvasFocusQueued=false;_input.Focus(FocusState.Programmatic);CaretAtEnd();});
+            }
             return;
         }
         SetText(text);_input.Focus(FocusState.Programmatic);CaretAtEnd();
