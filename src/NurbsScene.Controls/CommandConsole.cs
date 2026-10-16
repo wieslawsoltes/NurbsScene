@@ -100,5 +100,18 @@ public sealed class CommandConsole : Grid
         }
         Find(_input)?.Select(_input.Text.Length,0);
     }
-    public void BeginCommand(string text){SetText(text);_input.Focus(FocusState.Programmatic);CaretAtEnd();}
+    public void BeginCommand(string text)
+    {
+        ArgumentNullException.ThrowIfNull(text);
+        if(text.Length==1)
+        {
+            // A CharacterReceived handler can transfer focus before the host has
+            // finished dispatching that same character. Let the native editor
+            // accept it once, then supply it only when the host did not reroute it.
+            _input.Focus(FocusState.Programmatic);
+            DispatcherQueue.TryEnqueue(()=>{if(_input.Text.Length==0)SetText(text);CaretAtEnd();});
+            return;
+        }
+        SetText(text);_input.Focus(FocusState.Programmatic);CaretAtEnd();
+    }
 }
