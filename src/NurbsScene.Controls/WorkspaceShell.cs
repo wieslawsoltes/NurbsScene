@@ -16,7 +16,7 @@ public sealed partial class WorkspaceView
     private readonly List<FrameworkElement> _shellActions=[],_contextActions=[],_layerActions=[];
     private Button? _layerStatus,_modeStatus;
     private TextBlock? _unitsStatus;
-    private bool _controlKey,_altKey;
+    private bool _controlKey,_altKey,_shiftKey;
     public IEnumerable<FrameworkElement> ActionElements=>_shellActions.Concat(_contextActions).Concat(_layerActions);
     public bool ModelContextMenuIsOpen{get;private set;}
     public string ViewportPropertyValidation=>_viewportProperties?.Validation??"";
@@ -49,33 +49,33 @@ public sealed partial class WorkspaceView
         Console.HistoryExpandedRequested+=expanded=>SetPreferences(Preferences with{HistoryExpanded=expanded});
         var cad=Viewport.Canvas;cad.RepeatRequested+=AcceptOrRepeat;cad.ContextMenuRequested+=ShowModelContext;
         cad.ViewChanged+=RefreshViewStatus;
-        cad.KeyDown+=(_,e)=>{
-            if(e.Key==VirtualKey.Control)_controlKey=true;if(e.Key==VirtualKey.Menu)_altKey=true;
-            if(e.Key==VirtualKey.Escape){if(!cad.CancelNavigation())Run("Cancel");e.Handled=true;}
+        void CanvasKeyDown(object sender,KeyRoutedEventArgs e)
+        {
+            if(e.Key==VirtualKey.Control){_controlKey=true;return;}
+            if(e.Key==VirtualKey.Menu){_altKey=true;return;}
+            if(e.Key==VirtualKey.Shift){_shiftKey=true;return;}
+            if(_controlKey)
+            {
+                var command=e.Key switch{VirtualKey.Z=>"Undo",VirtualKey.Y=>"Redo",VirtualKey.A=>"SelAll",VirtualKey.M=>"MaxViewport",_=>null};
+                if(command is not null){Run(command);e.Handled=true;return;}
+                var viewport=e.Key switch{VirtualKey.F1=>"Top",VirtualKey.F2=>"Front",VirtualKey.F3=>"Right",VirtualKey.F4=>"Perspective",_=>null};
+                if(viewport is not null){cad.Activate(viewport);if(cad.Maximized!=viewport)cad.Maximize(viewport);e.Handled=true;return;}
+            }
+            if(_shiftKey&&e.Key==VirtualKey.F10){ShowModelContext(new(cad.ActualWidth/2,cad.ActualHeight/2));e.Handled=true;return;}
+            if(e.Key==VirtualKey.F3&&!_altKey){Run("Properties");e.Handled=true;}
+            else if(e.Key==VirtualKey.Escape){if(!cad.CancelNavigation())Run("Cancel");e.Handled=true;}
             else if(e.Key==VirtualKey.Delete&&!_controlKey&&!_altKey){Run("Delete");e.Handled=true;}
             else if(e.Key is VirtualKey.Enter or VirtualKey.Space&&!_controlKey&&!_altKey){AcceptOrRepeat();e.Handled=true;}
-        };
-        cad.KeyUp+=(_,e)=>{if(e.Key==VirtualKey.Control)_controlKey=false;if(e.Key==VirtualKey.Menu)_altKey=false;};
-        cad.LostFocus+=(_,_)=>{_controlKey=false;_altKey=false;};
+        }
+        cad.AddHandler(UIElement.KeyDownEvent,new KeyEventHandler(CanvasKeyDown),true);
+        cad.KeyUp+=(_,e)=>{if(e.Key==VirtualKey.Control)_controlKey=false;if(e.Key==VirtualKey.Menu)_altKey=false;if(e.Key==VirtualKey.Shift)_shiftKey=false;};
+        cad.LostFocus+=(_,_)=>{_controlKey=false;_altKey=false;_shiftKey=false;};
         // The native character event carries the actual keyboard layout. Do not
         // derive text from virtual-key codes or send it into graph/numeric editors.
         cad.CharacterReceived+=(_,e)=>{
             if(_controlKey||_altKey||char.IsControl(e.Character)||char.IsWhiteSpace(e.Character))return;
             Console.BeginCommand(e.Character.ToString());e.Handled=true;
         };
-        foreach(var(key,command)in new[]{(VirtualKey.Z,"Undo"),(VirtualKey.Y,"Redo"),(VirtualKey.A,"SelAll"),(VirtualKey.M,"MaxViewport")})
-        {
-            var captured=command;var shortcut=new KeyboardAccelerator{Key=key,Modifiers=VirtualKeyModifiers.Control,ScopeOwner=this};
-            shortcut.Invoked+=(_,e)=>{if(cad.FocusState==FocusState.Unfocused)return;Run(captured);e.Handled=true;};KeyboardAccelerators.Add(shortcut);
-        }
-        var properties=new KeyboardAccelerator{Key=VirtualKey.F3};properties.Invoked+=(_,e)=>{Run("Properties");e.Handled=true;};KeyboardAccelerators.Add(properties);
-        var context=new KeyboardAccelerator{Key=VirtualKey.F10,Modifiers=VirtualKeyModifiers.Shift,ScopeOwner=this};
-        context.Invoked+=(_,e)=>{if(cad.FocusState==FocusState.Unfocused)return;ShowModelContext(new(cad.ActualWidth/2,cad.ActualHeight/2));e.Handled=true;};KeyboardAccelerators.Add(context);
-        foreach(var (key,name) in new[]{(VirtualKey.F1,"Top"),(VirtualKey.F2,"Front"),(VirtualKey.F3,"Right"),(VirtualKey.F4,"Perspective")})
-        {
-            var viewport=name;var shortcut=new KeyboardAccelerator{Key=key,Modifiers=VirtualKeyModifiers.Control,ScopeOwner=this};
-            shortcut.Invoked+=(_,e)=>{if(cad.FocusState==FocusState.Unfocused)return;cad.Activate(viewport);if(cad.Maximized!=viewport)cad.Maximize(viewport);e.Handled=true;};KeyboardAccelerators.Add(shortcut);
-        }
         if(_ownsController)foreach(var camera in cad.Cameras.Values)camera.Target=Vec3.Zero;
     }
     private void AcceptOrRepeat(){if(Controller.PendingCommand.Length>0)Run("Cancel");else Console.Repeat();}
