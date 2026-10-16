@@ -68,6 +68,13 @@ public sealed partial class WorkspaceView
             else if(e.Key is VirtualKey.Enter or VirtualKey.Space&&!_controlKey&&!_altKey){AcceptOrRepeat();e.Handled=true;}
         }
         cad.AddHandler(UIElement.KeyDownEvent,new KeyEventHandler(CanvasKeyDown),true);
+        // F3 is a workspace command, not a canvas-only shortcut. Native buttons
+        // retain focus after toggling the inspector, and browser hosts do not
+        // consistently promote that key to KeyboardAccelerators. Observe the
+        // routed key at the shell; canvas-owned Ctrl+F3 is already handled above.
+        AddHandler(UIElement.KeyDownEvent,new KeyEventHandler((_,e)=>{
+            if(!e.Handled&&e.Key==VirtualKey.F3){Run("Properties");e.Handled=true;}
+        }),true);
         cad.KeyUp+=(_,e)=>{if(e.Key==VirtualKey.Control)_controlKey=false;if(e.Key==VirtualKey.Menu)_altKey=false;if(e.Key==VirtualKey.Shift)_shiftKey=false;};
         cad.LostFocus+=(_,_)=>{_controlKey=false;_altKey=false;_shiftKey=false;};
         // The native character event carries the actual keyboard layout. Do not
