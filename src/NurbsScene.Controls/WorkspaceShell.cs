@@ -137,8 +137,13 @@ public sealed partial class WorkspaceView
         {
             var command=id;var item=ShellItem(label,()=>Run(command),"ModelContext_"+id,_contextActions);if(id=="ZoomSelected")item.IsEnabled=Controller.Document.Selection.Count>0;menu.Items.Add(item);
         }
-        menu.Opened+=(_,_)=>ModelContextMenuIsOpen=true;menu.Closed+=(_,_)=>{ModelContextMenuIsOpen=false;_contextActions.Clear();};
-        menu.ShowAt(Viewport.Canvas,new FlyoutShowOptions{Position=point});
+        menu.Closed+=(_,_)=>{ModelContextMenuIsOpen=false;_contextActions.Clear();};
+        // Uno may create and focus the native popup without raising Opened. The
+        // state belongs to this ShowAt attempt, so publish it before dispatch and
+        // roll it back if popup creation fails; Closed remains authoritative.
+        ModelContextMenuIsOpen=true;
+        try{menu.ShowAt(Viewport.Canvas,new FlyoutShowOptions{Position=point});}
+        catch{ModelContextMenuIsOpen=false;_contextActions.Clear();throw;}
     }
     private void AddStatusControls(StackPanel row)
     {
