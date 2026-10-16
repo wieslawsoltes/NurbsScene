@@ -1,6 +1,7 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using NurbsScene.Presentation;
 using Windows.ApplicationModel.DataTransfer;
@@ -39,6 +40,11 @@ public sealed class CommandConsole : Grid
         ToolTipService.SetToolTip(_expand,"Command history (F2)");row.Children.Add(_expand);SetColumn(_expand,2);
         Children.Add(row);SetRow(row,1);
         AutomationProperties.SetAutomationId(_input,"CommandInput");AutomationProperties.SetName(_input,"Command");AutomationProperties.SetAutomationId(_log,"CommandHistory");
+        // A read-only WinUI/Uno TextBox does not consistently take focus when
+        // its empty scrollable area is pressed. Observe handled child presses as
+        // well, so selection/copy works across the complete history surface.
+        _log.IsTabStop=true;_log.AllowFocusOnInteraction=true;
+        _log.AddHandler(UIElement.PointerPressedEvent,new PointerEventHandler((_,_)=>_log.Focus(FocusState.Pointer)),true);
         var menu=new MenuFlyout();
         var copy=new MenuFlyoutItem{Text="Copy history"};copy.Click+=(_,_)=>{
             try{var data=new DataPackage();data.SetText(_log.Text);Clipboard.SetContent(data);}catch(Exception error){WriteLine("Clipboard: "+error.Message);}
@@ -50,7 +56,12 @@ public sealed class CommandConsole : Grid
             _input.ItemsSource=text.Length>0&&!text.Contains(' ')?WorkspaceShellCommands.Search(text)
                 .Concat(WorkspaceCommands.Search(text).Select(t=>t.Command)).Distinct(StringComparer.OrdinalIgnoreCase).Take(12).ToArray():Array.Empty<string>();
         };
-        _input.QuerySubmitted+=(_,e)=>Submit(e.ChosenSuggestion?.ToString()??e.QueryText);
+        _input.QuerySubmitted+=(_,e)=>{
+            Submit(e.ChosenSuggestion?.ToString()??e.QueryText);
+            // AutoSuggestBox restores QueryText after QuerySubmitted on some Uno
+            // hosts. Clear after that framework update, not only inside Submit.
+            DispatcherQueue.TryEnqueue(()=>{SetText("");_input.IsSuggestionListOpen=false;});
+        };
         _input.KeyDown+=(_,e)=>{
             if(e.Key==VirtualKey.Escape){SetText("");_history.ResetNavigation();_input.IsSuggestionListOpen=false;CommandSubmitted?.Invoke("Cancel");e.Handled=true;}
             else if(!_input.IsSuggestionListOpen&&e.Key==VirtualKey.Up){SetText(_history.Previous(_input.Text));CaretAtEnd();e.Handled=true;}

@@ -18,6 +18,7 @@ public sealed class ViewportPropertiesPanel : StackPanel,IDisposable
     private readonly TextBlock _projection=ClassicChrome.Label("",10),_size=ClassicChrome.Label("",10);
     private readonly TextBlock _error=new(){FontSize=11,TextWrapping=TextWrapping.Wrap,Foreground=ClassicChrome.Brush(150,40,35)};
     private readonly Dictionary<string,TextBox> _fields=[];
+    private readonly Dictionary<TextBox,string> _presentedText=[];
     private readonly ComboBox _display=new(){Header="Display mode (all viewports)",FontSize=11,HorizontalAlignment=HorizontalAlignment.Stretch};
     private readonly DispatcherTimer _refreshTimer=new(){Interval=TimeSpan.FromMilliseconds(50)};
     private string _camera="";
@@ -41,7 +42,10 @@ public sealed class ViewportPropertiesPanel : StackPanel,IDisposable
         {
             var box=new TextBox{Header=label,FontSize=11,MinHeight=26,Padding=new(5,2,5,2),HorizontalAlignment=HorizontalAlignment.Stretch};
             AutomationProperties.SetAutomationId(box,"ViewportProperty"+key);AutomationProperties.SetName(box,label);
-            box.TextChanged+=(_,_)=>{if(!_refreshing){_draft=true;_error.Text="Unapplied camera changes";}};
+            box.TextChanged+=(_,_)=>{
+                if(_refreshing||(_presentedText.TryGetValue(box,out var presented)&&box.Text==presented))return;
+                _draft=true;_error.Text="Unapplied camera changes";
+            };
             _fields.Add(key,box);Children.Add(box);
         }
         var actions=new StackPanel{Orientation=Orientation.Horizontal,Spacing=4};
@@ -72,7 +76,11 @@ public sealed class ViewportPropertiesPanel : StackPanel,IDisposable
             if(_draft)return;
             var settings=ViewportCameraSettings.Read(camera);if(settings==_snapshot)return;_snapshot=settings;_error.Text="";
             var values=new Dictionary<string,double>{{"X",settings.Target.X},{"Y",settings.Target.Y},{"Z",settings.Target.Z},{"Distance",settings.Distance},{"Scale",settings.Scale},{"Azimuth",settings.Azimuth*180/Math.PI},{"Elevation",settings.Elevation*180/Math.PI},{"Fov",settings.FieldOfView*180/Math.PI}};
-            foreach(var (name,box) in _fields)box.Text=values[name].ToString("G17",CultureInfo.InvariantCulture);
+            foreach(var (name,box) in _fields)
+            {
+                var text=values[name].ToString("G17",CultureInfo.InvariantCulture);
+                _presentedText[box]=text;box.Text=text;
+            }
             _fields["Scale"].IsEnabled=!camera.Perspective;foreach(var name in new[]{"Azimuth","Elevation","Fov"})_fields[name].IsEnabled=camera.Perspective;
         }
         finally{_refreshing=false;}
