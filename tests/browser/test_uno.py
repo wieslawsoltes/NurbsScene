@@ -54,7 +54,10 @@ async def main(url, campaign=None):
     def write(name, data):
         (EVIDENCE / name).write_text(json.dumps(data, indent=2))
     async with async_playwright() as pw:
-        options = {"headless": True}
+        launch_args = json.loads(os.getenv("NURBSSCENE_CHROMIUM_ARGS", "[]"))
+        if not isinstance(launch_args, list) or any(not isinstance(arg, str) for arg in launch_args):
+            raise ValueError("NURBSSCENE_CHROMIUM_ARGS must be a JSON array of Chromium arguments")
+        options = {"headless": True, "args": launch_args}
         if os.getenv("CHROMIUM_PATH"):
             options["executable_path"] = os.environ["CHROMIUM_PATH"]
         browser = await pw.chromium.launch(**options)
@@ -77,7 +80,7 @@ async def main(url, campaign=None):
                     report = await page.evaluate("globalThis.nurbsSceneQualification")
                     report["pageErrors"] = list(campaign_errors)
                     write("uno-browser-" + name + ".json", report)
-                    if report.get("application") != "Uno Platform" or report.get("status") != "passed" or campaign_errors:
+                    if report.get("application") != "Uno Platform" or report.get("gpuApi") != "WebGPU" or report.get("status") != "passed" or campaign_errors:
                         raise AssertionError(json.dumps(report, indent=2))
                     reports.append(report)
                     if len(reports) == 1:
@@ -117,7 +120,7 @@ async def main(url, campaign=None):
             write("uno-ui.json", {"status": "failed", "error": str(error), "checks": all_checks, "campaigns": campaign_reports, "pageErrors": errors})
             raise
         finally:
-            write("uno-console.json", {"errors": errors, "console": logs})
+            write("uno-console.json", {"errors": errors, "console": logs, "browserLaunchArgs": launch_args})
             await browser.close()
     print(json.dumps({"suite": "real-uno-pointer-keyboard", "passed": len(all_checks), "campaigns": len(campaign_reports)}), flush=True)
 

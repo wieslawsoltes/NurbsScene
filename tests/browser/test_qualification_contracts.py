@@ -41,7 +41,7 @@ class QualificationContracts(unittest.TestCase):
                       "modelingChecksPerCampaign": [30]}
             modeling = {"application": "Uno Platform", "status": "passed", "pageErrors": [],
                         "checks": ["model fixture " + str(i) for i in range(30)], "lastGpuError": None,
-                        "gpuBackend": "WebGL2 fixture", "frames": 1, "surfacePixels": 1,
+                        "gpuApi": "WebGPU", "gpuBackend": "WebGPU fixture", "frames": 1, "surfacePixels": 1,
                         "gpuReadbackSha256": "A" * 64}
             GATE.write_json(folder / "uno-ui.json", report)
             GATE.write_json(folder / ("uno-browser-" + name + ".json"), modeling)
@@ -145,6 +145,14 @@ class QualificationContracts(unittest.TestCase):
 
     def test_modeling_report_must_describe_actual_uno(self):
         self.edit("uno-browser-workspace.json", lambda r: r.update(application="offline JavaScript harness"))
+        self.rejected()
+
+    def test_legacy_renderer_evidence_cannot_qualify_webgpu_migration(self):
+        self.edit("uno-browser-workspace.json", lambda r: r.update(gpuBackend="WebGL2 fixture"))
+        self.rejected()
+
+    def test_explicit_webgpu_api_evidence_is_required(self):
+        self.edit("uno-browser-workspace.json", lambda r: r.pop("gpuApi"))
         self.rejected()
 
     def test_framebuffer_evidence_is_required(self):

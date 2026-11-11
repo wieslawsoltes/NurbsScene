@@ -115,7 +115,7 @@ def collect(evidence, site, commit, tree, output, registry_path=REGISTRY):
         modeling = read_json(path.parent / ("uno-browser-" + name + ".json"))
         if modeling.get("application") != "Uno Platform" or modeling.get("status") != "passed" or modeling.get("pageErrors") != [] or "lastGpuError" not in modeling or modeling["lastGpuError"] is not None:
             raise ValueError("Actual Uno modeling/framebuffer qualification did not pass: " + name)
-        if not isinstance(modeling.get("gpuBackend"), str) or not modeling["gpuBackend"] or type(modeling.get("frames")) is not int or modeling["frames"] < 1 or type(modeling.get("surfacePixels")) is not int or modeling["surfacePixels"] < 1 or not re.fullmatch(r"[0-9a-fA-F]{64}", modeling.get("gpuReadbackSha256", "")):
+        if modeling.get("gpuApi") != "WebGPU" or not isinstance(modeling.get("gpuBackend"), str) or not modeling["gpuBackend"].startswith("WebGPU") or type(modeling.get("frames")) is not int or modeling["frames"] < 1 or type(modeling.get("surfacePixels")) is not int or modeling["surfacePixels"] < 1 or not re.fullmatch(r"[0-9a-fA-F]{64}", modeling.get("gpuReadbackSha256", "")):
             raise ValueError("Missing actual native framebuffer evidence: " + name)
         check_strings(modeling.get("checks"), registry["minimumModelingChecks"], name + " modeling/framebuffer assertions")
         if report.get("modelingChecksPerCampaign") != [len(modeling["checks"])]:

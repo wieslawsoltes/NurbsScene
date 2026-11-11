@@ -103,6 +103,9 @@ jobs:
         shell: bash
         env:
           CAMPAIGN: ${{ matrix.campaign }}
+          # Hosted runners validate the real WGSL/WebGPU path on SwiftShader.
+          # This is correctness evidence, not a hardware GPU performance result.
+          NURBSSCENE_CHROMIUM_ARGS: '["--enable-unsafe-webgpu","--use-webgpu-adapter=swiftshader","--use-angle=swiftshader"]'
         run: |
           set -euo pipefail
           python -m http.server 8766 --bind 127.0.0.1 --directory artifacts/site > evidence/http.log 2>&1 &

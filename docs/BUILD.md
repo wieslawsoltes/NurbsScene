@@ -1,6 +1,6 @@
 # Build and validation
 
-`global.json` pins the Uno SDK and a compatible .NET 10 SDK range. The preserved source import is complete. Temporary transfer and dependency-cache workflows have been removed; their prior commits remain in Git history.
+`global.json` pins Uno.Sdk **7.0.5** (Uno Platform **7.0.32**) and a compatible .NET 10 SDK range. The desktop and browser application hosts select the WebGPU backend explicitly. The preserved source import is complete. Temporary transfer and dependency-cache workflows have been removed; their prior commits remain in Git history.
 
 ## Real Uno application
 
@@ -53,9 +53,19 @@ python -m playwright install chromium
 python tests/browser/test_uno.py
 ```
 
-The opt-in hook exercises real managed commands, undo/redo, graph changes, exact baking, workspace and typed-path round trips, four viewports and differential GL framebuffer readback. Seven additional checks cover curve-plane sections, overlap reporting, the new components, execution-plan/result reuse, definition serialization, and application-controller splitting/undo. No GPU mocks or skip-on-unavailable path exists. It is smoke qualification, not complete UI, hardware or performance coverage.
+The opt-in hook exercises real managed commands, undo/redo, graph changes, exact baking, workspace and typed-path round trips, four viewports and asynchronous differential WebGPU framebuffer readback. Seven additional checks cover curve-plane sections, overlap reporting, the new components, execution-plan/result reuse, definition serialization, and application-controller splitting/undo. No GPU mocks or skip-on-unavailable path exists. It is smoke qualification, not complete UI, hardware or performance coverage.
 
-The pinned Uno 6.7.135 browser GL adapter selects the framework's existing RGBA readback/channel-conversion path and rejects an unknown framework contract. Browser drawing does not require the optional debug-renderer extension. Inherited shared-context GL errors are recorded separately; context loss and NurbsScene submission errors still fail.
+The viewport derives from Uno 7's `WebGpuCanvasElement`, borrows Uno's WebGPU device and queue, and renders directly into the compositor target. It does not create an independent browser canvas or copy each displayed frame to CPU memory. Readback runs only for explicit capture/qualification requests. The old reflected GL readback adapter and pinned Uno 6 packages are removed.
+
+The artifact gate requires `gpuApi: "WebGPU"` plus actual differential framebuffer evidence; a legacy WebGL report cannot qualify this migration. Browser qualification preserves all ten mandatory input campaigns. Hosted CI uses Chromium's SwiftShader WebGPU adapter for shader/API/framebuffer correctness. That software adapter is not hardware performance evidence. The launch arguments are retained in `uno-console.json`. For an equivalent local correctness run:
+
+```sh
+NURBSSCENE_CHROMIUM_ARGS='["--enable-unsafe-webgpu","--use-webgpu-adapter=swiftshader","--use-angle=swiftshader"]' python tests/browser/test_uno.py
+```
+
+Omit `NURBSSCENE_CHROMIUM_ARGS` to test the browser's normal hardware selection. The default is an empty argument list, and no missing-adapter skip is accepted. Serve the browser app over HTTPS or localhost. Native targets require a working WebGPU graphics driver; unsupported targets fail visibly because the application has no secondary raster backend. Uno documents WebGPU as experimental, so successful compilation alone does not certify a device/driver.
+
+Primary migration references: [Uno 7 migration](https://platform.uno/docs/articles/migrating-to-uno-7.html), [WebGPU backend](https://platform.uno/docs/articles/features/using-webgpu-rendering.html), [WebGpuCanvasElement](https://platform.uno/docs/articles/controls/WebGpuCanvasElement.html), [SDK package manifest](https://www.nuget.org/packages/Uno.Sdk/7.0.5), and [Chromium's WebGPU test adapter](https://dawn.googlesource.com/dawn.git/+/refs/heads/main/webgpu-cts/README.md).
 
 Ordinary builds omit the hook. Pages intentionally publishes the exact **qualification-enabled alpha artifact** tested by CI; its checks run only with the explicit `?qualification=1` query. This permits reproducible validation of the deployed alpha without substituting another renderer or application.
 
@@ -91,7 +101,7 @@ GPU, cold-start or complete UI benchmark. See `SECTIONS-AND-RUNTIME.md`.
 ## Workspace UI regressions
 
 The real Uno browser suite also runs `test_workspace_ui.py`, using mouse and keyboard
-input against observed native-control and Skia-canvas bounds. It retains JSON logs
+input against observed native-control and graph-canvas bounds. It retains JSON logs
 and right/bottom/narrow screenshots. Presentation benchmarks and allocation contracts
 run separately in `presentation.yml`. See `CLASSIC-WORKSPACE.md` for scope and limits.
 
