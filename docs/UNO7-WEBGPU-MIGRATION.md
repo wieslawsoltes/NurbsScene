@@ -255,3 +255,8 @@ next complete Uno campaign run to confirm startup and interaction behavior.
 At revision `47ae1c89`, the standalone Chromium shader job executed 16 frames
 and passed all 21 checks, including both new reverse-Z occlusion regressions.
 All three production WGSL modules compiled without messages or validation errors.
+
+
+### XAML startup font registration
+
+The coherent software driver configuration removed the observed Chromium device loss on `e580c23`, but the shared app still did not reach its first canvas frame. The captured surface was blank across the XAML chrome as well as the canvases. Source review against Uno 7.0.32 identified a separate necessary host fix: the managed browser font provider cannot discover a system default font. Registering fonts only inside the custom vector adapter does not configure XAML `TextBlock` measurement. Both hosts now register `ManagedBackend.CreateFontProvider(BundledFonts.GetDefaultFontBytes())` before application startup, using the same licensed embedded DejaVu Sans font. Release unhandled exceptions are written to stderr, and failed browser qualification reports public loaded/size/initialization state without suppressing exceptions or relaxing the first-frame assertion. Actual resolved font style is read from the font tables so synthetic bold/italic fallback remains correct when a named family returns a regular face. Full browser runtime qualification is rerun after this fix.

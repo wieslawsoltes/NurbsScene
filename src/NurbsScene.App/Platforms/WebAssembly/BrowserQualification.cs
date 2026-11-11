@@ -91,7 +91,20 @@ public partial class App
             report["gpuReadbackSha256"]=Convert.ToHexString(SHA256.HashData(rotated));
             report["status"]="passed";
         }
-        catch(Exception error){report["status"]="failed";report["error"]=error.ToString();}
+        catch(Exception error)
+        {
+            report["status"]="failed";report["error"]=error.ToString();
+            var canvas=view.Viewport.Canvas;
+            var graph=view.GraphEditor.Canvas;
+            // Read-only failure state distinguishes missing layout, unloaded
+            // canvases and a compositor failure from shader/device validation.
+            report["renderingState"]=new
+            {
+                workspace=new{view.IsLoaded,view.ActualWidth,view.ActualHeight},
+                viewport=new{canvas.IsLoaded,canvas.ActualWidth,canvas.ActualHeight,canvas.IsWebGpuInitialized,canvas.Frames,canvas.Backend,canvas.LastError},
+                graph=new{graph.IsLoaded,graph.ActualWidth,graph.ActualHeight,graph.IsWebGpuInitialized,graph.DrawingFrames,graph.LastDrawingError}
+            };
+        }
         Publish();
         if(report["status"] as string=="passed")await ObserveWorkspaceUiAsync(view);
     }

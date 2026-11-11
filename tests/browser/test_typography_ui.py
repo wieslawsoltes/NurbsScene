@@ -80,7 +80,7 @@ async def verify_typography_ui(page):
     check(p['style']=={'fontFamily':'DejaVu Sans','size':14,'bold':True,'italic':True,'horizontal':'Right','vertical':'Bottom'},'Apply commits font family size weight slant and both alignments together')
     check(data['state']['graphRevision']==revision+1 and data['values']['evaluated']==0,'Typography commits one revision while retaining solved data')
     placed=p['rendered'];clip=placed['clip'];rows=placed['rows']
-    check(bool(placed['family']) and placed['style']==p['style'] and len(rows)>0,'Actual Skia renderer reports the requested style and resolved family')
+    check(bool(placed['family']) and placed['style']==p['style'] and len(rows)>0,'Actual WebGPU vector renderer reports the requested style and resolved family')
     check(all(abs(r['x']+r['advance']-(clip['X']+clip['Width']))<1e-4 for r in rows),'Right alignment uses measured native text advances')
     check(abs(rows[-1]['baseline']+placed['descent']-clip['Y']-clip['Height'])<1e-4,'Bottom alignment uses actual native ascent and descent')
     check(next(p for p in data['values']['panels'] if p['id']==pid)['items']==['WWW iii'],'Font and alignment never rewrite panel data')

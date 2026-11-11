@@ -14,6 +14,13 @@ python -m http.server 8766 --bind 127.0.0.1 --directory artifacts/site
 
 `src/NurbsScene.App` contains the host; reusable controls and modeling/application logic live in separate projects. Desktop compilation does not substitute for running every desktop platform.
 
+Both host composition roots explicitly register Uno's managed font provider with
+the embedded DejaVu Sans default face. This registration serves XAML TextBlocks and
+layout as well as the application-specific canvas font resources. It is required
+on WebAssembly, where system fonts cannot be enumerated; configuring only the
+custom canvas provider does not supply XAML's default font. See Uno's
+[Skia-free font-provider configuration](https://platform.uno/docs/articles/features/using-webgpu-rendering.html#apps-without-skiasharp).
+
 ## Managed numerical, graph and document suites
 
 ```sh
