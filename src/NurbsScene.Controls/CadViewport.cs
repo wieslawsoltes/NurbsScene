@@ -119,7 +119,13 @@ public sealed class CadViewport : WebGpuCanvasElement
     private async Task CompleteCaptureAsync(TaskCompletionSource<byte[]> capture,Task<byte[]> readback)
     {
         try{capture.TrySetResult(await readback);}
-        catch(Exception error){capture.TrySetException(error);Report(error.Message);}
+        catch(Exception error)
+        {
+            capture.TrySetException(error);
+            // A readback can finish after unload/reload. Its failure must not
+            // replace diagnostics from the new device generation.
+            if(ReferenceEquals(_capture,capture))Report(error.Message);
+        }
         finally
         {
             if(ReferenceEquals(_capture,capture)){_capture=null;_captureSubmitted=false;}
