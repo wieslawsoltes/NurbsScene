@@ -200,9 +200,12 @@ fn lineVertex(@builtin(vertex_index) vertex: u32,
     let halfWidth = max(object.material.z * 0.5, 0.25);
     let expandedHalfWidth = halfWidth + 0.75;
     var position = mix(a, b, endpoint[vertex]);
+    // Reverse-Z precision is relative to Z. A fixed NDC bias would pull distant
+    // curves through foreground surfaces; a few float ULPs retain coplanar lines.
+    let depthBias = max(abs(position.z), 1e-6 * abs(position.w)) * 2e-6;
     position = vec4<f32>(position.xy + perpendicular * frame.viewport.zw * 2.0
         * expandedHalfWidth * side[vertex] * position.w,
-        min(position.z + 2e-6 * position.w, position.w), position.w);
+        min(position.z + depthBias, position.w), position.w);
     output.position = position;
     output.world = mix(wa, wb, endpoint[vertex]);
     output.transverse = side[vertex] * expandedHalfWidth;

@@ -35,18 +35,21 @@ class QualificationContracts(unittest.TestCase):
             name = entry["name"]
             folder = self.evidence / name
             checks = ["fixture check " + str(i) for i in range(entry["minimumUiChecks"] - 1)] + ["Interaction test session restored: " + name]
-            record = {"campaign": name, "status": "passed", "checks": checks,
+            observation = {"version": 1, "installed": True, "requestCount": 1, "deviceCount": 1, "errors": []}
+            record = {"campaign": name, "status": "passed", "checks": checks, "gpuObservation": copy.deepcopy(observation),
                       "final": {"state": {"gpuError": None, "graphErrors": 0}}}
             report = {"status": "passed", "checks": checks, "campaigns": [record], "pageErrors": [],
                       "modelingChecksPerCampaign": [30]}
             modeling = {"application": "Uno Platform", "status": "passed", "pageErrors": [],
                         "checks": ["model fixture " + str(i) for i in range(30)], "lastGpuError": None,
                         "gpuApi": "WebGPU", "gpuBackend": "WebGPU fixture", "frames": 1, "surfacePixels": 1,
+                        "gpuObservation": copy.deepcopy(observation),
                         "gpuReadbackSha256": "A" * 64}
             GATE.write_json(folder / "uno-ui.json", report)
             GATE.write_json(folder / ("uno-browser-" + name + ".json"), modeling)
             GATE.write_json(folder / "uno-publication.json", self.manifest)
-            GATE.write_json(folder / "uno-console.json", {"errors": [], "console": []})
+            GATE.write_json(folder / "uno-console.json", {"errors": [], "console": [],
+                "gpuObservations": [{"campaign": name, "state": copy.deepcopy(observation)}]})
 
     def collect(self):
         return GATE.collect(self.evidence, self.site, COMMIT, TREE, self.output)
@@ -153,6 +156,30 @@ class QualificationContracts(unittest.TestCase):
 
     def test_explicit_webgpu_api_evidence_is_required(self):
         self.edit("uno-browser-workspace.json", lambda r: r.pop("gpuApi"))
+        self.rejected()
+
+    def test_uncaptured_webgpu_error_rejects_even_when_surface_pixels_differ(self):
+        self.edit("uno-browser-workspace.json", lambda r: r["gpuObservation"]["errors"].append({"kind": "uncaptured-error", "message": "invalid shadow pass"}))
+        self.rejected()
+
+    def test_missing_real_device_observation_rejects(self):
+        self.edit("uno-browser-workspace.json", lambda r: r.pop("gpuObservation"))
+        self.rejected()
+
+    def test_installed_observer_without_a_real_device_rejects(self):
+        self.edit("uno-browser-workspace.json", lambda r: r["gpuObservation"].update(deviceCount=0))
+        self.rejected()
+
+    def test_late_device_loss_rejects_the_final_campaign(self):
+        self.edit("uno-ui.json", lambda r: r["campaigns"][0]["gpuObservation"]["errors"].append({"kind": "device-lost", "reason": "unknown"}))
+        self.rejected()
+
+    def test_missing_final_device_observation_rejects(self):
+        self.edit("uno-ui.json", lambda r: r["campaigns"][0].pop("gpuObservation"))
+        self.rejected()
+
+    def test_console_cannot_omit_final_device_observation(self):
+        self.edit("uno-console.json", lambda r: r.pop("gpuObservations"))
         self.rejected()
 
     def test_framebuffer_evidence_is_required(self):

@@ -110,6 +110,9 @@ def qualify():
         return buffer([-.85,-.8,z,0,0,1,.85,-.8,z,0,0,1,0,.85,z,0,0,1],wgpu.BufferUsage.VERTEX)
     near, far, caster = triangle(.7), triangle(.25), triangle(.2)
     ribbon = buffer([-.9,0,2,.9,0,.5],wgpu.BufferUsage.VERTEX)
+    distant_surface = triangle(5e-6)
+    distant_ribbon = buffer([-.3,0,4e-6,.3,0,4e-6],wgpu.BufferUsage.VERTEX)
+    coplanar_ribbon = buffer([-.3,0,5e-6,.3,0,5e-6],wgpu.BufferUsage.VERTEX)
 
     def harness(width,height):
         half_w,half_h = (width+1)//2,(height+1)//2
@@ -133,7 +136,7 @@ def qualify():
         compose_group=device.create_bind_group(layout=compose.get_bind_group_layout(0),entries=[
             {"binding":0,"resource":hv},{"binding":1,"resource":av},{"binding":2,"resource":rv},
             {"binding":3,"resource":bav},{"binding":4,"resource":linear_sampler},{"binding":5,"resource":{"buffer":post_parameters}}])
-        def render(opaque=(),ghost=(),shadowed=False,clip=False,line=False,bloom=0,quad=False):
+        def render(opaque=(),ghost=(),shadowed=False,clip=False,line=False,bloom=0,quad=False,distant=False,coplanar=False):
             frame_values[40:44]=[width,height,1/width,1/height]
             frame_values[47]=1 if shadowed else 0
             frame_values[48]=1 if clip else 0
@@ -149,9 +152,9 @@ def qualify():
                 depth_stencil_attachment={"view":dv,"depth_clear_value":0,"depth_load_op":"clear","depth_store_op":"store"})
             p.set_pipeline(surface_pipeline);p.set_bind_group(0,frame_group)
             for item in opaque:
-                p.set_bind_group(1,object_group,[item*256]);p.set_vertex_buffer(0,near if item==0 else far);p.draw(3)
+                p.set_bind_group(1,object_group,[item*256]);p.set_vertex_buffer(0,distant_surface if distant else (near if item==0 else far));p.draw(3)
             if line:
-                p.set_pipeline(line_pipeline);p.set_bind_group(1,object_group,[0]);p.set_vertex_buffer(0,ribbon);p.draw(6,1)
+                p.set_pipeline(line_pipeline);p.set_bind_group(1,object_group,[256 if distant else 0]);p.set_vertex_buffer(0,(coplanar_ribbon if coplanar else distant_ribbon) if distant else ribbon);p.draw(6,1)
             p.end()
             p=encoder.begin_render_pass(color_attachments=[
                 {"view":amv,"resolve_target":av,"load_op":"clear","store_op":"store","clear_value":(0,0,0,0)},
@@ -193,6 +196,11 @@ def qualify():
     lines=render(line=True)
     check(delta(empty,lines)>10,"instanced near-clipped ribbon rasterizes")
     check(lines[left]==empty[left],"near-clipped hidden ribbon does not rasterize")
+    distant_base=render(opaque=[0],distant=True)
+    distant_hidden=render(opaque=[0],distant=True,line=True)
+    check(max_delta(distant_base,distant_hidden)<=1,"distant reverse-Z curves stay behind opaque foreground geometry")
+    distant_coplanar=render(opaque=[0],distant=True,line=True,coplanar=True)
+    check(delta(distant_base,distant_coplanar)>10,"coplanar distant curves remain visible with relative depth bias")
     bloomed=render(opaque=[0],bloom=.6)
     check(delta(unshadowed,bloomed)>30,"separable compute bloom changes final pixels")
     partition_base=render(opaque=[0],clip=True,quad=True)

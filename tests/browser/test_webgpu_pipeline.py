@@ -119,6 +119,9 @@ GPU_TEST = r"""async ({sources, software}) => {
     -.85,-.8,z, 0,0,1, .85,-.8,z, 0,0,1, 0,.85,z, 0,0,1]),GPUBufferUsage.VERTEX);
   const near = triangle(.7), far = triangle(.25), caster = triangle(.2);
   const ribbon = buffer(new Float32Array([-.9,0,2, .9,0,.5]),GPUBufferUsage.VERTEX);
+  const distantSurface = triangle(5e-6);
+  const distantRibbon = buffer(new Float32Array([-.3,0,4e-6, .3,0,4e-6]),GPUBufferUsage.VERTEX);
+  const coplanarRibbon = buffer(new Float32Array([-.3,0,5e-6, .3,0,5e-6]),GPUBufferUsage.VERTEX);
   function setObject(slot,color,roughness=.36) {
     objectBytes.set(color,slot*64); objectBytes.set([.12,roughness,3,0],slot*64+4);
   }
@@ -152,7 +155,7 @@ GPU_TEST = r"""async ({sources, software}) => {
       {binding:3,resource:bloomAView},{binding:4,resource:linearSampler},{binding:5,resource:{buffer:postParameters}}]});
     const pitch=Math.ceil(width*4/256)*256;
     const readback=device.createBuffer({size:pitch*height,usage:GPUBufferUsage.COPY_DST|GPUBufferUsage.MAP_READ});owned.push(readback);
-    async function render({opaque=[],ghost=[],shadowed=false,clip=false,line=false,bloom=0,quad=false}={}) {
+    async function render({opaque=[],ghost=[],shadowed=false,clip=false,line=false,bloom=0,quad=false,distant=false,coplanar=false}={}) {
       frameBytes.set([width,height,1/width,1/height],40);
       frameBytes[47]=shadowed?1:0;frameBytes[48]=clip?1:0;frameBytes.set([1,0,0,0],36);
       device.queue.writeBuffer(frame,0,frameBytes);
@@ -165,8 +168,8 @@ GPU_TEST = r"""async ({sources, software}) => {
       pass=encoder.beginRenderPass({colorAttachments:[{view:hdrMsView,resolveTarget:hdrView,loadOp:'clear',storeOp:'store',clearValue:[.05,.06,.07,1]}],
         depthStencilAttachment:{view:depthView,depthClearValue:0,depthLoadOp:'clear',depthStoreOp:'store'}});
       pass.setPipeline(surfacePipeline);pass.setBindGroup(0,frameGroup);
-      for(const item of opaque) {pass.setBindGroup(1,objectGroup,[item*256]);pass.setVertexBuffer(0,item===0?near:far);pass.draw(3);}
-      if(line){pass.setPipeline(linePipeline);pass.setBindGroup(1,objectGroup,[0]);pass.setVertexBuffer(0,ribbon);pass.draw(6,1);}
+      for(const item of opaque) {pass.setBindGroup(1,objectGroup,[item*256]);pass.setVertexBuffer(0,distant?distantSurface:(item===0?near:far));pass.draw(3);}
+      if(line){pass.setPipeline(linePipeline);pass.setBindGroup(1,objectGroup,[distant?256:0]);pass.setVertexBuffer(0,distant?(coplanar?coplanarRibbon:distantRibbon):ribbon);pass.draw(6,1);}
       pass.end();
       pass=encoder.beginRenderPass({colorAttachments:[
         {view:accumMsView,resolveTarget:accumView,loadOp:'clear',storeOp:'store',clearValue:[0,0,0,0]},
@@ -215,6 +218,11 @@ GPU_TEST = r"""async ({sources, software}) => {
   const lines=await h.render({line:true});
   check(delta(empty,lines)>10,'instanced line ribbons rasterize after near-plane clipping');
   check(lines[left]===empty[left],'near-plane clipping suppresses the hidden part of a curve');
+  const distantBase=await h.render({opaque:[0],distant:true});
+  const distantHidden=await h.render({opaque:[0],distant:true,line:true});
+  check(maxDelta(distantBase,distantHidden)<=1,'distant reverse-Z curves stay behind an opaque foreground surface');
+  const distantCoplanar=await h.render({opaque:[0],distant:true,line:true,coplanar:true});
+  check(delta(distantBase,distantCoplanar)>10,'coplanar distant CAD curves remain visible with relative depth bias');
   const bloomed=await h.render({opaque:[0],bloom:.6});
   check(delta(unshadowed,bloomed)>30,'compute bloom modifies the HDR composite');
   const partitionBase=await h.render({opaque:[0],clip:true,quad:true});

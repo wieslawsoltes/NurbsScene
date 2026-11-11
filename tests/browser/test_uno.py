@@ -25,6 +25,14 @@ from test_rhino_workspace import verify_rhino_workspace
 
 ROOT = Path(__file__).resolve().parents[2]
 EVIDENCE = ROOT / "evidence"
+GPU_OBSERVER = (ROOT / "tests/browser/webgpu_observation.js").read_text()
+
+def require_gpu_observation(observation):
+    if (not isinstance(observation, dict) or observation.get("version") != 1
+            or observation.get("installed") is not True
+            or type(observation.get("deviceCount")) is not int or observation["deviceCount"] < 1
+            or observation.get("errors") != []):
+        raise AssertionError("Actual WebGPU device observation failed: " + json.dumps(observation))
 
 async def verify_panels(page):
     checks = await verify_canvas_values_ui(page)
@@ -50,7 +58,7 @@ async def main(url, campaign=None):
         if campaign not in registered:
             raise ValueError("Unknown native campaign: " + campaign)
         campaigns = tuple(item for item in campaigns if item[0] == campaign)
-    all_checks, reports, campaign_reports, errors, logs = [], [], [], [], []
+    all_checks, reports, campaign_reports, errors, logs, gpu_observations = [], [], [], [], [], []
     def write(name, data):
         (EVIDENCE / name).write_text(json.dumps(data, indent=2))
     async with async_playwright() as pw:
@@ -65,6 +73,7 @@ async def main(url, campaign=None):
             for name, verify in campaigns:
                 context = await browser.new_context(viewport={"width": 1600, "height": 1100}, device_scale_factor=1)
                 await context.grant_permissions(["clipboard-read", "clipboard-write"])
+                await context.add_init_script(script=GPU_OBSERVER)
                 page = await context.new_page()
                 campaign_errors = []
                 def on_error(error, campaign=name, found=campaign_errors):
@@ -79,9 +88,11 @@ async def main(url, campaign=None):
                     await page.wait_for_function('globalThis.nurbsSceneQualification && globalThis.nurbsSceneQualification.status !== "running"', timeout=180000)
                     report = await page.evaluate("globalThis.nurbsSceneQualification")
                     report["pageErrors"] = list(campaign_errors)
+                    report["gpuObservation"] = await page.evaluate("globalThis.nurbsSceneGpuObservation")
                     write("uno-browser-" + name + ".json", report)
                     if report.get("application") != "Uno Platform" or report.get("gpuApi") != "WebGPU" or report.get("status") != "passed" or campaign_errors:
                         raise AssertionError(json.dumps(report, indent=2))
+                    require_gpu_observation(report["gpuObservation"])
                     reports.append(report)
                     if len(reports) == 1:
                         write("uno-browser.json", report)  # canonical modeling/framebuffer report
@@ -98,7 +109,6 @@ async def main(url, campaign=None):
                         raise AssertionError(campaign_errors)
                     record["status"] = "passed"
                     all_checks.extend(record["checks"])
-                    print(json.dumps({"campaign": name, "status": "passed", "checks": len(record["checks"])}), flush=True)
                 except Exception as error:
                     record["status"] = "failed"; record["error"] = str(error)
                     try:
@@ -108,19 +118,36 @@ async def main(url, campaign=None):
                         record["observationError"] = str(observation_error)
                     raise
                 finally:
-                    write("uno-campaign-" + name + ".json", record)
                     try:
                         await page.screenshot(path=str(EVIDENCE / ("uno-campaign-" + name + ".png")))
                         await page.screenshot(path=str(EVIDENCE / "uno-browser.png"))
                     finally:
-                        await context.close()
+                        try:
+                            observation = await page.evaluate("globalThis.nurbsSceneGpuObservation")
+                            record["gpuObservation"] = observation
+                            gpu_observations.append({"campaign": name, "state": observation})
+                            require_gpu_observation(observation)
+                            if campaign_errors:
+                                raise AssertionError(campaign_errors)
+                        except Exception as gpu_error:
+                            record["status"] = "failed"
+                            record["gpuObservationError"] = str(gpu_error)
+                            raise
+                        finally:
+                            write("uno-campaign-" + name + ".json", record)
+                            await context.close()
+                print(json.dumps({"campaign": name, "status": "passed", "checks": len(record["checks"])}), flush=True)
             write("uno-ui.json", {"status": "passed", "checks": all_checks, "campaigns": campaign_reports,
                 "modelingChecksPerCampaign": [len(r["checks"]) for r in reports], "pageErrors": errors})
         except Exception as error:
+            # Keep the diagnostic evidence accessible in CI logs when the runner
+            # fails before publishing a managed GPU error or framebuffer report.
+            print("UNO_BROWSER_FAILURE_CONSOLE " + json.dumps(logs[-120:]), flush=True)
+            print("UNO_BROWSER_FAILURE_GPU " + json.dumps(gpu_observations), flush=True)
             write("uno-ui.json", {"status": "failed", "error": str(error), "checks": all_checks, "campaigns": campaign_reports, "pageErrors": errors})
             raise
         finally:
-            write("uno-console.json", {"errors": errors, "console": logs, "browserLaunchArgs": launch_args})
+            write("uno-console.json", {"errors": errors, "console": logs, "browserLaunchArgs": launch_args, "gpuObservations": gpu_observations})
             await browser.close()
     print(json.dumps({"suite": "real-uno-pointer-keyboard", "passed": len(all_checks), "campaigns": len(campaign_reports)}), flush=True)
 

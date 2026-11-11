@@ -86,6 +86,14 @@ def check_strings(checks, minimum, label):
         raise ValueError("Missing or incomplete " + label)
 
 
+def require_gpu_observation(observation, name):
+    if (not isinstance(observation, dict) or observation.get("version") != 1
+            or observation.get("installed") is not True
+            or type(observation.get("deviceCount")) is not int or observation["deviceCount"] < 1
+            or observation.get("errors") != []):
+        raise ValueError("Missing or erroneous actual WebGPU device observation: " + name)
+
+
 def collect(evidence, site, commit, tree, output, registry_path=REGISTRY):
     manifest = verify_site(site, commit, tree)
     registry = campaigns(registry_path)
@@ -117,12 +125,16 @@ def collect(evidence, site, commit, tree, output, registry_path=REGISTRY):
             raise ValueError("Actual Uno modeling/framebuffer qualification did not pass: " + name)
         if modeling.get("gpuApi") != "WebGPU" or not isinstance(modeling.get("gpuBackend"), str) or not modeling["gpuBackend"].startswith("WebGPU") or type(modeling.get("frames")) is not int or modeling["frames"] < 1 or type(modeling.get("surfacePixels")) is not int or modeling["surfacePixels"] < 1 or not re.fullmatch(r"[0-9a-fA-F]{64}", modeling.get("gpuReadbackSha256", "")):
             raise ValueError("Missing actual native framebuffer evidence: " + name)
+        require_gpu_observation(modeling.get("gpuObservation"), name + " modeling")
+        require_gpu_observation(record.get("gpuObservation"), name + " final")
         check_strings(modeling.get("checks"), registry["minimumModelingChecks"], name + " modeling/framebuffer assertions")
         if report.get("modelingChecksPerCampaign") != [len(modeling["checks"])]:
             raise ValueError("Inconsistent modeling assertion count: " + name)
         console = read_json(path.parent / "uno-console.json")
         if console.get("errors") != []:
             raise ValueError("Campaign recorded browser page errors: " + name)
+        if console.get("gpuObservations") != [{"campaign": name, "state": record["gpuObservation"]}]:
+            raise ValueError("Campaign WebGPU observation differs from its final evidence: " + name)
         reports[name] = (path.parent, record, modeling, console)
     if set(reports) != set(required):
         raise ValueError("Missing mandatory campaigns: " + ", ".join(sorted(set(required) - set(reports))))
@@ -141,7 +153,8 @@ def collect(evidence, site, commit, tree, output, registry_path=REGISTRY):
         shutil.copytree(folder, output / "campaigns" / name)
     write_json(output / "uno-ui.json", aggregate)
     write_json(output / "uno-browser.json", ordered[0][2])
-    write_json(output / "uno-console.json", {"errors": [], "console": [entry for _, _, _, console in ordered for entry in console.get("console", [])]})
+    write_json(output / "uno-console.json", {"errors": [], "console": [entry for _, _, _, console in ordered for entry in console.get("console", [])],
+        "gpuObservations": [entry for _, _, _, console in ordered for entry in console["gpuObservations"]]})
     write_json(output / "uno-publication.json", manifest)
     return aggregate
 
