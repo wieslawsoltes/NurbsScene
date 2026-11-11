@@ -132,9 +132,11 @@ jobs:
         shell: bash
         env:
           CAMPAIGN: ${{ matrix.campaign }}
+          # Use SwiftShader consistently for Dawn/ANGLE/canvas SharedImage interop.
+          # A forced WebGPU-only adapter loses the canvas device: Chromium issue 575926500.
           # Hosted runners validate the real WGSL/WebGPU path on SwiftShader.
           # This is correctness evidence, not a hardware GPU performance result.
-          NURBSSCENE_CHROMIUM_ARGS: '["--enable-unsafe-webgpu","--use-webgpu-adapter=swiftshader","--use-angle=swiftshader"]'
+          NURBSSCENE_CHROMIUM_ARGS: '["--enable-unsafe-webgpu","--use-angle=swiftshader","--enable-unsafe-swiftshader","--use-vulkan=swiftshader","--enable-features=Vulkan"]'
         run: |
           set -euo pipefail
           python -m http.server 8766 --bind 127.0.0.1 --directory artifacts/site > evidence/http.log 2>&1 &

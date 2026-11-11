@@ -75,8 +75,16 @@ The `webgpu-pipeline` CI job must pass before the publication can qualify.
 The artifact gate requires `gpuApi: "WebGPU"`, actual differential framebuffer evidence and an installed observer that saw at least one real GPU device. A wrapper around the native `GPUAdapter.requestDevice` installs listeners on each returned device without replacing it, changing descriptors or suppressing the host's events. Uncaptured validation errors and unexpected device loss fail both the initial modeling report and the final campaign evidence. Only device loss with an explicit `destroyed` reason is ignored because it reports intentional host teardown. Final evidence is sampled after screenshots and retained in `uno-console.json`; a legacy WebGL report or missing observation cannot qualify this migration. Browser qualification preserves all ten mandatory input campaigns. Hosted CI uses Chromium's SwiftShader WebGPU adapter for shader/API/framebuffer correctness. That software adapter is not hardware performance evidence. The launch arguments are retained in `uno-console.json`. For an equivalent local correctness run:
 
 ```sh
-NURBSSCENE_CHROMIUM_ARGS='["--enable-unsafe-webgpu","--use-webgpu-adapter=swiftshader","--use-angle=swiftshader"]' python tests/browser/test_uno.py
+NURBSSCENE_CHROMIUM_ARGS='["--enable-unsafe-webgpu","--use-angle=swiftshader","--enable-unsafe-swiftshader","--use-vulkan=swiftshader","--enable-features=Vulkan"]' python tests/browser/test_uno.py
 ```
+
+The software configuration selects SwiftShader consistently for WebGPU, ANGLE and
+the Vulkan canvas compositor. Forcing only `--use-webgpu-adapter=swiftshader` can
+leave offscreen WebGPU rendering operational while invalidating the instance on
+canvas presentation, as recorded in [Chromium issue 575926500](https://issues.chromium.org/issues/575926500).
+The first Uno migration run reproduced that exact device-loss message. The
+configuration above changes the CI software driver selection and preserves the
+actual application, shader, pixel and device-error gates.
 
 Omit `NURBSSCENE_CHROMIUM_ARGS` to test the browser's normal hardware selection. The default is an empty argument list, and no missing-adapter skip is accepted. Serve the browser app over HTTPS or localhost. Native targets require a working WebGPU graphics driver; unsupported targets fail visibly because the application has no secondary raster backend. Uno documents WebGPU as experimental, so successful compilation alone does not certify a device/driver.
 

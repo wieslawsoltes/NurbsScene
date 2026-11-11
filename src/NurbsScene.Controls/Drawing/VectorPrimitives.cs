@@ -47,7 +47,8 @@ public sealed class VectorPaint : IDisposable
         StartCap = (StrokeCap)StrokeCap, EndCap = (StrokeCap)StrokeCap,
         DashCap = (StrokeCap)StrokeCap, LineJoin = (StrokeJoin)StrokeJoin,
         MiterLimit = 4, DashArray = PathEffect?.Intervals, DashOffset = PathEffect?.Phase ?? 0,
-        TrimStart = 0, TrimEnd = 1
+        // Uno uses (0, 0) to disable trimming. (0, 1) rebuilds closed outlines as open contours.
+        TrimStart = 0, TrimEnd = 0
     };
     public void Dispose() { }
 }

@@ -204,7 +204,7 @@ Playwright 1.57 dependency does not support the current Ubuntu 26.04 runner.
    failure log and corrected without changing its test set or dependency pins.
    Browser device-error observation was strengthened so uncaptured GPU validation
    errors cannot be mistaken for a passing visual campaign. A temporary read-only
-   diagnostic workflow exposes the already-captured failing browser console.
+   diagnostic workflow exposed the already-captured failing browser console.
 8. Review found that a constant clip-space line bias could pull distant curves
    through opaque surfaces under reverse-Z. The bias is now relative, with new
    actual-pixel tests for hidden distant and visible coplanar curves.
@@ -234,3 +234,24 @@ inventory.
 - [Stable drawing backend](https://github.com/unoplatform/uno/tree/7.0.32/src/Uno.UI.Composition.WebGpu)
 - [WebGPU specification](https://www.w3.org/TR/webgpu/)
 - [DejaVu 2.37 release](https://github.com/dejavu-fonts/dejavu-fonts/releases/tag/version_2_37)
+
+
+### Browser integration diagnosis
+
+The failing full-app console showed a device loss immediately after Uno imported
+its WebGPU device and initialized the compositor: "A valid external Instance
+reference no longer exists." Standalone offscreen WGSL execution on the same
+software adapter passed. The behavior and launch arguments match
+[Chromium issue 575926500](https://issues.chromium.org/issues/575926500), whose paired
+reproduction distinguishes failing forced-adapter canvas interop from a coherent
+SwiftShader Vulkan configuration.
+
+The Uno CI campaigns now use the report's working software launch configuration:
+`--enable-unsafe-webgpu --use-angle=swiftshader --enable-unsafe-swiftshader --use-vulkan=swiftshader --enable-features=Vulkan`.
+Only test-process setup changes; application device ownership, timeouts,
+assertions and GPU error observation remain intact. This diagnosis requires the
+next complete Uno campaign run to confirm startup and interaction behavior.
+
+At revision `47ae1c89`, the standalone Chromium shader job executed 16 frames
+and passed all 21 checks, including both new reverse-Z occlusion regressions.
+All three production WGSL modules compiled without messages or validation errors.
