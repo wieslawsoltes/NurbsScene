@@ -5,6 +5,7 @@ using NurbsScene.Geometry;
 using NurbsScene.Rendering;
 using NurbsScene.Presentation;
 using Uno.WinUI.Graphics3DWebGpu;
+using Uno.UI.Composition.WebGpu;
 using Windows.Foundation;
 using Windows.System;
 
@@ -41,6 +42,15 @@ public sealed class CadViewport : WebGpuCanvasElement
     public string CursorViewport {get;private set;}="Perspective";
     public string? LastError {get;private set;}
     public long Frames=>_renderer?.Frames??0;
+    /// <summary>Cumulative geometry residency counters for this renderer lifetime.</summary>
+    public long GeometryUploadBytes=>_renderer?.GeometryUploadBytes??0;
+    public long GeometryUploadCount=>_renderer?.GeometryUploadCount??0;
+    /// <summary>Submitted work in the last frame, including its rendering passes.</summary>
+    public int DrawCalls=>_renderer?.DrawCalls??0;
+    public int TriangleCount=>_renderer?.TriangleCount??0;
+    public int LineCount=>_renderer?.LineCount??0;
+    /// <summary>CPU command encoding/submission time; excludes GPU execution and readback.</summary>
+    public double LastSubmissionMilliseconds=>_renderer?.LastSubmissionMilliseconds??0;
     public string Backend=>_renderer?.Backend??"GPU not initialized";
     public event Action<string>? DiagnosticsChanged;
     public event Action<PickResult?,bool>? ObjectPicked;
@@ -87,7 +97,8 @@ public sealed class CadViewport : WebGpuCanvasElement
     {
         try
         {
-            _renderer=new(context.Api,context.Device,context.Queue,context.TargetFormat);
+            _renderer=new(context.Api,context.Device,context.Queue,context.TargetFormat,
+                browserReadback:OperatingSystem.IsBrowser()?ReadBrowserBufferAsync:null);
             LastError=null;
             DiagnosticsChanged?.Invoke(_renderer.Backend);
         }
@@ -98,6 +109,16 @@ public sealed class CadViewport : WebGpuCanvasElement
             Report(error.Message);
             throw;
         }
+    }
+    private static async Task<byte[]> ReadBrowserBufferAsync(nint buffer,int byteLength)
+    {
+        // Uno's supported browser bridge maps the actual WebGPU buffer from the
+        // JS event loop and unmaps it before completing. Native uses its callback.
+        var encoded=await WebGpuJsInterop.MapReadBase64Async(checked((int)buffer),byteLength);
+        var bytes=Convert.FromBase64String(encoded);
+        if(bytes.Length!=byteLength)
+            throw new InvalidOperationException($"WebGPU readback returned {bytes.Length} bytes; expected {byteLength}.");
+        return bytes;
     }
     protected override unsafe void RenderOverride(WebGpuCanvasContext context)
     {
@@ -169,15 +190,15 @@ public sealed class CadViewport : WebGpuCanvasElement
             var error=new TimeoutException("WebGPU framebuffer readback did not complete within 10 seconds.");
             FailCapture(error);
             _renderer?.CancelCapture();
-            // Submit one final compositor frame to retire the canceled native map callback.
-            Invalidate();
+            // Submit one final native compositor frame to retire its canceled map callback.
+            if(!OperatingSystem.IsBrowser())Invalidate();
             Report(error.Message);
             return;
         }
         // Uno polls its native WebGPU device after each compositor submission.
-        // Keep that owner progressing only while an explicit readback is pending;
-        // the regular viewport remains demand-driven, and no device is busy-waited.
-        Invalidate();
+        // Keep that owner progressing only while an explicit readback is pending.
+        // The browser bridge progresses from the JS event loop without extra frames.
+        if(!OperatingSystem.IsBrowser())Invalidate();
     }
     protected override void OnWebGpuUnavailable()
     {

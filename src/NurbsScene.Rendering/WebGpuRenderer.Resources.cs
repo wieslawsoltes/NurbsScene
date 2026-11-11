@@ -12,6 +12,7 @@ public sealed unsafe partial class WebGpuRenderer
     private readonly Device* _device;
     private readonly Queue* _queue;
     private readonly TextureFormat _targetFormat;
+    private readonly Func<nint, int, Task<byte[]>>? _browserReadback;
     private readonly uint _uniformAlignment;
     private readonly uint _maximumTextureSize;
     private readonly ulong _maximumBufferSize;
@@ -32,11 +33,12 @@ public sealed unsafe partial class WebGpuRenderer
     private bool _disposed, _targetsHaveTransparency;
 
     /// <summary>All context objects are borrowed from Uno. Only objects created by this renderer are released.</summary>
-    public WebGpuRenderer(WebGPU api, Device* device, Queue* queue, TextureFormat targetFormat)
+    public WebGpuRenderer(WebGPU api, Device* device, Queue* queue, TextureFormat targetFormat,
+        Func<nint, int, Task<byte[]>>? browserReadback = null)
     {
         ArgumentNullException.ThrowIfNull(api);
         if (device == null || queue == null) throw new ArgumentException("A live WebGPU device and queue are required.");
-        _api = api; _device = device; _queue = queue; _targetFormat = targetFormat;
+        _api = api; _device = device; _queue = queue; _targetFormat = targetFormat; _browserReadback = browserReadback;
         SupportedLimits supported = default;
         if (!api.DeviceGetLimits(device, &supported)) throw new InvalidOperationException("Cannot query WebGPU device limits.");
         _uniformAlignment = Math.Max(256, supported.Limits.MinUniformBufferOffsetAlignment);

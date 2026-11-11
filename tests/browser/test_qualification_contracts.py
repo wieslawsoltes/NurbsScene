@@ -39,11 +39,15 @@ class QualificationContracts(unittest.TestCase):
             record = {"campaign": name, "status": "passed", "checks": checks, "gpuObservation": copy.deepcopy(observation),
                       "final": {"state": {"gpuError": None, "graphErrors": 0}}}
             report = {"status": "passed", "checks": checks, "campaigns": [record], "pageErrors": [],
-                      "modelingChecksPerCampaign": [30]}
+                      "modelingChecksPerCampaign": [33]}
+            metrics = {"Frames": 2, "GeometryUploadBytes": 4096, "GeometryUploadCount": 2,
+                       "DrawCalls": 4, "TriangleCount": 24, "LineCount": 0, "CpuSubmissionMilliseconds": 0.25}
+            performance = {"schema": 1, "sceneUnchanged": True, "geometryReused": True,
+                           "before": metrics, "after": metrics | {"Frames": 3}}
             modeling = {"application": "Uno Platform", "status": "passed", "pageErrors": [],
-                        "checks": ["model fixture " + str(i) for i in range(30)], "lastGpuError": None,
+                        "checks": ["model fixture " + str(i) for i in range(33)], "lastGpuError": None,
                         "gpuApi": "WebGPU", "gpuBackend": "WebGPU fixture", "frames": 1, "surfacePixels": 1,
-                        "gpuObservation": copy.deepcopy(observation),
+                        "gpuObservation": copy.deepcopy(observation), "renderingPerformance": performance,
                         "gpuReadbackSha256": "A" * 64}
             GATE.write_json(folder / "uno-ui.json", report)
             GATE.write_json(folder / ("uno-browser-" + name + ".json"), modeling)
@@ -69,13 +73,13 @@ class QualificationContracts(unittest.TestCase):
         result = self.collect()
         self.assertEqual(len(result["checks"]), 349)
         self.assertEqual([r["campaign"] for r in result["campaigns"]], self.names)
-        self.assertEqual(result["modelingChecksPerCampaign"], [30] * 10)
+        self.assertEqual(result["modelingChecksPerCampaign"], [33] * 10)
         self.assertEqual(len(list((self.output / "campaigns").glob("*/uno-ui.json"))), 10)
         self.assertEqual(GATE.read_json(self.output / "uno-publication.json"), self.manifest)
 
     def test_original_campaign_registry_remains_mandatory(self):
         self.assertEqual(self.names, ["workspace", "inputs-sliders", "panels", "panel-edges", "ellipse-loft", "panel-display", "typography", "pointer-selection", "panel-scrolling", "rhino-workspace"])
-        self.assertEqual(self.registry["minimumModelingChecks"], 30)
+        self.assertEqual(self.registry["minimumModelingChecks"], 33)
 
     def test_hidden_site_files_are_part_of_exact_content_verification(self):
         self.assertIn(".nojekyll", self.manifest["files"])
@@ -186,6 +190,38 @@ class QualificationContracts(unittest.TestCase):
         self.edit("uno-browser-workspace.json", lambda r: r.update(surfacePixels=0))
         self.rejected()
 
+    def test_missing_camera_reuse_evidence_rejects(self):
+        self.edit("uno-browser-workspace.json", lambda r: r.pop("renderingPerformance"))
+        self.rejected()
+
+    def test_camera_mesh_reupload_rejects_even_with_claimed_reuse(self):
+        self.edit("uno-browser-workspace.json", lambda r: r["renderingPerformance"]["after"].update(GeometryUploadCount=3))
+        self.rejected()
+
+    def test_camera_vertex_or_line_reupload_rejects(self):
+        self.edit("uno-browser-workspace.json", lambda r: r["renderingPerformance"]["after"].update(GeometryUploadBytes=8192))
+        self.rejected()
+
+    def test_camera_sample_requires_uploaded_geometry(self):
+        self.edit("uno-browser-workspace.json", lambda r: r["renderingPerformance"]["before"].update(GeometryUploadCount=0))
+        self.rejected()
+
+    def test_camera_sample_requires_actual_mesh_draws(self):
+        self.edit("uno-browser-workspace.json", lambda r: r["renderingPerformance"]["after"].update(TriangleCount=0))
+        self.rejected()
+
+    def test_camera_sample_requires_another_frame(self):
+        self.edit("uno-browser-workspace.json", lambda r: r["renderingPerformance"]["after"].update(Frames=2))
+        self.rejected()
+
+    def test_camera_sample_cannot_change_the_scene(self):
+        self.edit("uno-browser-workspace.json", lambda r: r["renderingPerformance"].update(sceneUnchanged=False))
+        self.rejected()
+
+    def test_cpu_submission_time_requires_finite_measurement(self):
+        self.edit("uno-browser-workspace.json", lambda r: r["renderingPerformance"]["after"].update(CpuSubmissionMilliseconds=float("nan")))
+        self.rejected()
+
     def test_inconsistent_modeling_counts_reject(self):
         self.edit("uno-ui.json", lambda r: r.update(modelingChecksPerCampaign=[0]))
         self.rejected()
@@ -211,7 +247,7 @@ class QualificationContracts(unittest.TestCase):
 
     def test_registry_rejects_duplicates_and_reduced_modeling_minimum(self):
         path = self.root / "registry.json"
-        for registry in [self.registry | {"minimumModelingChecks": 0}, self.registry | {"campaigns": self.registry["campaigns"] * 2}]:
+        for registry in [self.registry | {"minimumModelingChecks": 0}, self.registry | {"minimumModelingChecks": 32}, self.registry | {"campaigns": self.registry["campaigns"] * 2}]:
             GATE.write_json(path, registry)
             with self.assertRaises(ValueError):
                 GATE.campaigns(path)

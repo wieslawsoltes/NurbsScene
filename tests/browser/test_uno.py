@@ -77,7 +77,8 @@ async def main(url, campaign=None):
                 page = await context.new_page()
                 campaign_errors = []
                 def on_error(error, campaign=name, found=campaign_errors):
-                    found.append(str(error)); errors.append({"campaign": campaign, "error": str(error)})
+                    found.append(str(error))
+                    errors.append({"campaign": campaign, "error": str(error), "stack": error.stack})
                 page.on("pageerror", on_error)
                 page.on("console", lambda msg, campaign=name: logs.append({"campaign": campaign, "message": msg.type + ": " + msg.text}))
                 record = {"campaign": name, "status": "running", "checks": []}
@@ -144,6 +145,7 @@ async def main(url, campaign=None):
             # fails before publishing a managed GPU error or framebuffer report.
             print("UNO_BROWSER_FAILURE_CONSOLE " + json.dumps(logs[-120:]), flush=True)
             print("UNO_BROWSER_FAILURE_GPU " + json.dumps(gpu_observations), flush=True)
+            print("UNO_BROWSER_FAILURE_PAGE_ERRORS " + json.dumps(errors[-20:]), flush=True)
             write("uno-ui.json", {"status": "failed", "error": str(error), "checks": all_checks, "campaigns": campaign_reports, "pageErrors": errors})
             raise
         finally:

@@ -9,6 +9,7 @@ application mutation occurs in this utility.
 import argparse
 import hashlib
 import json
+import math
 import re
 import shutil
 from pathlib import Path
@@ -30,7 +31,7 @@ def write_json(path, value):
 
 def campaigns(path=REGISTRY):
     registry = read_json(path)
-    if registry.get("schema") != 1 or registry.get("minimumModelingChecks", 0) < 29:
+    if registry.get("schema") != 1 or registry.get("minimumModelingChecks", 0) < 33:
         raise ValueError("Invalid modeling acceptance registry")
     entries = registry.get("campaigns", [])
     names = [entry.get("name") for entry in entries]
@@ -94,6 +95,29 @@ def require_gpu_observation(observation, name):
         raise ValueError("Missing or erroneous actual WebGPU device observation: " + name)
 
 
+def require_camera_reuse(performance, name):
+    if (not isinstance(performance, dict) or performance.get("schema") != 1
+            or performance.get("sceneUnchanged") is not True or performance.get("geometryReused") is not True):
+        raise ValueError("Missing camera-only geometry reuse evidence: " + name)
+    for stage in ("before", "after"):
+        sample = performance.get(stage)
+        if not isinstance(sample, dict):
+            raise ValueError("Missing camera submission sample: " + name)
+        for field in ("Frames", "GeometryUploadBytes", "GeometryUploadCount", "DrawCalls", "TriangleCount"):
+            if type(sample.get(field)) is not int or sample[field] < 1:
+                raise ValueError("Missing resident geometry or submitted mesh work: " + name + " " + field)
+        if type(sample.get("LineCount")) is not int or sample["LineCount"] < 0:
+            raise ValueError("Missing line submission count: " + name)
+        timing = sample.get("CpuSubmissionMilliseconds")
+        if type(timing) not in (int, float) or not math.isfinite(timing) or timing < 0:
+            raise ValueError("Invalid CPU submission timing: " + name)
+    before, after = performance["before"], performance["after"]
+    if after["Frames"] <= before["Frames"]:
+        raise ValueError("Camera sample did not submit another frame: " + name)
+    if any(before[field] != after[field] for field in ("GeometryUploadBytes", "GeometryUploadCount")):
+        raise ValueError("Camera-only motion uploaded geometry again: " + name)
+
+
 def collect(evidence, site, commit, tree, output, registry_path=REGISTRY):
     manifest = verify_site(site, commit, tree)
     registry = campaigns(registry_path)
@@ -125,6 +149,7 @@ def collect(evidence, site, commit, tree, output, registry_path=REGISTRY):
             raise ValueError("Actual Uno modeling/framebuffer qualification did not pass: " + name)
         if modeling.get("gpuApi") != "WebGPU" or not isinstance(modeling.get("gpuBackend"), str) or not modeling["gpuBackend"].startswith("WebGPU") or type(modeling.get("frames")) is not int or modeling["frames"] < 1 or type(modeling.get("surfacePixels")) is not int or modeling["surfacePixels"] < 1 or not re.fullmatch(r"[0-9a-fA-F]{64}", modeling.get("gpuReadbackSha256", "")):
             raise ValueError("Missing actual native framebuffer evidence: " + name)
+        require_camera_reuse(modeling.get("renderingPerformance"), name)
         require_gpu_observation(modeling.get("gpuObservation"), name + " modeling")
         require_gpu_observation(record.get("gpuObservation"), name + " final")
         check_strings(modeling.get("checks"), registry["minimumModelingChecks"], name + " modeling/framebuffer assertions")

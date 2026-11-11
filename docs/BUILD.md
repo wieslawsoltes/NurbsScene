@@ -63,7 +63,26 @@ python tests/browser/test_uno.py
 
 The opt-in hook exercises real managed commands, undo/redo, graph changes, exact baking, workspace and typed-path round trips, four viewports and asynchronous differential WebGPU framebuffer readback. Seven additional checks cover curve-plane sections, overlap reporting, the new components, execution-plan/result reuse, definition serialization, and application-controller splitting/undo. No GPU mocks or skip-on-unavailable path exists. It is smoke qualification, not complete UI, hardware or performance coverage.
 
-The viewport derives from Uno 7's `WebGpuCanvasElement`, borrows Uno's WebGPU device and queue, and renders directly into the compositor target. It does not create an independent browser canvas or copy each displayed frame to CPU memory. Readback runs only for explicit capture/qualification requests. While a capture is pending, a 16 ms dispatcher timer requests compositor frames so Uno's native device polling can complete the asynchronous mapping. The timer stops on completion, failure or unload; a 10-second deadline fails the request instead of waiting indefinitely. The old reflected GL readback adapter and pinned Uno 6 packages are removed.
+The viewport derives from Uno 7's `WebGpuCanvasElement`, borrows Uno's WebGPU device and queue, and renders directly into the compositor target. It does not create an independent browser canvas or copy each displayed frame to CPU memory. Readback runs only for explicit capture/qualification requests. A 16 ms dispatcher timer enforces bounded capture lifetime and requests compositor frames only on native targets, where Uno's device polling completes asynchronous mapping. The browser map progresses from its JavaScript promise without extra frames. The timer stops on completion, failure or unload; a 10-second deadline fails the request instead of waiting indefinitely. The old reflected GL readback adapter and pinned Uno 6 packages are removed.
+
+On WebAssembly, readback calls Uno 7's public
+[`WebGpuJsInterop.MapReadBase64Async`](https://github.com/unoplatform/uno/blob/7.0.32/src/Uno.UI.Composition.WebGpu.Init/WebGpuJsInterop.cs)
+bridge, the same mechanism used by Uno's
+[`WebGpuDrawingFactory.SnapshotAsync`](https://github.com/unoplatform/uno/blob/7.0.32/src/Uno.UI.Composition.WebGpu/WebGpuDrawingFactory.cs).
+It maps the actual staging buffer from the JavaScript event loop, copies its padded
+bytes and unmaps before completing. The host injects this async operation into the
+renderer; native targets retain asynchronous WebGPU callbacks and owner-driven
+device polling. The renderer validates the returned length, removes row padding
+and retains ownership of its capture buffer and texture until completion or
+cancellation. This explicit capture path never runs during ordinary presentation.
+
+The framebuffer qualification also records cumulative geometry upload bytes/count
+and per-frame draw, triangle and line counts before and after camera rotation. It
+requires an unchanged scene, origin and grid state, an additional rendered frame,
+changed pixels and no additional geometry upload. The artifact gate rejects missing
+or contradictory samples. `CpuSubmissionMilliseconds` measures CPU command encoding
+and queue submission only; it excludes GPU execution and readback. These observations
+prove resident-buffer reuse under camera motion, not a physical-GPU frame rate.
 
 The standalone production-shader gate is also mandatory:
 

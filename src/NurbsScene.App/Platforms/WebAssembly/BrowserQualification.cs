@@ -15,6 +15,11 @@ namespace NurbsScene.App;
 // in ordinary builds. No geometry/GPU replacement and no unconditional pass.
 public partial class App
 {
+    private sealed record FrameSubmissionMetrics(long Frames,long GeometryUploadBytes,long GeometryUploadCount,
+        int DrawCalls,int TriangleCount,int LineCount,double CpuSubmissionMilliseconds);
+    private static FrameSubmissionMetrics ReadSubmissionMetrics(CadViewport canvas)=>new(canvas.Frames,
+        canvas.GeometryUploadBytes,canvas.GeometryUploadCount,canvas.DrawCalls,canvas.TriangleCount,
+        canvas.LineCount,canvas.LastSubmissionMilliseconds);
     partial void ConfigureQualification(WorkspaceView workspace)
     {
         if (Uno.Foundation.WebAssemblyRuntime.InvokeJS("new URLSearchParams(location.search).get('qualification') === '1' ? 'yes' : 'no'") == "yes")
@@ -83,9 +88,26 @@ public partial class App
             var different=0;for(var i=0;i<filled.Length;i+=4)if(Math.Abs(filled[i]-empty[i])+Math.Abs(filled[i+1]-empty[i+1])+Math.Abs(filled[i+2]-empty[i+2])>12)different++;
             Check(different>100,"Actual WebGPU surface pixels differ from empty scene");
             Check(canvas.Viewports.Length==4,"Four native Uno viewports");
+            var beforeMetrics=ReadSubmissionMetrics(canvas);
+            var beforeScene=(scene.Revision,scene.MeshRevision,scene.Origin,scene.ShowGrid,scene.ShowIsocurves);
             var before=SHA256.HashData(filled);canvas.Cameras["Perspective"].Orbit(60,25);
             var rotated=await canvas.CaptureRgbaAsync().WaitAsync(TimeSpan.FromSeconds(15));
+            var afterMetrics=ReadSubmissionMetrics(canvas);
+            var sceneUnchanged=beforeScene==(scene.Revision,scene.MeshRevision,scene.Origin,scene.ShowGrid,scene.ShowIsocurves);
+            var geometryReused=beforeMetrics.GeometryUploadBytes==afterMetrics.GeometryUploadBytes&&
+                beforeMetrics.GeometryUploadCount==afterMetrics.GeometryUploadCount;
+            report["renderingPerformance"]=new
+            {
+                schema=1,sceneUnchanged,geometryReused,before=beforeMetrics,after=afterMetrics,
+                scope="Camera-only resident geometry reuse. CPU submission time excludes GPU execution and readback; no hardware FPS claim."
+            };
             Check(!before.SequenceEqual(SHA256.HashData(rotated)),"Camera motion changes the actual GPU image");
+            Check(beforeMetrics.GeometryUploadBytes>0&&beforeMetrics.GeometryUploadCount>0&&
+                beforeMetrics.DrawCalls>0&&beforeMetrics.TriangleCount>0&&
+                afterMetrics.Frames>beforeMetrics.Frames&&afterMetrics.DrawCalls>0&&afterMetrics.TriangleCount>0,
+                "Actual WebGPU camera samples submit resident mesh geometry");
+            Check(sceneUnchanged,"Camera-only qualification preserves scene geometry, origin and grid state");
+            Check(geometryReused,"Camera-only motion reuses resident WebGPU vertex, index and line buffers");
             Check(canvas.LastError is null,"No GPU submission error after interactions");
             report["gpuBackend"]=canvas.Backend;report["frames"]=canvas.Frames;report["surfacePixels"]=different;
             report["gpuReadbackSha256"]=Convert.ToHexString(SHA256.HashData(rotated));
