@@ -14,17 +14,69 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           global-json-file: global.json
+      - name: Install the native X11 and software Vulkan runtime
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb xauth dbus-x11 libx11-6 libxrandr2 libxi-dev libxcursor1 libfontconfig1 libvulkan1 mesa-vulkan-drivers vulkan-tools
       - name: Build the real Uno desktop application
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p artifacts/uno-desktop
-          dotnet build src/NurbsScene.App -c Release -f net10.0-desktop -p:NurbsSceneDesktopOnly=true 2>&1 | tee artifacts/uno-desktop/build.log
+          dotnet build src/NurbsScene.App -c Release -f net10.0-desktop -p:NurbsSceneDesktopOnly=true -p:NurbsSceneDesktopQualification=true 2>&1 | tee artifacts/uno-desktop/build.log
       - name: WebGPU camera, ABI and render math contracts
         shell: bash
         run: |
           set -euo pipefail
           dotnet run --project tests/dotnet/NurbsScene.WebGpuContracts -c Release 2>&1 | tee artifacts/uno-desktop/webgpu-contracts.log
+      - name: Execute the real Uno desktop on software Vulkan
+        shell: bash
+        env:
+          UNO_WEBGPU_BACKENDS: vulkan
+          UNO_WEBGPU_LOG: warn
+          NURBSSCENE_DESKTOP_QUALIFICATION_OUTPUT: artifacts/uno-desktop/native-webgpu.json
+        run: |
+          set -euo pipefail
+          git rev-parse HEAD > artifacts/uno-desktop/tested-commit.txt
+          git rev-parse HEAD^{tree} > artifacts/uno-desktop/tested-tree.txt
+          shopt -s nullglob
+          lavapipe_icds=(/usr/share/vulkan/icd.d/lvp_icd*.json)
+          test "${#lavapipe_icds[@]}" -eq 1
+          export VK_DRIVER_FILES="${lavapipe_icds[0]}"
+          export XDG_RUNTIME_DIR="$RUNNER_TEMP/nurbsscene-native-runtime"
+          export XDG_DATA_HOME="$RUNNER_TEMP/nurbsscene-native-data"
+          mkdir -p "$XDG_RUNTIME_DIR" "$XDG_DATA_HOME"
+          chmod 700 "$XDG_RUNTIME_DIR"
+          xvfb-run -a -s "-screen 0 1280x900x24 -nolisten tcp" vulkaninfo --summary > artifacts/uno-desktop/vulkan-adapter.txt 2>&1
+          # Lavapipe executes the production native WGSL/WebGPU path on a CPU.
+          # This is correctness evidence, with no hardware performance claim.
+          timeout --signal=TERM --kill-after=15s 420s \
+            xvfb-run -a -s "-screen 0 1280x900x24 -nolisten tcp" \
+            dbus-run-session -- \
+            dotnet run --project src/NurbsScene.App -c Release -f net10.0-desktop \
+              --no-build --no-restore -p:NurbsSceneDesktopOnly=true -p:NurbsSceneDesktopQualification=true \
+            2>&1 | tee artifacts/uno-desktop/native-webgpu.log
+          python3 - <<'PY'
+          import json, os, pathlib, re
+          directory = pathlib.Path("artifacts/uno-desktop")
+          output = directory / "native-webgpu.json"
+          report = json.loads(output.read_text())
+          log = (directory / "native-webgpu.log").read_text()
+          assert report["status"] == "passed", report
+          assert report["windowClosed"] is True, "The native window did not close normally"
+          assert report["commit"] == os.environ["GITHUB_SHA"], "Wrong tested commit"
+          adapters = re.findall(r"\[webgpu\] init device[^\n]*adapter='([^'\n]+)' backend=(\w+) type=(\w+)", log)
+          assert adapters and all(backend == "Vulkan" and kind == "Cpu" for _, backend, kind in adapters), adapters
+          errors = re.findall(r"(?im)^.*(?:\[webgpu\] uncaptured error|\[webgpu\] device lost \((?!Destroyed|InstanceDropped)|\[wgpu Error\]|NURBSSCENE_UNHANDLED:|NURBSSCENE_WEBGPU:).*$", log)
+          assert not errors, errors
+          report["adapterEvidence"] = {
+              "source": "Uno native WebGPU device initialization log",
+              "adapters": [dict(description=name, backend=backend, type=kind) for name, backend, kind in adapters],
+              "softwareCorrectnessOnly": True,
+          }
+          output.write_text(json.dumps(report, indent=2) + "\n")
+          print(json.dumps(report, indent=2))
+          PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:

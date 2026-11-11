@@ -138,7 +138,9 @@ the existing RGBA capture contract.
 Native map callbacks need the device owner to make progress. While capture is
 pending, a 16 ms dispatcher timer invalidates the viewport so Uno can perform its
 normal nonblocking device poll. The timer stops on completion, failure or unload;
-a 10-second timeout cancels the map and requests one final retirement frame.
+the default 10-second timeout cancels the map and requests one final retirement frame.
+Explicit capture requests may select a finite positive timeout up to 60 seconds;
+software-adapter qualification uses that upper bound and records each elapsed wait.
 There is no busy wait or application-owned native polling loop. Completion is
 marshaled to the UI dispatcher, and a retired request cannot change a reloaded
 viewport's diagnostics or stop a newer request.
@@ -219,8 +221,8 @@ Playwright 1.57 dependency does not support the current Ubuntu 26.04 runner.
 6. The reconstructed revision `fc7f2f18` passed the real desktop build, the five
    math contracts and the Chromium production-WGSL pipeline job, including the
    added viewport-partition checks. All ten full Uno interaction campaigns then stopped at the same canvas
-   initialization timeout. Their captured console is being recovered to diagnose
-   the integration failure; these campaigns are not qualified.
+   initialization timeout. Their captured console was recovered to diagnose
+   the integration failure; those campaigns did not qualify that revision.
 7. The unrelated npm workflow runner incompatibility was identified from its
    failure log and corrected without changing its test set or dependency pins.
    Browser device-error observation was strengthened so uncaptured GPU validation
@@ -334,3 +336,16 @@ The passive `c93a131` input trace isolated the remaining Rhino-style shell failu
 Space now preserves an active transfer draft and its text comes from the actual layout-aware `CharacterReceived` event. Enter submits that pending draft through the normal command path. Space/Enter with no pending draft retain the existing repeat behavior. The regression campaign keeps its original exact-prefix test and adds fast native typing followed immediately by Enter, then an ordinary Undo; it does not force focus, slow typing, retry input or invoke a command test hook. The Rhino minimum rises from 56 to 58 checks and the ten-campaign UI minimum from 349 to 351, retaining every prior assertion.
 
 The same `c93a131` run passed the other nine complete Uno input campaigns. Its styled XAML typography preview was visually checked and now uses the real bold-oblique face. Measured completed captures show native software-GPU mapping occupying most of the elapsed readback time; no evidence justified changing managed continuation dispatch.
+
+
+### Measured integrated browser capture behavior
+
+All ten campaigns associated with branch head `c93a131c` completed their 330 modeling checks and all 30 real staging-buffer maps. No observed GPU or page error was reported. The identical 849-file publication manifests bind those runs to PR merge commit `d37bf6b5f82f1af950389dc65a4507de502fbc6d`, tree `5efec4bf28ca24cfbb2ec9c2278019edf4ae4d80`; a branch head and the actual Actions merge checkout are recorded separately.
+
+The largest native map wait was 8,803.4 ms. The largest complete capture took 10,622.8 ms, including an 8,696.4 ms native map. This establishes that a real software-rendered capture can exceed the old 10-second total qualification budget even when its native map itself completes within 10 seconds. All maps returned 4,601,856 padded bytes and all captures produced 4,410,112 RGBA bytes. Every camera sample retained the same 657,264 cumulative upload bytes and 34 upload operations. These are measured correctness and residency results, not GPU timestamp measurements or target-device latency guarantees. [Associated workflow and per-campaign artifacts](https://github.com/wieslawsoltes/NurbsScene/actions/runs/43117274921).
+
+### Real native desktop qualification
+
+The existing desktop CI job now builds an opt-in native qualification hook and runs the actual Uno X11 host under Xvfb using Mesa Lavapipe's Vulkan adapter. It verifies Uno's own adapter initialization log, solves the existing Pavilion definition, captures empty/filled/orbited framebuffers through the public asynchronous viewport API, checks changed pixels and unchanged geometry residency, writes three PPM images plus JSON evidence, and closes the window normally. No renderer, native callback, shader or driver is replaced by a test implementation.
+
+Each capture uses an explicit 60-second qualification budget and 65-second outer wait, with phase/status/elapsed evidence; ordinary application calls retain their 10-second default. The process has a 420-second hard deadline. The workflow rejects missing evidence, the wrong tested commit, unexpected GPU errors, failure to close, or an adapter other than the selected Vulkan CPU backend. This adds native asynchronous map success and completed-resource teardown evidence; it does not claim in-flight cancellation coverage, physical-GPU performance, or validation of every desktop OS. Reproduction and artifact locations are in [BUILD.md](BUILD.md#real-native-desktop-qualification).

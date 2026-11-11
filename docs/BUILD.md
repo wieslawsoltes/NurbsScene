@@ -25,6 +25,36 @@ Passing only regular font bytes as the global default also loses requested fallb
 weight/slant. See Uno's [font-provider configuration](https://platform.uno/docs/articles/features/using-webgpu-rendering.html#apps-without-skiasharp)
 and [`IFontProvider` interface](https://github.com/unoplatform/uno/blob/7.0.32/src/Uno.UI.Composition.Drawing/IFontProvider.cs).
 
+## Real native desktop qualification
+
+The mandatory `desktop` CI job also runs the real X11 application with Mesa
+Lavapipe, an explicit CPU Vulkan adapter. Xvfb supplies the display server; the
+WebGPU renderer and native asynchronous mapping path are unchanged. The opt-in
+hook loads the existing Pavilion definition, captures empty/filled/orbited frames,
+checks real pixel differences and zero camera-induced geometry uploads, then
+closes the native window normally. It writes JSON and three PPM framebuffers to
+`artifacts/uno-desktop/`, alongside the build/runtime logs and adapter identity.
+
+For an interactive desktop with a working native WebGPU driver:
+
+```sh
+dotnet build src/NurbsScene.App -c Release -f net10.0-desktop -p:NurbsSceneDesktopOnly=true -p:NurbsSceneDesktopQualification=true
+NURBSSCENE_DESKTOP_QUALIFICATION_OUTPUT="$PWD/artifacts/uno-desktop/native-webgpu.json" dotnet run --project src/NurbsScene.App -c Release -f net10.0-desktop --no-build --no-restore -p:NurbsSceneDesktopOnly=true -p:NurbsSceneDesktopQualification=true
+```
+
+The hook requires both the build property and the output environment variable;
+ordinary builds retain their normal empty-document startup. For the identical
+headless Linux software configuration, follow the native runtime packages,
+Lavapipe ICD selection, Xvfb invocation and strict evidence verifier in
+[`uno.yml`](../.github/workflows/uno.yml). CI requires Uno's actual log to identify
+`backend=Vulkan type=Cpu` and rejects unexpected native errors and device loss.
+The source hook records each 60-second capture budget, 65-second outer deadline,
+completion phase and elapsed time. The process deadline is 420 seconds.
+
+This run establishes native rendering/readback correctness and normal shutdown
+after completed captures. It does not test cancellation of an in-flight native map,
+provide physical-GPU timing, or certify Windows/macOS drivers.
+
 ## Managed numerical, graph and document suites
 
 ```sh
@@ -88,8 +118,8 @@ and retains ownership of its capture buffer and texture until completion or
 cancellation. This explicit capture path never runs during ordinary presentation.
 
 Ordinary `CaptureRgbaAsync()` requests retain a 10-second deadline. An explicit
-timeout must be finite, positive and at most 60 seconds. Browser qualification
-requests the 60-second budget with a 65-second outer wait to measure cold software
+timeout must be finite, positive and at most 60 seconds. Browser and native software qualification
+request the 60-second budget with a 65-second outer wait to measure cold software
 GPU execution separately from the normal application deadline. This follows
 [observed mapping-phase timeouts](https://github.com/wieslawsoltes/NurbsScene/actions/runs/43113642478)
 with no device-validation or JavaScript errors; it lets the next qualification

@@ -15,4 +15,7 @@
   <PropertyGroup Condition="'$(NurbsSceneQualification)' == 'true' and '$(TargetFramework)' == 'net10.0-browserwasm'">
     <DefineConstants>$(DefineConstants);NURBSSCENE_QUALIFICATION</DefineConstants>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(NurbsSceneDesktopQualification)' == 'true' and '$(TargetFramework)' == 'net10.0-desktop'">
+    <DefineConstants>$(DefineConstants);NURBSSCENE_DESKTOP_QUALIFICATION</DefineConstants>
+  </PropertyGroup>
 </Project>
