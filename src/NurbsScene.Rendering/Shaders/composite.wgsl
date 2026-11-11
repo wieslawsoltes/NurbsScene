@@ -72,8 +72,12 @@ fn compositeFragment(input: FullscreenOutput) -> @location(0) vec4<f32> {
     let dimensions = vec2<i32>(textureDimensions(opaque));
     let pixel = clamp(vec2<i32>(input.position.xy), vec2<i32>(0), dimensions - vec2<i32>(1));
     let background = textureLoad(opaque, pixel, 0).rgb;
-    let accumulated = textureLoad(accumulation, pixel, 0);
-    let transmission = clamp(textureLoad(revealage, pixel, 0).r, 0.0, 1.0);
+    // Opaque-only scenes bind cleared 1x1 OIT textures. Clamp against each
+    // actual texture, preserving the same composition for full-resolution OIT.
+    let accumulationPixel = clamp(pixel, vec2<i32>(0), vec2<i32>(textureDimensions(accumulation)) - vec2<i32>(1));
+    let revealagePixel = clamp(pixel, vec2<i32>(0), vec2<i32>(textureDimensions(revealage)) - vec2<i32>(1));
+    let accumulated = textureLoad(accumulation, accumulationPixel, 0);
+    let transmission = clamp(textureLoad(revealage, revealagePixel, 0).r, 0.0, 1.0);
     // Very deep overlap can saturate FP16. Clamp before division so inf/inf never
     // escapes into the tone mapper as NaN; ordinary overlap remains unchanged.
     let transparent = min(accumulated.rgb, vec3<f32>(65504.0)) / clamp(accumulated.a, 1e-5, 65504.0);

@@ -29,7 +29,7 @@ public sealed unsafe partial class WebGpuRenderer
     private int _objectCapacity;
     private GpuTexture? _shadow, _hdr, _hdrMultisample, _depth, _accum, _accumMultisample, _reveal, _revealMultisample, _bloomA, _bloomB;
     private int _width, _height;
-    private bool _disposed;
+    private bool _disposed, _targetsHaveTransparency;
 
     /// <summary>All context objects are borrowed from Uno. Only objects created by this renderer are released.</summary>
     public WebGpuRenderer(WebGPU api, Device* device, Queue* queue, TextureFormat targetFormat)
@@ -275,7 +275,7 @@ public sealed unsafe partial class WebGpuRenderer
     }
     private void Resize(int width, int height)
     {
-        if (_width == width && _height == height) return;
+        if (_width == width && _height == height && _targetsHaveTransparency == _hasTransparency) return;
         if (width < 1 || height < 1 || width > _maximumTextureSize || height > _maximumTextureSize)
             throw new ArgumentOutOfRangeException(nameof(width), "Viewport exceeds WebGPU texture limits.");
         ReleaseTargets();
@@ -286,10 +286,14 @@ public sealed unsafe partial class WebGpuRenderer
             _hdr = new(_api, _device, (uint)width, (uint)height, TextureFormat.Rgba16float, sampled);
             _hdrMultisample = new(_api, _device, (uint)width, (uint)height, TextureFormat.Rgba16float, render, Samples);
             _depth = new(_api, _device, (uint)width, (uint)height, TextureFormat.Depth32float, render, Samples);
-            _accum = new(_api, _device, (uint)width, (uint)height, TextureFormat.Rgba16float, sampled);
-            _accumMultisample = new(_api, _device, (uint)width, (uint)height, TextureFormat.Rgba16float, render, Samples);
-            _reveal = new(_api, _device, (uint)width, (uint)height, TextureFormat.R8Unorm, sampled);
-            _revealMultisample = new(_api, _device, (uint)width, (uint)height, TextureFormat.R8Unorm, render, Samples);
+            // Weighted OIT costs 45 attachment bytes per pixel at 4x MSAA.
+            // Keep only neutral 1x1 targets when no transparent surfaces exist.
+            var oitWidth = _hasTransparency ? (uint)width : 1u;
+            var oitHeight = _hasTransparency ? (uint)height : 1u;
+            _accum = new(_api, _device, oitWidth, oitHeight, TextureFormat.Rgba16float, sampled);
+            _accumMultisample = new(_api, _device, oitWidth, oitHeight, TextureFormat.Rgba16float, render, Samples);
+            _reveal = new(_api, _device, oitWidth, oitHeight, TextureFormat.R8Unorm, sampled);
+            _revealMultisample = new(_api, _device, oitWidth, oitHeight, TextureFormat.R8Unorm, render, Samples);
             var bloomUsage = TextureUsage.TextureBinding | TextureUsage.StorageBinding;
             _bloomA = new(_api, _device, (uint)(width + 1) / 2, (uint)(height + 1) / 2, TextureFormat.Rgba16float, bloomUsage);
             _bloomB = new(_api, _device, (uint)(width + 1) / 2, (uint)(height + 1) / 2, TextureFormat.Rgba16float, bloomUsage);
@@ -297,7 +301,7 @@ public sealed unsafe partial class WebGpuRenderer
             _horizontalGroup = BloomGroup(_bloomA.View, _bloomB.View);
             _verticalGroup = BloomGroup(_bloomB.View, _bloomA.View);
             _compositeGroup = Group(_compositeLayout, [new() { Binding = 0, TextureView = _hdr.View }, new() { Binding = 1, TextureView = _accum.View }, new() { Binding = 2, TextureView = _reveal.View }, new() { Binding = 3, TextureView = _bloomA.View }, new() { Binding = 4, Sampler = _linearSampler }, new() { Binding = 5, Buffer = _compositeParameters, Size = 32 }]);
-            _width = width; _height = height;
+            _width = width; _height = height; _targetsHaveTransparency = _hasTransparency;
         }
         catch { ReleaseTargets(); throw; }
     }
@@ -310,6 +314,6 @@ public sealed unsafe partial class WebGpuRenderer
         _accum?.Dispose(); _accum = null; _accumMultisample?.Dispose(); _accumMultisample = null;
         _reveal?.Dispose(); _reveal = null; _revealMultisample?.Dispose(); _revealMultisample = null;
         _bloomA?.Dispose(); _bloomA = null; _bloomB?.Dispose(); _bloomB = null;
-        _width = _height = 0;
+        _width = _height = 0; _targetsHaveTransparency = false;
     }
 }

@@ -49,7 +49,7 @@ public sealed unsafe partial class WebGpuRenderer : IDisposable
     private DisplayMode _itemMode, _shadowMode;
     private WebGpuRenderSettings? _itemSettings, _shadowSettings;
     private float[] _objectData = [], _frameData = [];
-    private bool _shadowValid;
+    private bool _shadowValid, _hasTransparency;
     private CaptureRequest? _captureRequest;
 
     public WebGpuRenderSettings Settings { get; set; } = new();
@@ -124,6 +124,7 @@ public sealed unsafe partial class WebGpuRenderer : IDisposable
             EnsureObjectCapacity(checked(scene.Items.Count * 2 + 1));
             SetObject(0, new(.46f, .50f, .54f, .48f), .8f, settings);
             _draws.Clear();
+            _hasTransparency = false;
             for (var i = 0; i < scene.Items.Count; i++)
             {
                 var item = scene.Items[i]; var surfaceSlot = 1 + i * 2; var lineSlot = surfaceSlot + 1;
@@ -131,7 +132,10 @@ public sealed unsafe partial class WebGpuRenderer : IDisposable
                 if (scene.Mode == DisplayMode.Ghosted) color = color with { A = color.A * .35f };
                 SetObject(surfaceSlot, color, 1, settings);
                 SetObject(lineSlot, item.Selected ? new(1, .62f, .03f) : new(.13f, .27f, .27f, .78f), item.Selected ? 2 : 1.15f, settings);
-                _draws.Add(new(item, _meshes[item.Geometry.Id], checked((uint)surfaceSlot * _objectStride), checked((uint)lineSlot * _objectStride)));
+                var mesh = _meshes[item.Geometry.Id];
+                _draws.Add(new(item, mesh, checked((uint)surfaceSlot * _objectStride), checked((uint)lineSlot * _objectStride)));
+                _hasTransparency |= scene.Mode != DisplayMode.Wireframe && mesh.Source.Indices.Length > 0
+                    && item.Color.A > 0 && (scene.Mode == DisplayMode.Ghosted || item.Color.A < .999f);
             }
             Write(_objectsBuffer, _objectData.AsSpan(0, checked((scene.Items.Count * 2 + 1) * (int)_objectStride / 4)));
             _itemRevision = scene.Revision; _itemMode = scene.Mode; _itemSettings = settings;
@@ -156,7 +160,7 @@ public sealed unsafe partial class WebGpuRenderer : IDisposable
         if (width < 1 || height < 1) return;
         var begin = Stopwatch.GetTimestamp();
         var settings = Settings ?? throw new InvalidOperationException("Rendering settings are required."); settings.Validate();
-        Resize(width, height); Synchronize(scene, settings);
+        Synchronize(scene, settings); Resize(width, height);
         TriangleCount = LineCount = DrawCalls = CulledItems = 0;
         var light = settings.LightDirection.Normalized();
         var shadowMatrix = WebGpuRenderMath.ShadowMatrix(scene.Bounds, scene.Origin, light, ShadowSize);
@@ -301,11 +305,13 @@ public sealed unsafe partial class WebGpuRenderer : IDisposable
         colors[0] = Attachment(_accumMultisample!.View, _accum!.View, new(0, 0, 0, 0));
         colors[1] = Attachment(_revealMultisample!.View, _reveal!.View, new(1, 1, 1, 1));
         var depth = new RenderPassDepthStencilAttachment { View = _depth!.View, DepthReadOnly = true };
-        var descriptor = new RenderPassDescriptor { ColorAttachmentCount = 2, ColorAttachments = colors, DepthStencilAttachment = &depth };
+        // Opaque-only scenes use cleared 1x1 OIT targets; attaching the full-size
+        // depth texture would violate WebGPU render-pass attachment dimensions.
+        var descriptor = new RenderPassDescriptor { ColorAttachmentCount = 2, ColorAttachments = colors, DepthStencilAttachment = _hasTransparency ? &depth : null };
         var pass = Require(_api.CommandEncoderBeginRenderPass(encoder, &descriptor), "weighted transparency pass");
         try
         {
-            if (scene.Mode == DisplayMode.Wireframe) return;
+            if (!_hasTransparency) return;
             _api.RenderPassEncoderSetPipeline(pass, _ghostPipeline);
             foreach (var prepared in _views)
             {

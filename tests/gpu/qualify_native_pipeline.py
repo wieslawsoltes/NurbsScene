@@ -114,15 +114,16 @@ def qualify():
     distant_ribbon = buffer([-.3,0,4e-6,.3,0,4e-6],wgpu.BufferUsage.VERTEX)
     coplanar_ribbon = buffer([-.3,0,5e-6,.3,0,5e-6],wgpu.BufferUsage.VERTEX)
 
-    def harness(width,height):
+    def harness(width,height,compact_oit=False):
         half_w,half_h = (width+1)//2,(height+1)//2
         sampled = wgpu.TextureUsage.TEXTURE_BINDING
         hdr=texture(width,height,"rgba16float",usage=sampled)
         hdr_ms=texture(width,height,"rgba16float",4)
-        accum=texture(width,height,"rgba16float",usage=sampled)
-        accum_ms=texture(width,height,"rgba16float",4)
-        reveal=texture(width,height,"r8unorm",usage=sampled)
-        reveal_ms=texture(width,height,"r8unorm",4)
+        oit_width,oit_height=(1,1) if compact_oit else (width,height)
+        accum=texture(oit_width,oit_height,"rgba16float",usage=sampled)
+        accum_ms=texture(oit_width,oit_height,"rgba16float",4)
+        reveal=texture(oit_width,oit_height,"r8unorm",usage=sampled)
+        reveal_ms=texture(oit_width,oit_height,"r8unorm",4)
         depth=texture(width,height,"depth32float",4)
         output=texture(width,height,"rgba8unorm",usage=wgpu.TextureUsage.COPY_SRC)
         bloom_a=device.create_texture(size=(half_w,half_h,1),format="rgba16float",usage=sampled|wgpu.TextureUsage.STORAGE_BINDING)
@@ -156,13 +157,18 @@ def qualify():
             if line:
                 p.set_pipeline(line_pipeline);p.set_bind_group(1,object_group,[256 if distant else 0]);p.set_vertex_buffer(0,(coplanar_ribbon if coplanar else distant_ribbon) if distant else ribbon);p.draw(6,1)
             p.end()
-            p=encoder.begin_render_pass(color_attachments=[
+            if compact_oit and ghost:
+                raise ValueError("Transparent geometry requires full-size OIT targets")
+            transparency_pass={"color_attachments":[
                 {"view":amv,"resolve_target":av,"load_op":"clear","store_op":"store","clear_value":(0,0,0,0)},
-                {"view":rmv,"resolve_target":rv,"load_op":"clear","store_op":"store","clear_value":(1,1,1,1)}],
-                depth_stencil_attachment={"view":dv,"depth_read_only":True})
-            p.set_pipeline(ghost_pipeline);p.set_bind_group(0,frame_group)
-            for item in ghost:
-                p.set_bind_group(1,object_group,[item*256]);p.set_vertex_buffer(0,near if item==2 else far);p.draw(3)
+                {"view":rmv,"resolve_target":rv,"load_op":"clear","store_op":"store","clear_value":(1,1,1,1)}]}
+            if not compact_oit:
+                transparency_pass["depth_stencil_attachment"]={"view":dv,"depth_read_only":True}
+            p=encoder.begin_render_pass(**transparency_pass)
+            if not compact_oit:
+                p.set_pipeline(ghost_pipeline);p.set_bind_group(0,frame_group)
+                for item in ghost:
+                    p.set_bind_group(1,object_group,[item*256]);p.set_vertex_buffer(0,near if item==2 else far);p.draw(3)
             p.end()
             p=encoder.begin_compute_pass()
             for name,group in zip(bloom_pipelines,bloom_groups):
@@ -211,6 +217,11 @@ def qualify():
     gap=(10*97+47)*4
     check(all(abs(partition_bloom[gap+c]-expected)<=1 for c,expected in enumerate((145,148,148))),
         "viewport separator keeps its neutral display color")
+    compact=harness(97,65,compact_oit=True)
+    compact_opaque=compact(opaque=[0,1])
+    check(max_delta(near_first,compact_opaque)==0,"one-pixel OIT targets preserve every opaque composite pixel")
+    compact_quad=compact(opaque=[0],clip=True,quad=True,bloom=.6)
+    check(max_delta(partition_bloom,compact_quad)==0,"one-pixel OIT targets preserve clipped quad-view bloom composition")
     resized=harness(131,73)(opaque=[0],ghost=[3],bloom=.1)
     check(len(resized)==131*73*4 and all(x==255 for x in resized[3::4]),"odd-width resize and aligned readback preserve every row")
     report.update(status="passed",sample_count=4,color_formats=["rgba16float","r8unorm","depth32float","rgba8unorm"],dimensions=[[97,65],[131,73]])

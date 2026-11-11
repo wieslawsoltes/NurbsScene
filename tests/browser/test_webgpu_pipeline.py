@@ -129,16 +129,17 @@ GPU_TEST = r"""async ({sources, software}) => {
   setObject(2,[.85,.14,.08,.45]);setObject(3,[.07,.2,.9,.35]);
   device.queue.writeBuffer(object,0,objectBytes);
   let frames=0;
-  async function harness(width,height) {
+  async function harness(width,height,compactOit=false) {
     frameBytes.set([width,height,1/width,1/height],40);
     const halfW=Math.ceil(width/2),halfH=Math.ceil(height/2);
     const sampled=GPUTextureUsage.TEXTURE_BINDING;
     const hdr=texture(width,height,'rgba16float',1,sampled);
     const hdrMs=texture(width,height,'rgba16float',4);
-    const accum=texture(width,height,'rgba16float',1,sampled);
-    const accumMs=texture(width,height,'rgba16float',4);
-    const revealTex=texture(width,height,'r8unorm',1,sampled);
-    const revealMs=texture(width,height,'r8unorm',4);
+    const oitWidth=compactOit?1:width,oitHeight=compactOit?1:height;
+    const accum=texture(oitWidth,oitHeight,'rgba16float',1,sampled);
+    const accumMs=texture(oitWidth,oitHeight,'rgba16float',4);
+    const revealTex=texture(oitWidth,oitHeight,'r8unorm',1,sampled);
+    const revealMs=texture(oitWidth,oitHeight,'r8unorm',4);
     const depth=texture(width,height,'depth32float',4);
     const output=texture(width,height,'rgba8unorm',1,GPUTextureUsage.COPY_SRC);
     const bloomA=device.createTexture({size:[halfW,halfH],format:'rgba16float',usage:sampled|GPUTextureUsage.STORAGE_BINDING});
@@ -171,12 +172,16 @@ GPU_TEST = r"""async ({sources, software}) => {
       for(const item of opaque) {pass.setBindGroup(1,objectGroup,[item*256]);pass.setVertexBuffer(0,distant?distantSurface:(item===0?near:far));pass.draw(3);}
       if(line){pass.setPipeline(linePipeline);pass.setBindGroup(1,objectGroup,[distant?256:0]);pass.setVertexBuffer(0,distant?(coplanar?coplanarRibbon:distantRibbon):ribbon);pass.draw(6,1);}
       pass.end();
-      pass=encoder.beginRenderPass({colorAttachments:[
+      if(compactOit && ghost.length)throw new Error('Transparent geometry requires full-size OIT targets');
+      const transparencyPass={colorAttachments:[
         {view:accumMsView,resolveTarget:accumView,loadOp:'clear',storeOp:'store',clearValue:[0,0,0,0]},
-        {view:revealMsView,resolveTarget:revealView,loadOp:'clear',storeOp:'store',clearValue:[1,1,1,1]}],
-        depthStencilAttachment:{view:depthView,depthReadOnly:true}});
-      pass.setPipeline(ghostPipeline);pass.setBindGroup(0,frameGroup);
-      for(const item of ghost){pass.setBindGroup(1,objectGroup,[item*256]);pass.setVertexBuffer(0,item===2?near:far);pass.draw(3);}
+        {view:revealMsView,resolveTarget:revealView,loadOp:'clear',storeOp:'store',clearValue:[1,1,1,1]}]};
+      if(!compactOit)transparencyPass.depthStencilAttachment={view:depthView,depthReadOnly:true};
+      pass=encoder.beginRenderPass(transparencyPass);
+      if(!compactOit){
+        pass.setPipeline(ghostPipeline);pass.setBindGroup(0,frameGroup);
+        for(const item of ghost){pass.setBindGroup(1,objectGroup,[item*256]);pass.setVertexBuffer(0,item===2?near:far);pass.draw(3);}
+      }
       pass.end();
       const compute=encoder.beginComputePass();
       for(const [i,name] of ['downsample','blurHorizontal','blurVertical'].entries()) {
@@ -234,6 +239,11 @@ GPU_TEST = r"""async ({sources, software}) => {
   const gap=(10*97+47)*4;
   check([145,148,148].every((expected,c)=>Math.abs(partitionBloom[gap+c]-expected)<=1),
     'viewport separator keeps its neutral display color');
+  const compact=await harness(97,65,true);
+  const compactOpaque=await compact.render({opaque:[0,1]});
+  check(maxDelta(nearFirst,compactOpaque)===0,'one-pixel OIT targets preserve every opaque composite pixel');
+  const compactQuad=await compact.render({opaque:[0],clip:true,quad:true,bloom:.6});
+  check(maxDelta(partitionBloom,compactQuad)===0,'one-pixel OIT targets preserve clipped quad-view bloom composition');
   const resized=await harness(131,73);const resizedImage=await resized.render({opaque:[0],ghost:[3],bloom:.1});
   check(resizedImage.length===131*73*4 && resizedImage.every((v,i)=>i%4!==3||v===255),
     'odd-width resize and aligned texture readback preserve complete rows');
