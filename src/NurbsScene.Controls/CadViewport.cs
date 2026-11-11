@@ -1,6 +1,7 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
 using NurbsScene.Geometry;
 using NurbsScene.Rendering;
 using NurbsScene.Presentation;
@@ -61,6 +62,8 @@ public sealed class CadViewport : WebGpuCanvasElement
     public event Action<PickResult?,VirtualKeyModifiers>? ObjectSelectionRequested;
     public CadViewport()
     {
+        // BorderVisual performs the geometry hit test; a GPU texture alone supplies no input shape.
+        Background=new SolidColorBrush(Microsoft.UI.Colors.Transparent);
         IsTabStop=true;SizeChanged+=(_,_)=>{CancelNavigation();Invalidate();};
         Unloaded+=(_,_)=>{CancelNavigation();FailCapture(new InvalidOperationException("The WebGPU viewport was unloaded."));};
         _capturePump.Tick+=(_,_)=>PumpCapture();
@@ -187,7 +190,8 @@ public sealed class CadViewport : WebGpuCanvasElement
         if(!IsLoaded){FailCapture(new InvalidOperationException("The WebGPU viewport was unloaded."));return;}
         if(Environment.TickCount64-_captureStartedAt>=CaptureTimeoutMilliseconds)
         {
-            var error=new TimeoutException("WebGPU framebuffer readback did not complete within 10 seconds.");
+            var phase=_captureSubmitted?"awaiting GPU buffer mapping":"awaiting viewport submission";
+            var error=new TimeoutException($"WebGPU framebuffer readback did not complete within 10 seconds ({phase}; frames={Frames}).");
             FailCapture(error);
             _renderer?.CancelCapture();
             // Submit one final native compositor frame to retire its canceled map callback.
@@ -196,9 +200,9 @@ public sealed class CadViewport : WebGpuCanvasElement
             return;
         }
         // Uno polls its native WebGPU device after each compositor submission.
-        // Keep that owner progressing only while an explicit readback is pending.
-        // The browser bridge progresses from the JS event loop without extra frames.
-        if(!OperatingSystem.IsBrowser())Invalidate();
+        // Re-request the initial browser frame until capture encoding has begun;
+        // its map then progresses from the JS event loop without extra frames.
+        if(!OperatingSystem.IsBrowser()||!_captureSubmitted)Invalidate();
     }
     protected override void OnWebGpuUnavailable()
     {

@@ -1,4 +1,6 @@
 using System.Text;
+using Microsoft.UI;
+using Microsoft.UI.Xaml.Media;
 using Silk.NET.WebGPU;
 using Uno.UI.Composition.Drawing;
 using Uno.UI.Composition.WebGpu;
@@ -18,7 +20,13 @@ public abstract class WebGpuVectorCanvasElement : WebGpuCanvasElement
     private VectorTargetResolve? _resolve;
     public long DrawingFrames { get; private set; }
     public string? LastDrawingError { get; private set; }
-    protected WebGpuVectorCanvasElement() => SizeChanged += (_, _) => Invalidate();
+    protected WebGpuVectorCanvasElement()
+    {
+        // Uno's WebGpuCanvasVisual inherits BorderVisual: native hit testing requires a background shape
+        // even when the GPU paints every visible pixel. Alpha zero preserves the canvas composition.
+        Background = new SolidColorBrush(Colors.Transparent);
+        SizeChanged += (_, _) => Invalidate();
+    }
     protected sealed override void Init(WebGpuCanvasContext context)
     {
         try
