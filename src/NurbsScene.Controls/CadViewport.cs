@@ -4,17 +4,16 @@ using Microsoft.UI.Xaml.Input;
 using NurbsScene.Geometry;
 using NurbsScene.Rendering;
 using NurbsScene.Presentation;
-using Silk.NET.OpenGL;
-using Uno.WinUI.Graphics3DGL;
+using Uno.WinUI.Graphics3DWebGpu;
 using Windows.Foundation;
 using Windows.System;
 
 namespace NurbsScene.Controls;
 
 /// <summary>Reusable depth-tested 3D Uno canvas. There is no CPU placeholder on GPU failure.</summary>
-public sealed class CadViewport : GLCanvasElement
+public sealed class CadViewport : WebGpuCanvasElement
 {
-    private GlRenderer? _renderer;
+    private WebGpuRenderer? _renderer;
     private bool _dragged;
     private Point _start,_last;
     private string _gesture="";
@@ -26,6 +25,7 @@ public sealed class CadViewport : GLCanvasElement
     private ViewportRectangle? _active;
     private int _pixelWidth=1,_pixelHeight=1;
     private TaskCompletionSource<byte[]>? _capture;
+    private bool _captureSubmitted;
     public DisplayScene Scene {get;set;}=new();
     public IReadOnlyDictionary<string,Camera> Cameras {get;}=new[]{"Top","Perspective","Front","Right"}.ToDictionary(n=>n,n=>new Camera(n));
     public string? Maximized {get;private set;}
@@ -46,7 +46,7 @@ public sealed class CadViewport : GLCanvasElement
     public event Action? RepeatRequested;
     public event Action<Point>? ContextMenuRequested;
     public event Action<PickResult?,VirtualKeyModifiers>? ObjectSelectionRequested;
-    public CadViewport():base(null!)
+    public CadViewport()
     {
         IsTabStop=true;SizeChanged+=(_,_)=>{CancelNavigation();Invalidate();};Unloaded+=(_,_)=>CancelNavigation();
         PointerPressed+=Pressed;PointerMoved+=Moved;PointerReleased+=Released;
@@ -54,7 +54,7 @@ public sealed class CadViewport : GLCanvasElement
         PointerCaptureLost+=(_,e)=>{if(_pointerId==e.Pointer.PointerId)CancelNavigation();};
         PointerExited+=(_,_)=>{if(_gesture==""){CursorHit=null;CursorMoved?.Invoke(null);}};
         PointerWheelChanged+=Wheel;
-        RegisterPropertyChangedCallback(IsGLInitializedProperty,(_,_)=>{if(IsLoaded&&IsGLInitialized==false&&LastError is null)Report("Uno could not initialize a GPU context. No substitute renderer is active.");});
+        RegisterPropertyChangedCallback(IsWebGpuInitializedProperty,(_,_)=>{if(IsLoaded&&IsWebGpuInitialized==false&&LastError is null)Report("WebGPU initialization failed. NurbsScene requires a WebGPU-capable browser or native graphics driver.");});
     }
     public ViewportRectangle[] Viewports=>ViewportLayout.Create(_pixelWidth,_pixelHeight,Cameras,Maximized);
     public void Activate(string name)
@@ -72,30 +72,82 @@ public sealed class CadViewport : GLCanvasElement
             if(view.Width>0&&view.Height>0)ViewportNavigation.Fit(view.Camera,Scene.Bounds,view.Width,view.Height);
         if(!Scene.Bounds.IsEmpty)Scene.Rebase(Scene.Bounds.Center);ViewChanged?.Invoke();Invalidate();
     }
-    private void Report(string text){LastError=text;System.Console.Error.WriteLine("NURBSSCENE_GL: "+text);DiagnosticsChanged?.Invoke(text);}
-    protected override void Init(GL gl)
+    private void Report(string text)
     {
-        try{UnoGlReadback.Configure(this);_renderer=new(gl);LastError=null;DiagnosticsChanged?.Invoke(_renderer.Backend);}
-        catch(Exception error){Report(error.Message);throw;}
+        LastError=text;
+        System.Console.Error.WriteLine("NURBSSCENE_WEBGPU: "+text);
+        DiagnosticsChanged?.Invoke(text);
     }
-    protected override unsafe void RenderOverride(GL gl)
+    protected override unsafe void Init(WebGpuCanvasContext context)
+    {
+        try
+        {
+            _renderer=new(context.Api,context.Device,context.Queue,context.TargetFormat);
+            LastError=null;
+            DiagnosticsChanged?.Invoke(_renderer.Backend);
+        }
+        catch(Exception error)
+        {
+            _renderer?.Dispose();
+            _renderer=null;
+            Report(error.Message);
+            throw;
+        }
+    }
+    protected override unsafe void RenderOverride(WebGpuCanvasContext context)
     {
         if(_renderer is null)return;
         try
         {
-            var viewport=stackalloc int[4];gl.GetInteger(GetPName.Viewport,viewport);_pixelWidth=viewport[2];_pixelHeight=viewport[3];
-            _renderer.Render(Scene,Viewports,_pixelWidth,_pixelHeight);
-            if(_capture is{} capture){_capture=null;capture.TrySetResult(_renderer.CaptureRgba());}
+            _pixelWidth=context.PixelWidth;
+            _pixelHeight=context.PixelHeight;
+            _renderer.Render(Scene,Viewports,context.TargetView,_pixelWidth,_pixelHeight);
+            if(_capture is{} capture&&!_captureSubmitted)
+            {
+                _captureSubmitted=true;
+                _=CompleteCaptureAsync(capture,_renderer.CaptureRgbaAsync());
+            }
             if(_renderer.Frames==1)DiagnosticsChanged?.Invoke(_renderer.Backend+"; GPU frame submitted");
         }
-        catch(Exception error){_capture?.TrySetException(error);_capture=null;Report(error.Message);}
+        catch(Exception error)
+        {
+            FailCapture(error);
+            Report(error.Message);
+            throw;
+        }
     }
-    protected override void OnDestroy(GL gl){_renderer?.Dispose();_renderer=null;_capture?.TrySetException(new InvalidOperationException("GPU context was destroyed."));_capture=null;}
+    private async Task CompleteCaptureAsync(TaskCompletionSource<byte[]> capture,Task<byte[]> readback)
+    {
+        try{capture.TrySetResult(await readback);}
+        catch(Exception error){capture.TrySetException(error);Report(error.Message);}
+        finally
+        {
+            if(ReferenceEquals(_capture,capture)){_capture=null;_captureSubmitted=false;}
+        }
+    }
+    private void FailCapture(Exception error)
+    {
+        _capture?.TrySetException(error);
+        _capture=null;
+        _captureSubmitted=false;
+    }
+    protected override void OnWebGpuUnavailable()
+        =>Report("The WebGPU drawing backend is unavailable. Enable WebGPU in this browser or use a supported native graphics driver.");
+    protected override void OnDestroy(WebGpuCanvasContext context)
+    {
+        FailCapture(new InvalidOperationException("The WebGPU viewport was unloaded."));
+        _renderer?.Dispose();
+        _renderer=null;
+    }
     public Task<byte[]> CaptureRgbaAsync()
     {
-        if(_renderer is null)throw new InvalidOperationException(LastError??"GPU is not initialized.");
+        if(_renderer is null)throw new InvalidOperationException(LastError??"WebGPU is not initialized.");
         if(_capture is not null)throw new InvalidOperationException("A capture is already pending.");
-        _capture=new(TaskCreationOptions.RunContinuationsAsynchronously);Invalidate();return _capture.Task;
+        var capture=new TaskCompletionSource<byte[]>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _capture=capture;
+        _captureSubmitted=false;
+        Invalidate();
+        return capture.Task;
     }
     private Point Pixels(Point p)=>new(p.X*_pixelWidth/Math.Max(1,ActualWidth),p.Y*_pixelHeight/Math.Max(1,ActualHeight));
     private ViewportRectangle? At(Point p){p=Pixels(p);return Viewports.FirstOrDefault(v=>p.X>=v.X&&p.Y>=v.Y&&p.X<v.X+v.Width&&p.Y<v.Y+v.Height);}

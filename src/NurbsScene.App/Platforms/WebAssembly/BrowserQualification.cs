@@ -23,7 +23,7 @@ public partial class App
     private static async Task RunQualificationAsync(WorkspaceView view)
     {
         var checks = new List<string>();
-        var report = new Dictionary<string,object?> { ["application"]="Uno Platform", ["status"]="running", ["scope"]="startup, managed commands/graph/interchange and actual GL framebuffer smoke; not full UI/parity qualification" };
+        var report = new Dictionary<string,object?> { ["application"]="Uno Platform", ["status"]="running", ["scope"]="startup, managed commands/graph/interchange and actual WebGPU framebuffer smoke; not full UI/parity qualification" };
         void Check(bool value,string name) { if(!value)throw new InvalidOperationException(name);checks.Add(name); }
         async Task Wait(Func<bool> predicate,string message)
         {
@@ -42,8 +42,8 @@ public partial class App
             Check(controller.Document.Objects.Count==0&&controller.Graph.Nodes.Count==0,"Ordinary startup is an empty modeling document, not an auto-loaded sample");
             controller.LoadPavilion(); // Explicit qualification fixture; ordinary startup stays empty.
             await Wait(()=>canvas.Frames>0||canvas.LastError is not null,"Uno GPU canvas did not initialize.");
-            report["gpuBackend"]=canvas.Backend;report["lastGpuError"]=canvas.LastError;
-            Check(canvas.LastError is null&&canvas.Frames>0,"Uno created a GPU context and submitted a frame: "+canvas.LastError);
+            report["gpuBackend"]=canvas.Backend;report["gpuApi"]="WebGPU";report["lastGpuError"]=canvas.LastError;
+            Check(canvas.LastError is null&&canvas.Frames>0&&canvas.Backend.StartsWith("WebGPU",StringComparison.Ordinal),"Uno created its WebGPU device and submitted a frame: "+canvas.LastError);
             await Wait(()=>controller.Graph.LastResult is {Stale:false} r&&r.Revision==controller.Graph.Revision,"Parametric solution did not settle.");
             Check(controller.Graph.LastResult!.ErrorCount==0,"Managed pavilion graph solved without errors");
             var count=controller.Document.Objects.Count;
@@ -81,7 +81,7 @@ public partial class App
             scene.SetItems([]);var empty=await canvas.CaptureRgbaAsync().WaitAsync(TimeSpan.FromSeconds(15));
             scene.SetItems(items);var filled=await canvas.CaptureRgbaAsync().WaitAsync(TimeSpan.FromSeconds(15));
             var different=0;for(var i=0;i<filled.Length;i+=4)if(Math.Abs(filled[i]-empty[i])+Math.Abs(filled[i+1]-empty[i+1])+Math.Abs(filled[i+2]-empty[i+2])>12)different++;
-            Check(different>100,"Actual GL surface pixels differ from empty scene");
+            Check(different>100,"Actual WebGPU surface pixels differ from empty scene");
             Check(canvas.Viewports.Length==4,"Four native Uno viewports");
             var before=SHA256.HashData(filled);canvas.Cameras["Perspective"].Orbit(60,25);
             var rotated=await canvas.CaptureRgbaAsync().WaitAsync(TimeSpan.FromSeconds(15));

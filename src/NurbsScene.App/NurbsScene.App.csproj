@@ -5,13 +5,12 @@
     <OutputType>Exe</OutputType><UnoSingleProject>true</UnoSingleProject><IsPackable>false</IsPackable>
     <ApplicationTitle>NurbsScene</ApplicationTitle><ApplicationId>org.nurbsscene.studio</ApplicationId>
     <ApplicationDisplayVersion>0.1.0</ApplicationDisplayVersion><ApplicationVersion>1</ApplicationVersion><ApplicationPublisher>NurbsScene contributors</ApplicationPublisher>
-    <UnoFeatures>SkiaRenderer;GLCanvas;</UnoFeatures><AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <UnoFeatures>WebGpu</UnoFeatures><AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <WasmShellWebAppBasePath>./</WasmShellWebAppBasePath>
     <WasmShellILLinkerEnabled>false</WasmShellILLinkerEnabled><PublishTrimmed>false</PublishTrimmed>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../NurbsScene.Controls/NurbsScene.Controls.csproj" />
-    <PackageReference Include="Uno.WinUI.Graphics3DGL" Version="6.7.135" Condition="'$(TargetFramework)'=='net10.0-browserwasm'" />
   </ItemGroup>
   <PropertyGroup Condition="'$(NurbsSceneQualification)' == 'true' and '$(TargetFramework)' == 'net10.0-browserwasm'">
     <DefineConstants>$(DefineConstants);NURBSSCENE_QUALIFICATION</DefineConstants>
