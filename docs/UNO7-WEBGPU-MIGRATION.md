@@ -325,3 +325,12 @@ Visual review also found that XAML's typography-dialog preview used the regular 
 ### Native map cancellation lifetime review
 
 Independent review against Uno 7.0.32's pinned wgpu-native implementation found that destroying a pending native buffer map can invoke its abort callback synchronously. Cleanup now records successful mapping ownership, skips unmap for failed/aborted maps, marks destruction before entering native code and defers handle release until the outer destroy wrapper returns. This avoids both an invalid second unmap and premature release during Uno's map-state bookkeeping. Browser mapping remains owned by the public async bridge. This correction is supported by the pinned [wgpu-core map-state implementation](https://github.com/gfx-rs/wgpu/blob/v29.0.3/wgpu-core/src/resource.rs) and [Uno's Silk compatibility wrapper](https://github.com/unoplatform/uno/blob/7.0.32/src/Uno.UI.Composition.WebGpu.Init/SilkCompat/SilkCompat.Hand.cs); native hardware cancellation qualification remains separate from browser correctness.
+
+
+### Command entry under delayed focus
+
+The passive `c93a131` input trace isolated the remaining Rhino-style shell failure. Characters accumulated correctly in a canvas draft, but the queued text focus took approximately 830 ms to run in the software-rendered session. Each Space was still routed as a canvas repeat action, clearing the draft; the actual character event then discarded its whitespace. No delayed query-clear callback appeared in that failing interval.
+
+Space now preserves an active transfer draft and its text comes from the actual layout-aware `CharacterReceived` event. Enter submits that pending draft through the normal command path. Space/Enter with no pending draft retain the existing repeat behavior. The regression campaign keeps its original exact-prefix test and adds fast native typing followed immediately by Enter, then an ordinary Undo; it does not force focus, slow typing, retry input or invoke a command test hook. The Rhino minimum rises from 56 to 58 checks and the ten-campaign UI minimum from 349 to 351, retaining every prior assertion.
+
+The same `c93a131` run passed the other nine complete Uno input campaigns. Its styled XAML typography preview was visually checked and now uses the real bold-oblique face. Measured completed captures show native software-GPU mapping occupying most of the elapsed readback time; no evidence justified changing managed continuation dispatch.

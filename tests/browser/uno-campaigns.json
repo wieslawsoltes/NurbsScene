@@ -40,7 +40,7 @@
     },
     {
       "name": "rhino-workspace",
-      "minimumUiChecks": 56
+      "minimumUiChecks": 58
     }
   ]
 }

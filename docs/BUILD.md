@@ -192,6 +192,14 @@ input against observed native-control and graph-canvas bounds. It retains JSON l
 and right/bottom/narrow screenshots. Presentation benchmarks and allocation contracts
 run separately in `presentation.yml`. See `CLASSIC-WORKSPACE.md` for scope and limits.
 
+A deferred native text-input focus handoff can leave the model canvas receiving
+keys after a command draft has started. The command console keeps that draft active
+during the handoff: Space appends text and Enter submits the pending draft once;
+an empty draft retains the repeat-command behavior. The Rhino workspace campaign
+types a command and immediately presses Enter without waiting for focus, then
+checks ordinary Undo. These two assertions raise its minimum from 56 to 58 and
+the ten-campaign UI minimum from 349 to 351.
+
 Graph clipboard/menu/selection scenarios run inside the same actual Uno test via
 `test_graph_editing_ui.py`. `editing.yml` separately runs fragment/arrangement
 contracts and identical presentation benchmarks against previous main `1d41fc57`.

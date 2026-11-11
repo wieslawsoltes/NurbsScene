@@ -122,6 +122,18 @@ async def verify_rhino_workspace(page):
         await page.keyboard.press('Enter'); data=await settle(page)
         check(data['state']['objects']==objects+1 and data['state']['lastName']=='Circle',
               'Canvas-initiated command entry creates an exact model curve')
+        # Enter immediately after native typing, without waiting for the queued
+        # canvas-to-textbox focus transfer. It must submit this complete draft.
+        v=await view('Top')
+        await page.mouse.click(v['x']+v['width']*.88,v['y']+v['height']*.14)
+        await page.keyboard.type('Circle 0,0,0 6',delay=0)
+        await page.keyboard.press('Enter'); data=await settle(page)
+        check(data['state']['objects']==objects+2 and data['state']['lastName']=='Circle'
+              and data['state']['commandInput']=='',
+              'Immediate Enter submits a complete canvas draft before deferred text focus')
+        data=await command('Undo')
+        check(data['state']['objects']==objects+1,
+              'Immediate canvas command remains one ordinary document undo record')
         await command('CommandHistory')
         await click('CommandInput'); await page.keyboard.press('Enter'); data=await settle(page)
         check(data['state']['objects']==objects+2,

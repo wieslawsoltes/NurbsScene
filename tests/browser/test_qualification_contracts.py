@@ -74,7 +74,7 @@ class QualificationContracts(unittest.TestCase):
 
     def test_all_ten_campaigns_aggregate_without_losing_assertions(self):
         result = self.collect()
-        self.assertEqual(len(result["checks"]), 349)
+        self.assertEqual(len(result["checks"]), 351)
         self.assertEqual([r["campaign"] for r in result["campaigns"]], self.names)
         self.assertEqual(result["modelingChecksPerCampaign"], [33] * 10)
         self.assertEqual(len(list((self.output / "campaigns").glob("*/uno-ui.json"))), 10)
@@ -83,6 +83,7 @@ class QualificationContracts(unittest.TestCase):
     def test_original_campaign_registry_remains_mandatory(self):
         self.assertEqual(self.names, ["workspace", "inputs-sliders", "panels", "panel-edges", "ellipse-loft", "panel-display", "typography", "pointer-selection", "panel-scrolling", "rhino-workspace"])
         self.assertEqual(self.registry["minimumModelingChecks"], 33)
+        self.assertEqual(next(entry["minimumUiChecks"] for entry in self.registry["campaigns"] if entry["name"] == "rhino-workspace"), 58)
 
     def test_hidden_site_files_are_part_of_exact_content_verification(self):
         self.assertIn(".nojekyll", self.manifest["files"])

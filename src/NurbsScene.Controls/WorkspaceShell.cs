@@ -65,7 +65,20 @@ public sealed partial class WorkspaceView
             if(e.Key==VirtualKey.F3&&!_altKey){Run("Properties");e.Handled=true;}
             else if(e.Key==VirtualKey.Escape){if(!cad.CancelNavigation())Run("Cancel");e.Handled=true;}
             else if(e.Key==VirtualKey.Delete&&!_controlKey&&!_altKey){Run("Delete");e.Handled=true;}
-            else if(e.Key is VirtualKey.Enter or VirtualKey.Space&&!_controlKey&&!_altKey){AcceptOrRepeat();e.Handled=true;}
+            else if(e.Key==VirtualKey.Enter&&!_controlKey&&!_altKey)
+            {
+                // Under a busy GPU compositor, the queued text-focus transfer can
+                // run after several keystrokes. Enter belongs to that draft.
+                if(!Console.TrySubmitPendingCanvasCommand())AcceptOrRepeat();
+                e.Handled=true;
+            }
+            else if(e.Key==VirtualKey.Space&&!_controlKey&&!_altKey)
+            {
+                // Preserve a pending draft; CharacterReceived supplies its actual
+                // space character. Space without a draft retains repeat behavior.
+                if(!Console.HasPendingCanvasCommand)AcceptOrRepeat();
+                e.Handled=true;
+            }
         }
         cad.AddHandler(UIElement.KeyDownEvent,new KeyEventHandler(CanvasKeyDown),true);
         // F3 is a workspace command, not a canvas-only shortcut. Native buttons
@@ -80,7 +93,7 @@ public sealed partial class WorkspaceView
         // The native character event carries the actual keyboard layout. Do not
         // derive text from virtual-key codes or send it into graph/numeric editors.
         cad.CharacterReceived+=(_,e)=>{
-            if(_controlKey||_altKey||char.IsControl(e.Character)||char.IsWhiteSpace(e.Character))return;
+            if(_controlKey||_altKey||char.IsControl(e.Character)||(char.IsWhiteSpace(e.Character)&&!Console.HasPendingCanvasCommand))return;
             Console.BeginCommand(e.Character.ToString());e.Handled=true;
         };
         if(_ownsController)foreach(var camera in cad.Cameras.Values)camera.Target=Vec3.Zero;
