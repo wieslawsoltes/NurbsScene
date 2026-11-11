@@ -32,7 +32,7 @@ jobs:
           path: artifacts/uno-desktop/
   webgpu-pipeline:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -48,6 +48,23 @@ jobs:
           git rev-parse HEAD > evidence/tested-commit.txt
           git rev-parse HEAD^{tree} > evidence/tested-tree.txt
           python tests/browser/test_webgpu_pipeline.py --software 2>&1 | tee evidence/webgpu-pipeline.log
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Build the real reusable NURBS kernel and check shared shader contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y clang lld cmake
+          npm ci --offline --ignore-scripts
+          bash tools/build-kernel.sh
+          node --test tests/graphics-webgpu.test.mjs 2>&1 | tee evidence/javascript-webgpu-contracts.log
+      - name: Execute reusable WebGPU package and real NURBS framebuffer qualification
+        shell: bash
+        run: |
+          set -euo pipefail
+          python tests/browser/test_gpu.py --software --output evidence/javascript-webgpu.json 2>&1 | tee evidence/javascript-webgpu.log
       - uses: actions/upload-artifact@v4
         if: always()
         with:

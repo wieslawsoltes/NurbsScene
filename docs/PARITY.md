@@ -53,8 +53,10 @@ The standalone typography raster fixture retains a compile-time SkiaSharp branch
 for the previous layout/cache contracts. Those CPU pixels and timings do not
 qualify the new WebGPU output; actual Uno typography and framebuffer campaigns do.
 See the [migration journal](UNO7-WEBGPU-MIGRATION.md) for exact architecture and
-validated revisions. The independent npm graphics package is a separate renderer
-and still exposes its WebGL2 compatibility path.
+validated revisions. The independent npm graphics package now uses the same production
+WGSL shader sources and WebGPU rendering passes. Its former WebGL2 entry points only
+throw migration guidance; they contain no GL renderer or automatic fallback. The npm
+validation harness retains ordinary DOM/SVG controls and remains separate from the Uno app.
 
 Use the exact commit and tree in CI artifacts for qualification status. Historical
 reports describe their recorded revisions, including earlier local-only blockers,

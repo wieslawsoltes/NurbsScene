@@ -63,7 +63,14 @@ python tests/browser/test_uno.py
 
 The opt-in hook exercises real managed commands, undo/redo, graph changes, exact baking, workspace and typed-path round trips, four viewports and asynchronous differential WebGPU framebuffer readback. Seven additional checks cover curve-plane sections, overlap reporting, the new components, execution-plan/result reuse, definition serialization, and application-controller splitting/undo. No GPU mocks or skip-on-unavailable path exists. It is smoke qualification, not complete UI, hardware or performance coverage.
 
-The viewport derives from Uno 7's `WebGpuCanvasElement`, borrows Uno's WebGPU device and queue, and renders directly into the compositor target. It does not create an independent browser canvas or copy each displayed frame to CPU memory. Readback runs only for explicit capture/qualification requests. A 16 ms dispatcher timer enforces bounded capture lifetime and requests compositor frames only on native targets, where Uno's device polling completes asynchronous mapping. The browser map progresses from its JavaScript promise without extra frames. The timer stops on completion, failure or unload; a 10-second deadline fails the request instead of waiting indefinitely. The old reflected GL readback adapter and pinned Uno 6 packages are removed.
+The viewport derives from Uno 7's `WebGpuCanvasElement`, borrows Uno's WebGPU device and queue, and renders directly into the compositor target. It does not create an independent browser canvas or copy each displayed frame to CPU memory. Readback runs only for explicit capture/qualification requests. A 16 ms dispatcher timer enforces bounded capture lifetime. It requests rendering until the capture frame has been submitted on either target, then continues requesting compositor frames only on native targets, where Uno's device polling completes asynchronous mapping. The browser map progresses from its JavaScript promise without extra frames after submission. The timer stops on completion, failure or unload; a 10-second deadline fails the request and identifies whether it was awaiting viewport submission or GPU mapping. The old reflected GL readback adapter and pinned Uno 6 packages are removed.
+
+Interactive GPU canvases set a transparent XAML `Background` so the native
+visual has a hit-test region. Uno's
+[`WebGpuCanvasVisual`](https://github.com/unoplatform/uno/blob/7.0.32/src/AddIns/Uno.WinUI.Graphics3DWebGpu/WebGpuCanvasVisual.cs)
+inherits [`BorderVisual`](https://github.com/unoplatform/uno/blob/7.0.32/src/Uno.UI.Composition/Composition/BorderVisual.skia.cs);
+GPU texture pixels alone do not create its background geometry. The non-null brush permits pointer routing and focus across the canvas,
+while non-interactive overlays and icons keep `IsHitTestVisible=false`.
 
 On WebAssembly, readback calls Uno 7's public
 [`WebGpuJsInterop.MapReadBase64Async`](https://github.com/unoplatform/uno/blob/7.0.32/src/Uno.UI.Composition.WebGpu.Init/WebGpuJsInterop.cs)
@@ -212,3 +219,17 @@ DOTNET_TieredCompilation=0 dotnet run --project tests/panel-display-performance 
 allocation contracts and compares the identical benchmark with original PR11.
 `test_panel_display_ui.py` is the sixth mandatory native-input campaign in the
 actual Uno browser runner. See `PANEL-DISPLAY-AND-TEXT-REVIEW.md`.
+
+
+## Reusable package WebGPU qualification
+
+The npm graphics renderer is WebGPU-only. `auto` selects WebGPU; explicit `webgl2` selection and legacy WebGL2 constructors fail with migration guidance. Shader strings are generated from the Uno renderer's authoritative WGSL files and verified byte for byte by Node contracts. The strict GPU job builds the real NURBS WASM kernel and runs:
+
+```bash
+node packages/graphics/generate-shaders.mjs --check
+node --test tests/graphics-webgpu.test.mjs
+bash tools/build-kernel.sh
+python tests/browser/test_gpu.py --software --output evidence/javascript-webgpu.json
+```
+
+The package campaign requires real WebGPU frames, differential NURBS surface pixels, camera changes, reverse-Z, shadows, transparency, clipping, rebasing, resize/readback, viewport bloom separation and explicit unsupported-device errors. Shader/API failures cannot fall back to GL. Hosted software rendering verifies correctness; target GPU performance remains a separate measurement. See [the package API guide](../packages/graphics/README.md) for resource ownership and the complete migration contract.

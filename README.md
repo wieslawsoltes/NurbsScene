@@ -29,7 +29,9 @@ parametric, graphics, controls and interchange, with a 102-component catalog.
 The Uno application explicitly selects the **WebGPU composition backend** on desktop
 and WebAssembly. Its 3D viewport, graph canvas, overlays, icons and retained text
 share Uno's device and queue; normal presentation stays on the GPU. The separate
-JavaScript graphics package has its own WebGPU and WebGL2 implementations.
+JavaScript graphics package also uses WebGPU, with the same production WGSL shaders and
+HDR pipeline. WebGL2 rendering and automatic fallback have been removed; unsupported
+browsers receive an explicit capability error. See its [API migration guide](packages/graphics/README.md).
 
 ## Uno 7 and WebGPU rendering
 
