@@ -1,5 +1,9 @@
 # Panel layout, persistence and review
 
+> Rendering statements and validation results below describe the recorded revision.
+> The current Uno 7/WebGPU architecture and its per-commit qualification are documented
+> in the [migration journal](UNO7-WEBGPU-MIGRATION.md).
+
 ## Source recovery and behavioral reference
 
 PR #9 was qualified and merged as `b69880bb71c580734df21f7aade68014e160360d`.

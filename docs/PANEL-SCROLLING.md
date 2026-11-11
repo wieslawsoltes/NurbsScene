@@ -1,5 +1,9 @@
 # Panel item scrolling and integration review
 
+> The integration results and campaign counts below describe the recorded scrolling revision.
+> Current Uno 7/WebGPU architecture and per-commit validation are documented in the
+> [migration journal](UNO7-WEBGPU-MIGRATION.md).
+
 Panels now expose a muted vertical scrollbar, a proportional grip, track paging,
 and an item-range footer. The strip owns unmodified wheel input; the body retains
 canvas zoom. A selected panel accepts Home/End/PageUp/PageDown. Escape restores a
@@ -73,7 +77,8 @@ features. A failed or missing shard prevents the exact-source aggregate and Page
 qualification. The local environment has no .NET SDK; local JavaScript and Python
 checks do not substitute for managed or native Uno CI.
 
-The current scope does not add full shaping/bidi/font fallback, pixel-measured
-paragraph wrapping, arbitrary long-item visual-line scrolling, robust solid/B-rep
-modeling, arbitrary trims, SubD, complete formats/plugins/catalog or direct Uno
-WebGPU. See [the compatibility inventory](PARITY.md).
+The scrolling feature does not add complete paragraph bidi/font fallback,
+pixel-measured wrapping, arbitrary long-item visual-line scrolling, robust
+solid/B-rep modeling, arbitrary trims, SubD or complete formats/plugins/catalog.
+The application now uses Uno 7's WebGPU backend; see the
+[compatibility inventory](PARITY.md) for current rendering and typography scope.

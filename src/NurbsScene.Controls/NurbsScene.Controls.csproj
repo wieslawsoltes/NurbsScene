@@ -8,6 +8,8 @@
   </PropertyGroup>
   <ItemGroup>
     <EmbeddedResource Include="Drawing/Fonts/*.ttf" />
+    <EmbeddedResource Include="Drawing/Fonts/LICENSE-DejaVu.txt" />
+    <None Update="Drawing/Fonts/LICENSE-DejaVu.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Pack="true" PackagePath="licenses/DejaVu.txt" />
     <ProjectReference Include="../NurbsScene.Workbench/NurbsScene.Workbench.csproj" />
     <ProjectReference Include="../NurbsScene.Presentation/NurbsScene.Presentation.csproj" />
   </ItemGroup>

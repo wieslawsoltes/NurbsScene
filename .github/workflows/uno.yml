@@ -20,11 +20,40 @@ jobs:
           set -euo pipefail
           mkdir -p artifacts/uno-desktop
           dotnet build src/NurbsScene.App -c Release -f net10.0-desktop -p:NurbsSceneDesktopOnly=true 2>&1 | tee artifacts/uno-desktop/build.log
+      - name: WebGPU camera, ABI and render math contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet run --project tests/dotnet/NurbsScene.WebGpuContracts -c Release 2>&1 | tee artifacts/uno-desktop/webgpu-contracts.log
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: uno-desktop-build-${{ github.run_id }}
           path: artifacts/uno-desktop/
+  webgpu-pipeline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install playwright
+      - run: python -m playwright install --with-deps chromium
+      - name: Compile and execute the production WGSL pipelines
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence
+          git rev-parse HEAD > evidence/tested-commit.txt
+          git rev-parse HEAD^{tree} > evidence/tested-tree.txt
+          python tests/browser/test_webgpu_pipeline.py --software 2>&1 | tee evidence/webgpu-pipeline.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: webgpu-pipeline-${{ github.run_id }}
+          path: evidence/
+          retention-days: 7
   browser-build:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -119,7 +148,7 @@ jobs:
           path: evidence/
           retention-days: 7
   browser-qualification:
-    needs: [desktop, browser-build, browser]
+    needs: [desktop, webgpu-pipeline, browser-build, browser]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

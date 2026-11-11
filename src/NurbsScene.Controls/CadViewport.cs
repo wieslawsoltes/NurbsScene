@@ -26,6 +26,9 @@ public sealed class CadViewport : WebGpuCanvasElement
     private int _pixelWidth=1,_pixelHeight=1;
     private TaskCompletionSource<byte[]>? _capture;
     private bool _captureSubmitted;
+    private long _captureStartedAt;
+    private readonly DispatcherTimer _capturePump=new(){Interval=TimeSpan.FromMilliseconds(16)};
+    private const long CaptureTimeoutMilliseconds=10_000;
     public DisplayScene Scene {get;set;}=new();
     public IReadOnlyDictionary<string,Camera> Cameras {get;}=new[]{"Top","Perspective","Front","Right"}.ToDictionary(n=>n,n=>new Camera(n));
     public string? Maximized {get;private set;}
@@ -48,7 +51,9 @@ public sealed class CadViewport : WebGpuCanvasElement
     public event Action<PickResult?,VirtualKeyModifiers>? ObjectSelectionRequested;
     public CadViewport()
     {
-        IsTabStop=true;SizeChanged+=(_,_)=>{CancelNavigation();Invalidate();};Unloaded+=(_,_)=>CancelNavigation();
+        IsTabStop=true;SizeChanged+=(_,_)=>{CancelNavigation();Invalidate();};
+        Unloaded+=(_,_)=>{CancelNavigation();FailCapture(new InvalidOperationException("The WebGPU viewport was unloaded."));};
+        _capturePump.Tick+=(_,_)=>PumpCapture();
         PointerPressed+=Pressed;PointerMoved+=Moved;PointerReleased+=Released;
         PointerCanceled+=(_,e)=>{if(_pointerId==e.Pointer.PointerId)CancelNavigation();};
         PointerCaptureLost+=(_,e)=>{if(_pointerId==e.Pointer.PointerId)CancelNavigation();};
@@ -118,27 +123,68 @@ public sealed class CadViewport : WebGpuCanvasElement
     }
     private async Task CompleteCaptureAsync(TaskCompletionSource<byte[]> capture,Task<byte[]> readback)
     {
-        try{capture.TrySetResult(await readback);}
-        catch(Exception error)
+        byte[]? pixels=null;
+        Exception? failure=null;
+        try{pixels=await readback.ConfigureAwait(false);}
+        catch(Exception error){failure=error;}
+        void Complete()
         {
-            capture.TrySetException(error);
-            // A readback can finish after unload/reload. Its failure must not
-            // replace diagnostics from the new device generation.
-            if(ReferenceEquals(_capture,capture))Report(error.Message);
+            // A retired readback must not alter a reloaded device's diagnostics
+            // or stop the progress timer belonging to a newer request.
+            if(ReferenceEquals(_capture,capture))
+            {
+                _capture=null;
+                _captureSubmitted=false;
+                _capturePump.Stop();
+                if(failure is not null)Report(failure.Message);
+            }
+            if(failure is null)capture.TrySetResult(pixels!);
+            else capture.TrySetException(failure);
         }
-        finally
-        {
-            if(ReferenceEquals(_capture,capture)){_capture=null;_captureSubmitted=false;}
-        }
+        if(DispatcherQueue.HasThreadAccess)Complete();
+        else if(!DispatcherQueue.TryEnqueue(Complete))
+            capture.TrySetException(failure??new InvalidOperationException("The viewport dispatcher stopped before readback completed."));
     }
     private void FailCapture(Exception error)
     {
-        _capture?.TrySetException(error);
+        var capture=_capture;
         _capture=null;
         _captureSubmitted=false;
+        StopCapturePump();
+        capture?.TrySetException(error);
+    }
+    private void StopCapturePump()
+    {
+        // Readback completion may arrive on a WebGPU callback thread. A queued
+        // stop must not stop a new request started before that queue is drained.
+        if(DispatcherQueue.HasThreadAccess){if(_capture is null)_capturePump.Stop();}
+        else DispatcherQueue.TryEnqueue(()=>{if(_capture is null)_capturePump.Stop();});
+    }
+    private void PumpCapture()
+    {
+        if(_capture is null){_capturePump.Stop();return;}
+        if(!IsLoaded){FailCapture(new InvalidOperationException("The WebGPU viewport was unloaded."));return;}
+        if(Environment.TickCount64-_captureStartedAt>=CaptureTimeoutMilliseconds)
+        {
+            var error=new TimeoutException("WebGPU framebuffer readback did not complete within 10 seconds.");
+            FailCapture(error);
+            _renderer?.CancelCapture();
+            // Submit one final compositor frame to retire the canceled native map callback.
+            Invalidate();
+            Report(error.Message);
+            return;
+        }
+        // Uno polls its native WebGPU device after each compositor submission.
+        // Keep that owner progressing only while an explicit readback is pending;
+        // the regular viewport remains demand-driven, and no device is busy-waited.
+        Invalidate();
     }
     protected override void OnWebGpuUnavailable()
-        =>Report("The WebGPU drawing backend is unavailable. Enable WebGPU in this browser or use a supported native graphics driver.");
+    {
+        var error=new InvalidOperationException("The WebGPU drawing backend is unavailable. Enable WebGPU in this browser or use a supported native graphics driver.");
+        FailCapture(error);
+        Report(error.Message);
+    }
     protected override void OnDestroy(WebGpuCanvasContext context)
     {
         FailCapture(new InvalidOperationException("The WebGPU viewport was unloaded."));
@@ -147,11 +193,14 @@ public sealed class CadViewport : WebGpuCanvasElement
     }
     public Task<byte[]> CaptureRgbaAsync()
     {
+        if(!DispatcherQueue.HasThreadAccess)throw new InvalidOperationException("Request a viewport capture on its UI thread.");
         if(_renderer is null)throw new InvalidOperationException(LastError??"WebGPU is not initialized.");
         if(_capture is not null)throw new InvalidOperationException("A capture is already pending.");
         var capture=new TaskCompletionSource<byte[]>(TaskCreationOptions.RunContinuationsAsynchronously);
         _capture=capture;
         _captureSubmitted=false;
+        _captureStartedAt=Environment.TickCount64;
+        _capturePump.Start();
         Invalidate();
         return capture.Task;
     }

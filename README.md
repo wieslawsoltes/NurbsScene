@@ -1,6 +1,6 @@
 # NurbsScene
 
-Independent NURBS modeling and visual programming for **Uno Platform desktop and
+Independent NURBS modeling and visual programming for **Uno Platform 7 desktop and
 WebAssembly**, split into reusable libraries and controls.
 
 **Working alpha, not a complete Rhino or Grasshopper replacement.** The application
@@ -16,7 +16,7 @@ remain unfinished. See [the compatibility inventory](docs/PARITY.md).
 | `NurbsScene.Kernel` | Managed/native evaluators, exact editing, ellipse/loft, numerical measurements and bounded queries |
 | `NurbsScene.Model` | Ordered documents, layers, selection, immutable views and transactional history |
 | `NurbsScene.Parametric` | Typed paths/trees, indexed dependencies, incremental solving and 114 executable components |
-| `NurbsScene.Rendering` | Knot-aware tessellation, cameras, hierarchical picking and depth-enabled GL rendering |
+| `NurbsScene.Rendering` | Knot-aware tessellation, cameras, hierarchical picking and a shared-device WebGPU HDR renderer |
 | `NurbsScene.IO` | Exact versioned `.nscene` and display-only OBJ/STL export |
 | `NurbsScene.Workbench` | Application commands, preview, exact baking and workspace lifecycle |
 | `NurbsScene.Presentation` | Platform-independent input, layout, editing and measured text placement |
@@ -26,8 +26,28 @@ The host is `src/NurbsScene.App`. `native/kernel` supplies a freestanding C/WASM
 numerical kernel. Six separate npm packages in `packages/` provide geometry, model,
 parametric, graphics, controls and interchange, with a 102-component catalog.
 `validation-harness` exercises these JavaScript packages; **it is not the Uno app**.
-JavaScript graphics has WebGPU and WebGL2 implementations. Uno currently uses
-desktop GL/browser WebGL2, **not direct Uno WebGPU**.
+The Uno application explicitly selects the **WebGPU composition backend** on desktop
+and WebAssembly. Its 3D viewport, graph canvas, overlays, icons and retained text
+share Uno's device and queue; normal presentation stays on the GPU. The separate
+JavaScript graphics package has its own WebGPU and WebGL2 implementations.
+
+## Uno 7 and WebGPU rendering
+
+The migration pins Uno.Sdk 7.0.5 / Uno Platform 7.0.32 and removes the Uno 6 GL
+viewport and private readback adapter. WGSL shaders provide a linear HDR pipeline,
+multisample antialiasing, reverse-Z depth, physically based surface shading,
+shadow filtering, order-independent transparency, pixel-width curves and a
+bloom/tone-mapping pass. Renderer-owned resources are reused across frames and
+rebuilt when the target changes. Explicit captures use asynchronous staging-buffer
+readback; displayed frames do not round-trip through CPU memory.
+
+The graph and UI drawing adapter uses Uno's managed drawing interfaces and WebGPU
+surfaces, with retained shaped text and bundled DejaVu fonts for offline fallback.
+Read the [migration journal](docs/UNO7-WEBGPU-MIGRATION.md) for architecture,
+resource ownership, per-commit evidence and remaining quality work. Production
+WGSL execution and all ten actual Uno input/framebuffer campaigns are required
+by CI. Hardware performance and an AAA production quality claim require their own
+representative scenes, visual review and device/driver measurements.
 
 ## Build and validate
 
@@ -44,7 +64,7 @@ python -m http.server 8766 --bind 127.0.0.1 --directory artifacts/site
 [Build instructions](docs/BUILD.md) describe native, managed, package and browser
 qualification. GitHub Pages deploys only the exact Uno artifact that passed the
 main-branch browser/framebuffer workflow. Every new revision needs its own tests;
-compilation, software-GL browser checks and physical-GPU performance are distinct.
+compilation, software-WebGPU correctness checks and physical-GPU performance are distinct.
 
 ## Modeling and visual programming
 
@@ -66,8 +86,8 @@ point. Escape cancels a selection, move or navigation draft. See
 
 Panels support multiline text, connected data, virtualized item scrolling, all-edge resizing, persistent
 path/index/wrap options, and a native typography dialog (context menu or
-Ctrl+double-click). Font/style/alignment are display-only metadata; bounded native
-text caches reuse glyphs and measurements. See [typography](docs/PANEL-TYPOGRAPHY.md)
+Ctrl+double-click). Font/style/alignment are display-only metadata; bounded text
+caches reuse shaped glyph runs and measurements. See [typography](docs/PANEL-TYPOGRAPHY.md)
 [item scrolling](docs/PANEL-SCROLLING.md), and [Unicode/display options](docs/PANEL-DISPLAY-AND-TEXT-REVIEW.md) for limits.
 
 Curves/surfaces retain homogeneous controls and knots; display meshes never replace
@@ -84,6 +104,8 @@ Further contracts: [geometry and loft](docs/ELLIPSE-AND-LOFT.md),
 [performance/review](docs/PERFORMANCE-AND-REVIEW.md).
 
 Rhino and Grasshopper are behavioral references. No proprietary source, icons or
-binaries are included. NurbsScene-specific source is MIT-licensed. Historical
+binaries are included. NurbsScene-specific source is MIT-licensed; bundled DejaVu
+fonts retain their [upstream license](src/NurbsScene.Controls/Drawing/Fonts/LICENSE-DejaVu.txt).
+Historical
 reports under `docs/` retain the evidence and restrictions of their recorded
 revisions; they do not override the current per-commit workflow results.

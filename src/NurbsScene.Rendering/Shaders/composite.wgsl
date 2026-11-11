@@ -51,6 +51,8 @@ fn bloomCoordinate(fullPixel: vec2<f32>) -> vec2<f32> {
             }
         }
     }
+    // A sub-two-pixel view may have no half-resolution texel of its own.
+    if (any(maximum < minimum)) { return vec2<f32>(-1.0); }
     return clamp(fullPixel * 0.5, minimum, maximum) / dimensions;
 }
 
@@ -76,7 +78,10 @@ fn compositeFragment(input: FullscreenOutput) -> @location(0) vec4<f32> {
     // escapes into the tone mapper as NaN; ordinary overlap remains unchanged.
     let transparent = min(accumulated.rgb, vec3<f32>(65504.0)) / clamp(accumulated.a, 1e-5, 65504.0);
     var hdr = mix(transparent, background, transmission);
-    hdr += textureSampleLevel(bloom, linearSampler, bloomCoordinate(input.position.xy), 0.0).rgb * max(parameters.settings.y, 0.0);
+    let bloomUv = bloomCoordinate(input.position.xy);
+    if (all(bloomUv >= vec2<f32>(0.0))) {
+        hdr += textureSampleLevel(bloom, linearSampler, bloomUv, 0.0).rgb * max(parameters.settings.y, 0.0);
+    }
     var color = acesFit(max(hdr, vec3<f32>(0.0)) * max(parameters.settings.x, 0.0));
     if (parameters.settings.z > 0.5) { color = linearToSrgb(color); }
     // Opaque viewport output is premultiplied by definition; Uno composites it without a copy.

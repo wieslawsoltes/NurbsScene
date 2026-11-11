@@ -36,4 +36,5 @@
   <Project Path="tests/dotnet/NurbsScene.TypographyRasterContracts/NurbsScene.TypographyRasterContracts.csproj" />
   <Project Path="tests/dotnet/NurbsScene.PointerContracts/NurbsScene.PointerContracts.csproj" />
   <Project Path="tests/dotnet/NurbsScene.PanelScrollingContracts/NurbsScene.PanelScrollingContracts.csproj" />
+  <Project Path="tests/dotnet/NurbsScene.WebGpuContracts/NurbsScene.WebGpuContracts.csproj" />
 </Solution>

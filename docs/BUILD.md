@@ -34,6 +34,7 @@ dotnet run --project tests/dotnet/NurbsScene.PerformanceContracts -c Release
 dotnet run --project tests/dotnet/NurbsScene.QueryContracts -c Release
 dotnet run --project tests/dotnet/NurbsScene.ReviewContracts -c Release
 dotnet run --project tests/dotnet/NurbsScene.SectionContracts -c Release
+dotnet run --project tests/dotnet/NurbsScene.WebGpuContracts -c Release
 cmake -S native/kernel -B artifacts/native -DCMAKE_BUILD_TYPE=Release
 cmake --build artifacts/native --parallel
 LD_LIBRARY_PATH="$PWD/artifacts/native" NURBSSCENE_NATIVE_TESTS=1 dotnet run --project tests/dotnet/NurbsScene.SurfaceContracts -c Release
@@ -55,7 +56,21 @@ python tests/browser/test_uno.py
 
 The opt-in hook exercises real managed commands, undo/redo, graph changes, exact baking, workspace and typed-path round trips, four viewports and asynchronous differential WebGPU framebuffer readback. Seven additional checks cover curve-plane sections, overlap reporting, the new components, execution-plan/result reuse, definition serialization, and application-controller splitting/undo. No GPU mocks or skip-on-unavailable path exists. It is smoke qualification, not complete UI, hardware or performance coverage.
 
-The viewport derives from Uno 7's `WebGpuCanvasElement`, borrows Uno's WebGPU device and queue, and renders directly into the compositor target. It does not create an independent browser canvas or copy each displayed frame to CPU memory. Readback runs only for explicit capture/qualification requests. The old reflected GL readback adapter and pinned Uno 6 packages are removed.
+The viewport derives from Uno 7's `WebGpuCanvasElement`, borrows Uno's WebGPU device and queue, and renders directly into the compositor target. It does not create an independent browser canvas or copy each displayed frame to CPU memory. Readback runs only for explicit capture/qualification requests. While a capture is pending, a 16 ms dispatcher timer requests compositor frames so Uno's native device polling can complete the asynchronous mapping. The timer stops on completion, failure or unload; a 10-second deadline fails the request instead of waiting indefinitely. The old reflected GL readback adapter and pinned Uno 6 packages are removed.
+
+The standalone production-shader gate is also mandatory:
+
+```sh
+python -m pip install playwright
+python -m playwright install chromium
+python tests/browser/test_webgpu_pipeline.py --software
+```
+
+It compiles and executes the WGSL files embedded by the real renderer, checks
+render-pass behavior and readback, and writes `evidence/webgpu-pipeline.json`.
+The software adapter verifies API/shader correctness; this smaller scene cannot
+replace the application's ten interaction campaigns or a physical-GPU benchmark.
+The `webgpu-pipeline` CI job must pass before the publication can qualify.
 
 The artifact gate requires `gpuApi: "WebGPU"` plus actual differential framebuffer evidence; a legacy WebGL report cannot qualify this migration. Browser qualification preserves all ten mandatory input campaigns. Hosted CI uses Chromium's SwiftShader WebGPU adapter for shader/API/framebuffer correctness. That software adapter is not hardware performance evidence. The launch arguments are retained in `uno-console.json`. For an equivalent local correctness run:
 
@@ -85,6 +100,8 @@ That script builds the native/WASM kernel, runs the native and Node suites, pack
 ## GitHub Pages
 
 The `pages.yml` workflow runs only after the main branch's Uno qualification succeeds. It checks that the tested commit is still current main, downloads that exact run's qualified artifact, then uses GitHub Pages deployment with its scoped OIDC permissions. It never publishes the JavaScript harness as Uno. Repository Pages must use GitHub Actions as its build source.
+
+The source was reconstructed through Git objects after the local execution environment became unavailable during a browser publication. A successful desktop build of the earlier local checkout is useful API evidence, but does not qualify the reconstructed remote tree. The normal CI workflows must build and execute that exact tree before it can be qualified.
 
 Use per-commit CI artifacts for current evidence. Reports in `docs/history/alpha` describe the original partial alpha and its older environment.
 

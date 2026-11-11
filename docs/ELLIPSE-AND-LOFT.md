@@ -1,5 +1,9 @@
 # Exact ellipses and shared loft interpolation factors
 
+> Rendering statements and validation results below describe the recorded revision.
+> The current Uno 7/WebGPU architecture and its per-commit qualification are documented
+> in the [migration journal](UNO7-WEBGPU-MIGRATION.md).
+
 ## Published baseline and scope
 
 PR #10 is merged as `d768ea5b0eab5b94818c786369307c860cc5d14d`.

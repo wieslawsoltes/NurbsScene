@@ -1,5 +1,9 @@
 # Number-slider editor and retained graph views
 
+> Rendering statements and validation results below describe the recorded revision.
+> The current Uno 7/WebGPU architecture and its per-commit qualification are documented
+> in the [migration journal](UNO7-WEBGPU-MIGRATION.md).
+
 ## Recovered work
 
 This continuation starts at main `49601b987577ac796609950a917e9ac9c5f18246`
