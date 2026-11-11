@@ -26,6 +26,8 @@ public sealed class CommandConsole : Grid
     public int HistoryCount=>_history.Count;
     public bool HistoryExpanded {get;private set;}
     public string InputText=>_input.Text;
+    /// <summary>Whether canvas text is awaiting the deferred native command-input focus transfer.</summary>
+    public bool IsCanvasFocusPending=>_canvasFocusQueued;
     public string HistoryText=>_log.Text;
     public CommandConsole()
     {

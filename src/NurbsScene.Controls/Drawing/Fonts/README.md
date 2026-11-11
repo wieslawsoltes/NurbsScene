@@ -1,7 +1,7 @@
-# Bundled vector fonts
+# Bundled WebGPU and XAML fonts
 
 The four DejaVu Sans faces provide deterministic offline text for the WebGPU
-graph canvas. The fonts are the unmodified DejaVu 2.37 upstream release, with
+graph canvas and a complete regular/bold/oblique fallback family for XAML. The fonts are the unmodified DejaVu 2.37 upstream release, with
 their original upstream filenames. They carry the accompanying
 [DejaVu license](LICENSE-DejaVu.txt); they are not covered by the application's MIT
 license.
@@ -19,7 +19,32 @@ Retrieval mirror: https://github.com/go-opentype/fonts/tree/main/dejavusans
 | DejaVuSans-BoldOblique.ttf | 753f2d80b1f9a13026d641b6fd4cafb8d85dd479 |
 
 The packaged font names and version strings were checked directly in their sfnt
-name tables. Installed desktop families can override these defaults when the user
-requests them. Missing families use the bundled face with the requested weight
-and slant. The bundled fonts do not cover every Unicode script; a full font
+name tables. The packaged DejaVu Sans family resolves to these embedded faces on every host.
+Other requested desktop families retain Uno's managed installed-font matching.
+Missing families use the bundled face with the requested weight and slant. The bundled fonts do not cover every Unicode script; a full font
 fallback system for scripts outside their coverage is a separate requirement.
+
+## Host registration and style matching
+
+Both application heads register `BundledFonts.CreateProvider()` before creating
+the XAML tree. This public `IFontProvider` wrapper keeps one managed provider for
+installed fonts and platform character fallback, and selects the embedded
+regular, bold, oblique or bold-oblique face for the packaged family. Semibold
+(weight 600) and heavier requests use the real bold outlines; italic and oblique
+requests use the real oblique outlines. The bundled family has normal-width,
+static 400 and 700 faces, so other weights and stretches use the nearest supplied
+face.
+
+Uno 7.0.32's managed provider accepts one bundled default font and caches it by
+size. Supplying only the regular bytes makes XAML bold/italic requests resolve to
+the regular face on a browser without installed fonts. The wrapper fixes that
+observable typography-preview mismatch without synthesizing a style or changing
+the custom vector canvas's independent font resolver. Parsed XAML handles are
+cached by face and exact pixel size, with a bounded 128-entry resolution cache.
+Font bytes are loaded only when the corresponding face is first requested.
+
+The wrapper uses public Uno interfaces and preserves raw application font loading
+and asynchronous platform fallback for characters outside the bundled coverage:
+
+- https://github.com/unoplatform/uno/blob/7.0.32/src/Uno.UI.Composition.Drawing/IFontProvider.cs
+- https://github.com/unoplatform/uno/blob/7.0.32/src/Uno.UI.Composition.Managed/ManagedFontManager.cs

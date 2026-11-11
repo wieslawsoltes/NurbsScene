@@ -14,12 +14,16 @@ python -m http.server 8766 --bind 127.0.0.1 --directory artifacts/site
 
 `src/NurbsScene.App` contains the host; reusable controls and modeling/application logic live in separate projects. Desktop compilation does not substitute for running every desktop platform.
 
-Both host composition roots explicitly register Uno's managed font provider with
-the embedded DejaVu Sans default face. This registration serves XAML TextBlocks and
-layout as well as the application-specific canvas font resources. It is required
-on WebAssembly, where system fonts cannot be enumerated; configuring only the
-custom canvas provider does not supply XAML's default font. See Uno's
-[Skia-free font-provider configuration](https://platform.uno/docs/articles/features/using-webgpu-rendering.html#apps-without-skiasharp).
+Both host composition roots register `FontProvider(BundledFonts.CreateProvider())`
+for XAML text and layout. The bundled resolver selects actual regular, bold, oblique
+and bold-oblique DejaVu Sans faces for that explicit family and for the browser's
+default fallback; other installed families retain Uno's managed resolution.
+Application-specific GPU canvases use their own cached font resources. Global
+registration is required on WebAssembly, where system fonts cannot be enumerated:
+configuring only the custom canvas provider does not supply XAML's default font.
+Passing only regular font bytes as the global default also loses requested fallback
+weight/slant. See Uno's [font-provider configuration](https://platform.uno/docs/articles/features/using-webgpu-rendering.html#apps-without-skiasharp)
+and [`IFontProvider` interface](https://github.com/unoplatform/uno/blob/7.0.32/src/Uno.UI.Composition.Drawing/IFontProvider.cs).
 
 ## Managed numerical, graph and document suites
 
@@ -63,7 +67,7 @@ python tests/browser/test_uno.py
 
 The opt-in hook exercises real managed commands, undo/redo, graph changes, exact baking, workspace and typed-path round trips, four viewports and asynchronous differential WebGPU framebuffer readback. Seven additional checks cover curve-plane sections, overlap reporting, the new components, execution-plan/result reuse, definition serialization, and application-controller splitting/undo. No GPU mocks or skip-on-unavailable path exists. It is smoke qualification, not complete UI, hardware or performance coverage.
 
-The viewport derives from Uno 7's `WebGpuCanvasElement`, borrows Uno's WebGPU device and queue, and renders directly into the compositor target. It does not create an independent browser canvas or copy each displayed frame to CPU memory. Readback runs only for explicit capture/qualification requests. A 16 ms dispatcher timer enforces bounded capture lifetime. It requests rendering until the capture frame has been submitted on either target, then continues requesting compositor frames only on native targets, where Uno's device polling completes asynchronous mapping. The browser map progresses from its JavaScript promise without extra frames after submission. The timer stops on completion, failure or unload; a 10-second deadline fails the request and identifies whether it was awaiting viewport submission or GPU mapping. The old reflected GL readback adapter and pinned Uno 6 packages are removed.
+The viewport derives from Uno 7's `WebGpuCanvasElement`, borrows Uno's WebGPU device and queue, and renders directly into the compositor target. It does not create an independent browser canvas or copy each displayed frame to CPU memory. Readback runs only for explicit capture/qualification requests. A 16 ms dispatcher timer enforces bounded capture lifetime. It requests rendering until the capture frame has been submitted on either target, then continues requesting compositor frames only on native targets, where Uno's device polling completes asynchronous mapping. The browser map progresses from its JavaScript promise without extra frames after submission. The timer stops on completion, failure or unload; its deadline identifies whether the request was awaiting viewport submission or GPU mapping. The old reflected GL readback adapter and pinned Uno 6 packages are removed.
 
 Interactive GPU canvases set a transparent XAML `Background` so the native
 visual has a hit-test region. Uno's
@@ -82,6 +86,31 @@ renderer; native targets retain asynchronous WebGPU callbacks and owner-driven
 device polling. The renderer validates the returned length, removes row padding
 and retains ownership of its capture buffer and texture until completion or
 cancellation. This explicit capture path never runs during ordinary presentation.
+
+Ordinary `CaptureRgbaAsync()` requests retain a 10-second deadline. An explicit
+timeout must be finite, positive and at most 60 seconds. Browser qualification
+requests the 60-second budget with a 65-second outer wait to measure cold software
+GPU execution separately from the normal application deadline. This follows
+[observed mapping-phase timeouts](https://github.com/wieslawsoltes/NurbsScene/actions/runs/43113642478)
+with no device-validation or JavaScript errors; it lets the next qualification
+distinguish a slow initial map from one that never completes. Each empty, filled
+and rotated capture runs once, and a timeout still fails the campaign.
+
+`captureMeasurements` records each request's budget, completion phase, RGBA byte
+count and elapsed milliseconds. These durations include queue waiting, mapping,
+transfer and managed scheduling. They are not GPU timestamp-query measurements
+or hardware-latency targets. The artifact gate requires all three completed
+captures, matching byte counts, finite durations and the documented bounds.
+
+The real-device observer also records the first 64 native
+`GPUBuffer.mapAsync` requests, including mode, offset, size, request/settlement
+timestamps, status and duration; it reports any additional calls as dropped
+diagnostic records. It returns the original native promise, passes through the
+original receiver and arguments, and retains rejection details. Rejected or thrown
+map operations also enter the mandatory error gate. These passive
+observations distinguish a GPU map still pending from a completed JavaScript map
+whose managed continuation has not run. Capture deadlines determine acceptance;
+the observer adds evidence without submitting GPU work.
 
 The framebuffer qualification also records cumulative geometry upload bytes/count
 and per-frame draw, triangle and line counts before and after camera rotation. It

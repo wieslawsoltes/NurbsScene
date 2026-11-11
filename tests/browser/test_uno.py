@@ -97,12 +97,13 @@ async def main(url, campaign=None):
                     reports.append(report)
                     if len(reports) == 1:
                         write("uno-browser.json", report)  # canonical modeling/framebuffer report
-                        # Capture the actual Uno WebGPU workspace after its real
-                        # framebuffer checks pass, before the input campaign edits it.
-                        await page.screenshot(path=str(EVIDENCE / "uno-webgpu-initial.png"))
                     # Modeling qualification is published before the first UI
                     # observation. Every fresh context needs this explicit handoff.
                     ready = await wait_ready(page, timeout=20000)
+                    if len(reports) == 1:
+                        # The observer fits the workspace after readback qualification.
+                        # Capture that ready layout before the input campaign edits it.
+                        await page.screenshot(path=str(EVIDENCE / "uno-webgpu-initial.png"))
                     record["firstSample"] = ready["sample"]
                     record["checks"] = await verify(page)
                     record["final"] = await page.evaluate("globalThis.nurbsSceneUi")

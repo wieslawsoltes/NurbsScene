@@ -44,6 +44,32 @@ public partial class App
         try
         {
             var controller=view.Controller;var canvas=view.Viewport.Canvas;
+            const int captureBudgetMilliseconds=60_000,captureOuterBudgetMilliseconds=65_000;
+            var captures=new List<Dictionary<string,object?>>();
+            report["captureMeasurements"]=captures;
+            report["captureScope"]="Explicit browser qualification budget for cold software GPU execution; end-to-end capture duration is not GPU timing or a hardware latency claim.";
+            async Task<byte[]> Capture(string name)
+            {
+                var sample=new Dictionary<string,object?>
+                {
+                    ["name"]=name,["status"]="running",["phase"]="requesting capture",
+                    ["budgetMilliseconds"]=captureBudgetMilliseconds,["outerBudgetMilliseconds"]=captureOuterBudgetMilliseconds
+                };
+                captures.Add(sample);
+                var elapsed=Stopwatch.StartNew();
+                try
+                {
+                    var bytes=await canvas.CaptureRgbaAsync(TimeSpan.FromMilliseconds(captureBudgetMilliseconds)).WaitAsync(TimeSpan.FromMilliseconds(captureOuterBudgetMilliseconds));
+                    sample["status"]="passed";sample["phase"]=canvas.LastCapturePhase;sample["byteCount"]=bytes.Length;
+                    return bytes;
+                }
+                catch(Exception error)
+                {
+                    sample["status"]="failed";sample["phase"]=canvas.LastCapturePhase;sample["error"]=error.Message;
+                    throw;
+                }
+                finally {sample["elapsedMilliseconds"]=elapsed.Elapsed.TotalMilliseconds;}
+            }
             Check(controller.Document.Objects.Count==0&&controller.Graph.Nodes.Count==0,"Ordinary startup is an empty modeling document, not an auto-loaded sample");
             controller.LoadPavilion(); // Explicit qualification fixture; ordinary startup stays empty.
             await Wait(()=>canvas.Frames>0||canvas.LastError is not null,"Uno GPU canvas did not initialize.");
@@ -83,15 +109,15 @@ public partial class App
             canvas.Fit();controller.Scene.ShowGrid=false;controller.Scene.ShowIsocurves=false;
             var scene=controller.Scene;var items=scene.Items.ToArray();
             // Differential readback proves modeled surfaces, not only a grid, produced pixels.
-            scene.SetItems([]);var empty=await canvas.CaptureRgbaAsync().WaitAsync(TimeSpan.FromSeconds(15));
-            scene.SetItems(items);var filled=await canvas.CaptureRgbaAsync().WaitAsync(TimeSpan.FromSeconds(15));
+            scene.SetItems([]);var empty=await Capture("empty");
+            scene.SetItems(items);var filled=await Capture("filled");
             var different=0;for(var i=0;i<filled.Length;i+=4)if(Math.Abs(filled[i]-empty[i])+Math.Abs(filled[i+1]-empty[i+1])+Math.Abs(filled[i+2]-empty[i+2])>12)different++;
             Check(different>100,"Actual WebGPU surface pixels differ from empty scene");
             Check(canvas.Viewports.Length==4,"Four native Uno viewports");
             var beforeMetrics=ReadSubmissionMetrics(canvas);
             var beforeScene=(scene.Revision,scene.MeshRevision,scene.Origin,scene.ShowGrid,scene.ShowIsocurves);
             var before=SHA256.HashData(filled);canvas.Cameras["Perspective"].Orbit(60,25);
-            var rotated=await canvas.CaptureRgbaAsync().WaitAsync(TimeSpan.FromSeconds(15));
+            var rotated=await Capture("rotated");
             var afterMetrics=ReadSubmissionMetrics(canvas);
             var sceneUnchanged=beforeScene==(scene.Revision,scene.MeshRevision,scene.Origin,scene.ShowGrid,scene.ShowIsocurves);
             var geometryReused=beforeMetrics.GeometryUploadBytes==afterMetrics.GeometryUploadBytes&&
@@ -123,7 +149,7 @@ public partial class App
             report["renderingState"]=new
             {
                 workspace=new{view.IsLoaded,view.ActualWidth,view.ActualHeight},
-                viewport=new{canvas.IsLoaded,canvas.ActualWidth,canvas.ActualHeight,canvas.IsWebGpuInitialized,canvas.Frames,canvas.Backend,canvas.LastError},
+                viewport=new{canvas.IsLoaded,canvas.ActualWidth,canvas.ActualHeight,canvas.IsWebGpuInitialized,canvas.Frames,canvas.Backend,canvas.LastError,canvas.LastCapturePhase},
                 graph=new{graph.IsLoaded,graph.ActualWidth,graph.ActualHeight,graph.IsWebGpuInitialized,graph.DrawingFrames,graph.LastDrawingError}
             };
         }

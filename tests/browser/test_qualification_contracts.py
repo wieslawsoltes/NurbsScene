@@ -48,6 +48,9 @@ class QualificationContracts(unittest.TestCase):
                         "checks": ["model fixture " + str(i) for i in range(33)], "lastGpuError": None,
                         "gpuApi": "WebGPU", "gpuBackend": "WebGPU fixture", "frames": 1, "surfacePixels": 1,
                         "gpuObservation": copy.deepcopy(observation), "renderingPerformance": performance,
+                        "captureMeasurements": [{"name": capture, "status": "passed", "phase": "completed",
+                            "budgetMilliseconds": 60_000, "outerBudgetMilliseconds": 65_000,
+                            "elapsedMilliseconds": 5.5, "byteCount": 4096} for capture in ("empty", "filled", "rotated")],
                         "gpuReadbackSha256": "A" * 64}
             GATE.write_json(folder / "uno-ui.json", report)
             GATE.write_json(folder / ("uno-browser-" + name + ".json"), modeling)
@@ -188,6 +191,34 @@ class QualificationContracts(unittest.TestCase):
 
     def test_framebuffer_evidence_is_required(self):
         self.edit("uno-browser-workspace.json", lambda r: r.update(surfacePixels=0))
+        self.rejected()
+
+    def test_missing_capture_measurements_rejects(self):
+        self.edit("uno-browser-workspace.json", lambda r: r.pop("captureMeasurements"))
+        self.rejected()
+
+    def test_capture_measurements_cannot_omit_a_required_frame(self):
+        self.edit("uno-browser-workspace.json", lambda r: r["captureMeasurements"].pop())
+        self.rejected()
+
+    def test_capture_must_complete_actual_mapping(self):
+        self.edit("uno-browser-workspace.json", lambda r: r["captureMeasurements"][0].update(phase="awaiting GPU buffer mapping"))
+        self.rejected()
+
+    def test_capture_budget_cannot_silently_increase(self):
+        self.edit("uno-browser-workspace.json", lambda r: r["captureMeasurements"][0].update(budgetMilliseconds=120_000))
+        self.rejected()
+
+    def test_capture_duration_requires_a_finite_measurement(self):
+        self.edit("uno-browser-workspace.json", lambda r: r["captureMeasurements"][0].update(elapsedMilliseconds=float("nan")))
+        self.rejected()
+
+    def test_capture_duration_cannot_exceed_outer_budget(self):
+        self.edit("uno-browser-workspace.json", lambda r: r["captureMeasurements"][0].update(elapsedMilliseconds=65_001))
+        self.rejected()
+
+    def test_differential_captures_require_equal_rgba_byte_counts(self):
+        self.edit("uno-browser-workspace.json", lambda r: r["captureMeasurements"][0].update(byteCount=4092))
         self.rejected()
 
     def test_missing_camera_reuse_evidence_rejects(self):

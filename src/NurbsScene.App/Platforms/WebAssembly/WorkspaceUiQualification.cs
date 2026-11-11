@@ -4,6 +4,7 @@ using System.Text.Json;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using NurbsScene.Controls;
 using NurbsScene.Geometry;
@@ -22,6 +23,46 @@ public partial class App
     {
         var controller=view.Controller;var source=controller.Save();var preferences=view.Preferences;
         var watch=Stopwatch.StartNew();var drawing=new GraphPresentation();long sample=0;
+        // A bounded, passive trace explains native input ordering without sending
+        // input, changing focus, retrying actions, or keeping handlers after qualification.
+        var inputTrace=new Queue<object>();
+        var modelCanvas=view.Viewport.Canvas;
+        var commandInput=(AutoSuggestBox)view.Console.InputElement;
+        TextBox? FindInput(DependencyObject element)
+        {
+            if(element is TextBox box)return box;
+            for(var i=0;i<VisualTreeHelper.GetChildrenCount(element);i++)
+                if(FindInput(VisualTreeHelper.GetChild(element,i)) is{} found)return found;
+            return null;
+        }
+        string Limited(string text,int maximum)=>text.Length<=maximum?text:text[^maximum..];
+        void ObserveInput(string phase,RoutedEventArgs? args=null,string? key=null,bool? handled=null)
+        {
+            var owner=view.XamlRoot is{} xamlRoot?FocusManager.GetFocusedElement(xamlRoot):null;
+            var edit=FindInput(commandInput);
+            inputTrace.Enqueue(new{milliseconds=watch.ElapsedMilliseconds,phase,key,handled,
+                source=args?.OriginalSource?.GetType().FullName,
+                focus=owner?.GetType().FullName,
+                focusId=owner is DependencyObject focusOwner?AutomationProperties.GetAutomationId(focusOwner):null,
+                canvasFocus=modelCanvas.FocusState.ToString(),
+                focusPending=view.Console.IsCanvasFocusPending,
+                text=Limited(view.Console.InputText,80),innerText=edit is null?null:Limited(edit.Text,80),
+                selectionStart=edit?.SelectionStart,selectionLength=edit?.SelectionLength,
+                history=Limited(view.Console.HistoryText,160)});
+            while(inputTrace.Count>96)inputTrace.Dequeue();
+        }
+        KeyEventHandler keyDown=(_,e)=>ObserveInput("KeyDown",e,e.Key.ToString(),e.Handled);
+        KeyEventHandler keyUp=(_,e)=>ObserveInput("KeyUp",e,e.Key.ToString(),e.Handled);
+        TypedEventHandler<UIElement,CharacterReceivedRoutedEventArgs> character=(_,e)=>ObserveInput("CharacterReceived",e,e.Character.ToString(),e.Handled);
+        PointerEventHandler pressed=(_,e)=>ObserveInput("CanvasPointerPressed",e,handled:e.Handled);
+        RoutedEventHandler focused=(_,e)=>ObserveInput("GotFocus",e);
+        RoutedEventHandler blurred=(_,e)=>ObserveInput("LostFocus",e);
+        TypedEventHandler<AutoSuggestBox,AutoSuggestBoxTextChangedEventArgs> textChanged=(_,e)=>ObserveInput("CommandTextChanged",key:e.Reason.ToString());
+        view.AddHandler(UIElement.KeyDownEvent,keyDown,true);
+        view.AddHandler(UIElement.KeyUpEvent,keyUp,true);
+        view.AddHandler(UIElement.CharacterReceivedEvent,character,true);
+        modelCanvas.AddHandler(UIElement.PointerPressedEvent,pressed,true);
+        view.GotFocus+=focused;view.LostFocus+=blurred;commandInput.TextChanged+=textChanged;
         try
         {
             view.GraphEditor.Canvas.ObservePointerEvents=true;
@@ -113,6 +154,7 @@ public partial class App
                     selected=controller.Document.Selection.Count,documentRevision=controller.Document.Revision,
                     nodeCount=controller.Graph.Nodes.Count,wireCount=controller.Graph.Wires.Count,graphRevision=controller.Graph.Revision,
                     graphFocus=graph.FocusState.ToString(),focusedElement=focusedElement?.GetType().FullName,
+                    modelInputObservations=inputTrace.ToArray(),
                     pointerObservations=graph.PointerObservations,
                     graphSelected=graph.Selection.ToArray(),graphUndo=controller.GraphSession.CanUndo,graphRedo=controller.GraphSession.CanRedo,
                     graphErrors=controller.Graph.LastResult?.ErrorCount??0,graphLayoutBuilds=graph.LayoutBuilds,graphPathBuilds=graph.PathBuilds,
@@ -138,6 +180,14 @@ public partial class App
             else PublishUi(new{status="restored"});
         }
         catch(Exception error){PublishUi(new{status="failed",error=error.ToString()});}
+        finally
+        {
+            view.RemoveHandler(UIElement.KeyDownEvent,keyDown);
+            view.RemoveHandler(UIElement.KeyUpEvent,keyUp);
+            view.RemoveHandler(UIElement.CharacterReceivedEvent,character);
+            modelCanvas.RemoveHandler(UIElement.PointerPressedEvent,pressed);
+            view.GotFocus-=focused;view.LostFocus-=blurred;commandInput.TextChanged-=textChanged;
+        }
     }
     private static void PublishUi(object snapshot)
     {

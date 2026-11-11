@@ -30,7 +30,9 @@ public sealed class CadViewport : WebGpuCanvasElement
     private bool _captureSubmitted;
     private long _captureStartedAt;
     private readonly DispatcherTimer _capturePump=new(){Interval=TimeSpan.FromMilliseconds(16)};
-    private const long CaptureTimeoutMilliseconds=10_000;
+    private const long DefaultCaptureTimeoutMilliseconds=10_000;
+    private const long MaximumCaptureTimeoutMilliseconds=60_000;
+    private long _captureTimeoutMilliseconds=DefaultCaptureTimeoutMilliseconds;
     public DisplayScene Scene {get;set;}=new();
     public IReadOnlyDictionary<string,Camera> Cameras {get;}=new[]{"Top","Perspective","Front","Right"}.ToDictionary(n=>n,n=>new Camera(n));
     public string? Maximized {get;private set;}
@@ -42,6 +44,8 @@ public sealed class CadViewport : WebGpuCanvasElement
     public ConstructionHit? CursorHit {get;private set;}
     public string CursorViewport {get;private set;}="Perspective";
     public string? LastError {get;private set;}
+    /// <summary>The latest capture stage, retained on failure for diagnostics.</summary>
+    public string LastCapturePhase {get;private set;}="not requested";
     public long Frames=>_renderer?.Frames??0;
     /// <summary>Cumulative geometry residency counters for this renderer lifetime.</summary>
     public long GeometryUploadBytes=>_renderer?.GeometryUploadBytes??0;
@@ -134,6 +138,7 @@ public sealed class CadViewport : WebGpuCanvasElement
             if(_capture is{} capture&&!_captureSubmitted)
             {
                 _captureSubmitted=true;
+                LastCapturePhase="awaiting GPU buffer mapping";
                 _=CompleteCaptureAsync(capture,_renderer.CaptureRgbaAsync());
             }
             if(_renderer.Frames==1)DiagnosticsChanged?.Invoke(_renderer.Backend+"; GPU frame submitted");
@@ -161,6 +166,7 @@ public sealed class CadViewport : WebGpuCanvasElement
                 _captureSubmitted=false;
                 _capturePump.Stop();
                 if(failure is not null)Report(failure.Message);
+                else LastCapturePhase="completed";
             }
             if(failure is null)capture.TrySetResult(pixels!);
             else capture.TrySetException(failure);
@@ -188,10 +194,10 @@ public sealed class CadViewport : WebGpuCanvasElement
     {
         if(_capture is null){_capturePump.Stop();return;}
         if(!IsLoaded){FailCapture(new InvalidOperationException("The WebGPU viewport was unloaded."));return;}
-        if(Environment.TickCount64-_captureStartedAt>=CaptureTimeoutMilliseconds)
+        if(Environment.TickCount64-_captureStartedAt>=_captureTimeoutMilliseconds)
         {
             var phase=_captureSubmitted?"awaiting GPU buffer mapping":"awaiting viewport submission";
-            var error=new TimeoutException($"WebGPU framebuffer readback did not complete within 10 seconds ({phase}; frames={Frames}).");
+            var error=new TimeoutException($"WebGPU framebuffer readback did not complete within {_captureTimeoutMilliseconds} ms ({phase}; frames={Frames}).");
             FailCapture(error);
             _renderer?.CancelCapture();
             // Submit one final native compositor frame to retire its canceled map callback.
@@ -216,15 +222,22 @@ public sealed class CadViewport : WebGpuCanvasElement
         _renderer?.Dispose();
         _renderer=null;
     }
-    public Task<byte[]> CaptureRgbaAsync()
+    /// <summary>Capture once with a bounded deadline. Normal requests default to 10 seconds;
+    /// explicit qualification may request a budget of up to 60 seconds.</summary>
+    public Task<byte[]> CaptureRgbaAsync(TimeSpan? timeout=null)
     {
         if(!DispatcherQueue.HasThreadAccess)throw new InvalidOperationException("Request a viewport capture on its UI thread.");
+        var milliseconds=timeout?.TotalMilliseconds??DefaultCaptureTimeoutMilliseconds;
+        if(!double.IsFinite(milliseconds)||milliseconds<=0||milliseconds>MaximumCaptureTimeoutMilliseconds)
+            throw new ArgumentOutOfRangeException(nameof(timeout),"The capture timeout must be positive and at most 60 seconds.");
         if(_renderer is null)throw new InvalidOperationException(LastError??"WebGPU is not initialized.");
         if(_capture is not null)throw new InvalidOperationException("A capture is already pending.");
         var capture=new TaskCompletionSource<byte[]>(TaskCreationOptions.RunContinuationsAsynchronously);
         _capture=capture;
         _captureSubmitted=false;
         _captureStartedAt=Environment.TickCount64;
+        _captureTimeoutMilliseconds=checked((long)Math.Ceiling(milliseconds));
+        LastCapturePhase="awaiting viewport submission";
         _capturePump.Start();
         Invalidate();
         return capture.Task;

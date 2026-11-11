@@ -57,7 +57,7 @@ public sealed unsafe partial class WebGpuRenderer
         private readonly TaskCompletionSource<byte[]> _completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private GpuBuffer* _buffer = buffer;
         private GpuTexture? _texture = texture;
-        private bool _cancelled, _released;
+        private bool _cancelled, _released, _nativeMapped, _destroyed, _destroying, _releasePending;
         public bool IsCompleted => _completion.Task.IsCompleted;
         public Task<byte[]> Start()
         {
@@ -95,7 +95,7 @@ public sealed unsafe partial class WebGpuRenderer
                 _completion.TrySetException(reason ?? new ObjectDisposedException(nameof(WebGpuRenderer), "The viewport was unloaded during capture."));
                 // Destroy cancels an outstanding map. Its JS task or native callback still
                 // owns this request until completion and releases the buffer/texture there.
-                api.BufferDestroy(_buffer);
+                DestroyBuffer();
             }
         }
         [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl)])]
@@ -114,6 +114,7 @@ public sealed unsafe partial class WebGpuRenderer
                 {
                     if (_cancelled) return;
                     if (status != BufferMapAsyncStatus.Success) throw new InvalidOperationException($"WebGPU capture mapping failed: {status}.");
+                    _nativeMapped = true;
                     var pointer = api.BufferGetConstMappedRange(_buffer, 0, checked((nuint)stride * (nuint)height));
                     if (pointer == null) throw new InvalidOperationException("WebGPU returned an empty mapped capture.");
                     _completion.TrySetResult(ExtractRgba(new ReadOnlySpan<byte>(pointer, checked(stride * height))));
@@ -148,14 +149,36 @@ public sealed unsafe partial class WebGpuRenderer
         }
         private void Release()
         {
-            if (_released) return; _released = true;
-            if (_buffer != null)
+            lock (_gate)
             {
-                // The browser bridge owns its map/unmap pair. Native mapping stays local.
-                if (browserReadback is null) api.BufferUnmap(_buffer);
-                api.BufferDestroy(_buffer); api.BufferRelease(_buffer); _buffer = null;
+                if (_released) return;
+                // Native destroy can synchronously invoke the aborted-map callback. Keep
+                // its buffer alive until the outer destroy and Uno's bookkeeping return.
+                if (_destroying) { _releasePending = true; return; }
+                _released = true;
+                if (_buffer != null)
+                {
+                    // The browser bridge owns its map/unmap pair. A failed or canceled
+                    // native map never owns a mapping; destroy already unmaps implicitly.
+                    if (_nativeMapped) { _nativeMapped = false; api.BufferUnmap(_buffer); }
+                    DestroyBuffer();
+                    api.BufferRelease(_buffer); _buffer = null;
+                }
+                _texture?.Dispose(); _texture = null;
             }
-            _texture?.Dispose(); _texture = null;
+        }
+        // Called under _gate. Mark destruction before entering native code because an
+        // inline map callback reenters Release on the same thread (Monitor is reentrant).
+        private void DestroyBuffer()
+        {
+            if (_buffer == null || _destroyed) return;
+            _destroyed = true; _nativeMapped = false; _destroying = true;
+            try { api.BufferDestroy(_buffer); }
+            finally
+            {
+                _destroying = false;
+                if (_releasePending) { _releasePending = false; Release(); }
+            }
         }
     }
 }

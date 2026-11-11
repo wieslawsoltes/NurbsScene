@@ -11,11 +11,18 @@ PRELUDE = r"""
 const assert = require("node:assert/strict");
 const vm = require("node:vm");
 const observerSource = INPUT;
-function fixture(request) {
+function fixture(request, mapRequest, now) {
     class Adapter { requestDevice(...args) { return Reflect.apply(request, this, args); } }
-    const context = vm.createContext({ GPUAdapter: Adapter, Promise, WeakSet, Reflect });
+    class Buffer {
+        constructor() { this.size = 4096; }
+        mapAsync(...args) { return Reflect.apply(mapRequest, this, args); }
+    }
+    const globals = { GPUAdapter: Adapter, Promise, WeakSet, Reflect };
+    if (mapRequest) globals.GPUBuffer = Buffer;
+    if (now) globals.performance = { now };
+    const context = vm.createContext(globals);
     vm.runInContext(observerSource, context);
-    return { Adapter, adapter: new Adapter(), state: context.nurbsSceneGpuObservation, context };
+    return { Adapter, adapter: new Adapter(), Buffer, buffer: new Buffer(), state: context.nurbsSceneGpuObservation, context };
 }
 function device() {
     let lose;
@@ -124,6 +131,114 @@ class WebGpuObservationContracts(unittest.TestCase):
             assert.equal(await f.adapter.requestDevice(), gpu);
             assert.equal(f.state.errors.length, 1);
             assert.equal(f.state.errors[0].kind, "observer-error");
+        """)
+
+    def test_map_returns_exact_native_promise_and_preserves_invocation(self):
+        self.run_node(r"""
+            let resolve, receiver, argumentsSeen, time = 100;
+            const pending = new Promise(done => { resolve = done; });
+            const f = fixture(() => Promise.resolve(device()), function (...args) {
+                receiver = this; argumentsSeen = args; return pending;
+            }, () => time);
+            const originalDescriptor = Object.getOwnPropertyDescriptor(f.Buffer.prototype, "mapAsync");
+            const result = f.buffer.mapAsync(1, 256, 512);
+            assert.equal(result, pending, "The application must receive the exact native promise");
+            assert.equal(receiver, f.buffer);
+            assert.deepEqual(argumentsSeen, [1, 256, 512]);
+            assert.equal(originalDescriptor.enumerable, false);
+            assert.equal(f.state.bufferMaps.installed, true);
+            assert.equal(f.state.bufferMaps.records[0].status, "pending");
+            time = 136; resolve();
+            await result;
+            const sample = f.state.bufferMaps.records[0];
+            assert.equal(sample.requestedAtMilliseconds, 100);
+            assert.equal(sample.settledAtMilliseconds, 136);
+            assert.equal(sample.durationMilliseconds, 36);
+            assert.equal(sample.mode, 1);
+            assert.equal(sample.offset, 256);
+            assert.equal(sample.size, 512);
+            assert.equal(sample.bufferByteLength, 4096);
+            assert.equal(sample.status, "fulfilled");
+            assert.equal(f.state.errors.length, 0);
+        """)
+
+    def test_map_rejection_retains_exact_promise_and_error(self):
+        self.run_node(r"""
+            const original = new Error("map rejected"), pending = Promise.reject(original);
+            const f = fixture(() => Promise.resolve(device()), () => pending);
+            const result = f.buffer.mapAsync(1);
+            assert.equal(result, pending);
+            await assert.rejects(result, error => error === original);
+            const sample = f.state.bufferMaps.records[0];
+            assert.equal(sample.status, "rejected");
+            assert.equal(sample.error.message, "map rejected");
+            assert.equal(f.state.errors.length, 1);
+            assert.equal(f.state.errors[0].kind, "buffer-map");
+            assert.equal(f.state.errors[0].message, "map rejected");
+            assert.equal(f.state.errors[0].status, "rejected");
+        """)
+
+    def test_synchronous_map_exception_is_preserved(self):
+        self.run_node(r"""
+            const original = new TypeError("illegal buffer");
+            const f = fixture(() => Promise.resolve(device()), () => { throw original; });
+            assert.throws(() => f.buffer.mapAsync(1), error => error === original);
+            assert.equal(f.state.bufferMaps.records[0].status, "threw");
+            assert.equal(f.state.bufferMaps.records[0].error.message, "illegal buffer");
+            assert.equal(f.state.errors.length, 1);
+            assert.equal(f.state.errors[0].kind, "buffer-map");
+            assert.equal(f.state.errors[0].status, "threw");
+        """)
+
+    def test_default_map_range_is_observed_without_adding_arguments(self):
+        self.run_node(r"""
+            let argumentsSeen;
+            const pending = Promise.resolve();
+            const f = fixture(() => Promise.resolve(device()), (...args) => { argumentsSeen = args; return pending; });
+            assert.equal(f.buffer.mapAsync(1), pending);
+            await pending;
+            assert.deepEqual(argumentsSeen, [1]);
+            assert.equal(f.state.bufferMaps.records[0].offset, 0);
+            assert.equal(f.state.bufferMaps.records[0].size, 4096);
+        """)
+
+    def test_map_timing_records_are_bounded(self):
+        self.run_node(r"""
+            const pending = Promise.resolve();
+            const f = fixture(() => Promise.resolve(device()), () => pending);
+            for (let i = 0; i < 70; i++)
+                assert.equal(f.buffer.mapAsync(1), pending);
+            await pending;
+            assert.equal(f.state.bufferMaps.requestCount, 70);
+            assert.equal(f.state.bufferMaps.records.length, 64);
+            assert.equal(f.state.bufferMaps.droppedCount, 6);
+            assert.ok(f.state.bufferMaps.records.every(sample => sample.status === "fulfilled"));
+        """)
+
+    def test_failed_map_beyond_timing_cap_still_fails_error_observation(self):
+        self.run_node(r"""
+            const original = new Error("late map rejected");
+            let count = 0;
+            const f = fixture(() => Promise.resolve(device()),
+                () => ++count <= 64 ? Promise.resolve() : Promise.reject(original));
+            for (let i = 0; i < 64; i++) await f.buffer.mapAsync(1);
+            await assert.rejects(f.buffer.mapAsync(1), error => error === original);
+            assert.equal(f.state.bufferMaps.records.length, 64);
+            assert.equal(f.state.bufferMaps.droppedCount, 1);
+            assert.equal(f.state.errors.length, 1);
+            assert.equal(f.state.errors[0].kind, "buffer-map");
+            assert.equal(f.state.errors[0].requestId, 65);
+            assert.equal(f.state.errors[0].message, "late map rejected");
+        """)
+
+    def test_device_only_fixture_does_not_require_gpu_buffer(self):
+        self.run_node(r"""
+            const f = fixture(() => Promise.resolve(device()));
+            await f.adapter.requestDevice();
+            assert.equal(f.state.installed, true);
+            assert.equal(f.state.bufferMaps.installed, false);
+            assert.equal(f.state.bufferMaps.records.length, 0);
+            assert.equal(f.state.errors.length, 0);
         """)
 
     def test_unavailable_webgpu_cannot_produce_success_evidence(self):

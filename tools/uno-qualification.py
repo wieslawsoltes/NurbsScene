@@ -95,6 +95,26 @@ def require_gpu_observation(observation, name):
         raise ValueError("Missing or erroneous actual WebGPU device observation: " + name)
 
 
+def require_capture_measurements(captures, name):
+    if (not isinstance(captures, list) or len(captures) != 3
+            or any(not isinstance(sample, dict) for sample in captures)
+            or [sample.get("name") for sample in captures] != ["empty", "filled", "rotated"]):
+        raise ValueError("Missing one-shot framebuffer capture measurements: " + name)
+    for sample in captures:
+        if sample.get("status") != "passed" or sample.get("phase") != "completed":
+            raise ValueError("Framebuffer capture did not complete: " + name)
+        if sample.get("budgetMilliseconds") != 60_000 or sample.get("outerBudgetMilliseconds") != 65_000:
+            raise ValueError("Unexpected software qualification capture budget: " + name)
+        count = sample.get("byteCount")
+        elapsed = sample.get("elapsedMilliseconds")
+        if type(count) is not int or count < 4 or count % 4:
+            raise ValueError("Missing complete RGBA capture bytes: " + name)
+        if type(elapsed) not in (int, float) or not math.isfinite(elapsed) or not 0 <= elapsed <= 65_000:
+            raise ValueError("Missing or out-of-budget capture elapsed time: " + name)
+    if len({sample["byteCount"] for sample in captures}) != 1:
+        raise ValueError("Differential framebuffer captures have different dimensions: " + name)
+
+
 def require_camera_reuse(performance, name):
     if (not isinstance(performance, dict) or performance.get("schema") != 1
             or performance.get("sceneUnchanged") is not True or performance.get("geometryReused") is not True):
@@ -149,6 +169,7 @@ def collect(evidence, site, commit, tree, output, registry_path=REGISTRY):
             raise ValueError("Actual Uno modeling/framebuffer qualification did not pass: " + name)
         if modeling.get("gpuApi") != "WebGPU" or not isinstance(modeling.get("gpuBackend"), str) or not modeling["gpuBackend"].startswith("WebGPU") or type(modeling.get("frames")) is not int or modeling["frames"] < 1 or type(modeling.get("surfacePixels")) is not int or modeling["surfacePixels"] < 1 or not re.fullmatch(r"[0-9a-fA-F]{64}", modeling.get("gpuReadbackSha256", "")):
             raise ValueError("Missing actual native framebuffer evidence: " + name)
+        require_capture_measurements(modeling.get("captureMeasurements"), name)
         require_camera_reuse(modeling.get("renderingPerformance"), name)
         require_gpu_observation(modeling.get("gpuObservation"), name + " modeling")
         require_gpu_observation(record.get("gpuObservation"), name + " final")
