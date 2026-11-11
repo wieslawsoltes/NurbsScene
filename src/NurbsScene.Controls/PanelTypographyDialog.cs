@@ -59,7 +59,7 @@ public sealed class PanelTypographyDialog : ContentDialog
             preview.TextAlignment = _horizontal.SelectedIndex switch { 1 => TextAlignment.Center, 2 => TextAlignment.Right, _ => TextAlignment.Left };
             preview.VerticalAlignment = _vertical.SelectedIndex switch { 1 => VerticalAlignment.Center, 2 => VerticalAlignment.Bottom, _ => VerticalAlignment.Top };
             // Native preview uses the native host text control; the main canvas
-            // resolves its Skia font independently and reports that resolved family.
+            // resolves its managed font independently and reports that resolved family.
             var family = _family.Text.Trim();
             try { (PanelTextStyle.Default with { FontFamily = family }).Validate(); }
             catch (ArgumentException) { family = ""; }

@@ -1,23 +1,36 @@
 using System.Collections.Immutable;
 using NurbsScene.Parametric;
 using NurbsScene.Presentation;
-using SkiaSharp;
+#if NURBSSCENE_SKIA_RASTER_TEST
+using VectorCanvas = SkiaSharp.SKCanvas;
+using VectorFont = SkiaSharp.SKFont;
+using VectorFontStyle = SkiaSharp.SKFontStyle;
+using VectorFontStyleSlant = SkiaSharp.SKFontStyleSlant;
+using VectorFontStyleWeight = SkiaSharp.SKFontStyleWeight;
+using VectorFontStyleWidth = SkiaSharp.SKFontStyleWidth;
+using VectorPaint = SkiaSharp.SKPaint;
+using VectorRect = SkiaSharp.SKRect;
+using VectorTextBlob = SkiaSharp.SKTextBlob;
+using VectorTypeface = SkiaSharp.SKTypeface;
+#else
+using NurbsScene.Controls.Drawing;
+#endif
 
 namespace NurbsScene.Controls;
 
 public sealed record PanelRenderedTypography(PanelTextStyle Style, string ResolvedFamily, double FontSize,
     PanelFontMetrics Metrics, PanelTextPlacement Placement);
 
-/// <summary>Reusable owner-thread Skia panel text renderer. Text blobs retain glyph
+/// <summary>Reusable owner-thread GPU vector panel text renderer. Text blobs retain glyph
 /// runs; movement/alignment/selection never rebuild identical runs. Native caches
 /// are bounded and disposed on eviction; the caller retains its authoritative tree.</summary>
 public sealed class PanelTypographyRenderer : IDisposable
 {
     public const int MaximumPanels = 128, MaximumTypefaces = 16;
     private readonly record struct FaceKey(string Family, bool Bold, bool Italic);
-    private sealed class Face(SKTypeface value, long identity, bool owned)
+    private sealed class Face(VectorTypeface value, long identity, bool owned)
     {
-        public SKTypeface Value { get; } = value;
+        public VectorTypeface Value { get; } = value;
         public long Identity { get; } = identity;
         public bool Owned { get; } = owned;
         public long Used;
@@ -28,15 +41,15 @@ public sealed class PanelTypographyRenderer : IDisposable
         public ImmutableArray<string> Lines;
         public long FaceIdentity, Used;
         public double FontSize;
-        public SKTextBlob?[] Blobs = [];
+        public VectorTextBlob?[] Blobs = [];
         public PanelRenderedTypography? Rendered;
         public PanelPaintStamp? Source;
         public void Dispose() { foreach (var blob in Blobs) blob?.Dispose(); Blobs = []; }
     }
     private readonly Dictionary<FaceKey, Face> _faces = [];
     private readonly Dictionary<string, Entry> _panels = [];
-    private readonly SKFont _font = new(SKTypeface.Default, 10);
-    private readonly SKPaint _paint = new() { IsAntialias = true, Color = new(62, 60, 40) };
+    private readonly VectorFont _font = new(VectorTypeface.Default, 10);
+    private readonly VectorPaint _paint = new() { IsAntialias = true, Color = new(62, 60, 40) };
     private readonly Func<string, double> _measure;
     private long _clock, _identity;
     private bool _disposed;
@@ -55,8 +68,8 @@ public sealed class PanelTypographyRenderer : IDisposable
     public void Forget(string id) { if (_panels.Remove(id, out var entry)) entry.Dispose(); }
     public void Clear() { foreach (var e in _panels.Values) e.Dispose(); _panels.Clear(); }
 
-    public PanelRenderedTypography Draw(SKCanvas canvas, string id, PanelPreview preview, PanelTextStyle style,
-        SKRect bounds, PanelDisplayLayout layout, PanelPaintStamp? source = null)
+    public PanelRenderedTypography Draw(VectorCanvas canvas, string id, PanelPreview preview, PanelTextStyle style,
+        VectorRect bounds, PanelDisplayLayout layout, PanelPaintStamp? source = null)
     {
         ObjectDisposedException.ThrowIf(_disposed, this); ArgumentNullException.ThrowIfNull(canvas);
         ArgumentNullException.ThrowIfNull(id); ArgumentNullException.ThrowIfNull(preview); ArgumentNullException.ThrowIfNull(style);
@@ -79,11 +92,11 @@ public sealed class PanelTypographyRenderer : IDisposable
         var sameLines = entry.Lines == preview.Lines || (!entry.Lines.IsDefault && entry.Lines.AsSpan().SequenceEqual(preview.Lines.AsSpan()));
         if (!sameLines || entry.FaceIdentity != face.Identity || entry.FontSize != layout.FontSize)
         {
-            var blobs = new SKTextBlob?[preview.Lines.Length];
+            var blobs = new VectorTextBlob?[preview.Lines.Length];
             try
             {
                 for (var i = 0; i < blobs.Length; i++)
-                    if (preview.Lines[i].Length > 0) blobs[i] = SKTextBlob.Create(preview.Lines[i], _font) ?? throw new InvalidOperationException("Native panel glyph creation failed.");
+                    if (preview.Lines[i].Length > 0) blobs[i] = VectorTextBlob.Create(preview.Lines[i], _font) ?? throw new InvalidOperationException("Native panel glyph creation failed.");
             }
             catch { foreach (var blob in blobs) blob?.Dispose(); throw; }
             entry.Dispose(); entry.Blobs = blobs; entry.Lines = preview.Lines;
@@ -130,13 +143,13 @@ public sealed class PanelTypographyRenderer : IDisposable
             if (_faces.Count == MaximumTypefaces)
             {
                 var victim = _faces.MinBy(p => p.Value.Used);
-                _font.Typeface = SKTypeface.Default; _faces.Remove(victim.Key);
+                _font.Typeface = VectorTypeface.Default; _faces.Remove(victim.Key);
                 if (victim.Value.Owned && !_faces.Values.Any(other => ReferenceEquals(other.Value, victim.Value.Value))) victim.Value.Value.Dispose();
             }
-            using var requested = new SKFontStyle(style.Bold ? SKFontStyleWeight.Bold : SKFontStyleWeight.Normal,
-                SKFontStyleWidth.Normal, style.Italic ? SKFontStyleSlant.Italic : SKFontStyleSlant.Upright);
-            var value = SKTypeface.FromFamilyName(style.FontFamily.Length == 0 ? null : style.FontFamily, requested) ?? SKTypeface.Default;
-            _faces.Add(key, face = new(value, ++_identity, !ReferenceEquals(value, SKTypeface.Default)));
+            using var requested = new VectorFontStyle(style.Bold ? VectorFontStyleWeight.Bold : VectorFontStyleWeight.Normal,
+                VectorFontStyleWidth.Normal, style.Italic ? VectorFontStyleSlant.Italic : VectorFontStyleSlant.Upright);
+            var value = VectorTypeface.FromFamilyName(style.FontFamily.Length == 0 ? null : style.FontFamily, requested) ?? VectorTypeface.Default;
+            _faces.Add(key, face = new(value, ++_identity, !ReferenceEquals(value, VectorTypeface.Default)));
         }
         face.Used = ++_clock; _font.Typeface = face.Value; _font.Size = (float)size;
         // Some hosts only have a regular face. Synthetic style is explicit and

@@ -9,7 +9,7 @@ using NurbsScene.Presentation;
 
 namespace NurbsScene.Controls;
 
-/// <summary>Reusable graph editing workbench. Native controls expose search and properties around the Skia canvas.</summary>
+/// <summary>Reusable graph editing workbench. Native controls expose search and properties around the WebGPU vector canvas.</summary>
 public sealed partial class GraphEditorControl : Grid,IDisposable
 {
     public GraphCanvas Canvas {get;}=new();
@@ -206,5 +206,5 @@ public sealed partial class GraphEditorControl : Grid,IDisposable
             if(preview.OmittedBranches>0)ResultLine($"… {preview.OmittedBranches} more branches");
         }
     }
-    public void Dispose(){DisposeValueEditor();DisposeSliderEditor();if(Session is{} session)session.Replaced-=OnReplaced;DetachGraph();CloseActionPopups();Canvas.Dispose();}
+    public new void Dispose(){DisposeValueEditor();DisposeSliderEditor();if(Session is{} session)session.Replaced-=OnReplaced;DetachGraph();CloseActionPopups();Canvas.Dispose();base.Dispose();}
 }

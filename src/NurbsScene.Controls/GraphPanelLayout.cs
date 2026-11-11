@@ -1,6 +1,6 @@
 using NurbsScene.Parametric;
 using NurbsScene.Presentation;
-using SkiaSharp;
+using NurbsScene.Controls.Drawing;
 using Windows.Foundation;
 
 namespace NurbsScene.Controls;
@@ -8,7 +8,7 @@ namespace NurbsScene.Controls;
 public sealed partial class GraphCanvas
 {
     private PanelResizeDraft? _panelResize;
-    private readonly Dictionary<string, (CanvasPoint Start, CanvasPoint End, SKPath Path)> _resizePaths = [];
+    private readonly Dictionary<string, (CanvasPoint Start, CanvasPoint End, VectorPath Path)> _resizePaths = [];
     public CanvasBox? PanelResizeBounds => _panelResize?.Bounds;
     public long ResizePathBuilds { get; private set; }
     private CanvasBox CanvasBounds(PresentedNode node) => _panelResize?.NodeId == node.Node.Id ? _panelResize.Bounds : node.Bounds;
@@ -29,7 +29,7 @@ public sealed partial class GraphCanvas
         var left = Math.Min(start.X, end.X - delta); var right = Math.Max(start.X + delta, end.X);
         return new(left, Math.Min(start.Y, end.Y) - 3, right - left, Math.Abs(start.Y - end.Y) + 6);
     }
-    private void DrawWirePath(SKCanvas canvas, PresentedWire wire, SKPath ordinary)
+    private void DrawWirePath(VectorCanvas canvas, PresentedWire wire, VectorPath ordinary)
     {
         var start = WireStart(wire); var end = WireEnd(wire);
         if (start == wire.Start && end == wire.End) { canvas.DrawPath(ordinary, _paint); return; }
@@ -53,9 +53,9 @@ public sealed partial class GraphCanvas
         foreach (var entry in _resizePaths.Values) entry.Path.Dispose();
         _resizePaths.Clear();
     }
-    private void DrawResizeHandles(SKCanvas canvas, SKRect bounds, bool selected)
+    private void DrawResizeHandles(VectorCanvas canvas, VectorRect bounds, bool selected)
     {
-        _paint.Style = SKPaintStyle.Stroke; _paint.StrokeWidth = 1; _paint.Color = new(126,118,67);
+        _paint.Style = VectorPaintStyle.Stroke; _paint.StrokeWidth = 1; _paint.Color = new(126,118,67);
         for (var inset = 4; inset <= 10; inset += 3)
             canvas.DrawLine(bounds.Right - inset - 2, bounds.Bottom - 3, bounds.Right - 3, bounds.Bottom - inset - 2, _paint);
         if (!selected) return;
@@ -68,7 +68,7 @@ public sealed partial class GraphCanvas
                 if (row == 1 && col == 1) continue;
                 var x = col == 0 ? bounds.Left : col == 2 ? bounds.Right - size : bounds.MidX - size / 2;
                 var y = row == 0 ? bounds.Top : row == 2 ? bounds.Bottom - size : bounds.MidY - size / 2;
-                var grip = new SKRect(x, y, x + size, y + size);
+                var grip = new VectorRect(x, y, x + size, y + size);
                 Fill(canvas, grip, new(249,245,201)); Stroke(canvas, grip, new(109,105,72), 1 / _zoom);
             }
     }

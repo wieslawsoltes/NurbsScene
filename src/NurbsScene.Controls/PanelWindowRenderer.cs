@@ -1,10 +1,14 @@
 using NurbsScene.Parametric;
 using NurbsScene.Presentation;
-using SkiaSharp;
+#if NURBSSCENE_SKIA_RASTER_TEST
+using VectorRect = SkiaSharp.SKRect;
+#else
+using NurbsScene.Controls.Drawing;
+#endif
 
 namespace NurbsScene.Controls;
 
-public readonly record struct PanelWindowRenderPlan(SKRect Body, PanelDisplayLayout Layout,
+public readonly record struct PanelWindowRenderPlan(VectorRect Body, PanelDisplayLayout Layout,
     PanelWindow Window, double ReservedWidth);
 
 /// <summary>Measured, bounded preparation for a single panel text paint. Resolves
@@ -13,7 +17,7 @@ public readonly record struct PanelWindowRenderPlan(SKRect Body, PanelDisplayLay
 public static class PanelWindowRenderer
 {
     public static PanelWindowRenderPlan Prepare(PanelTypographyRenderer typography, PanelWindowCache cache,
-        GraphNode node, NodeResult? result, SKRect bounds, double zoom, PanelTextStyle style,
+        GraphNode node, NodeResult? result, VectorRect bounds, double zoom, PanelTextStyle style,
         int first, bool hadScrollbar)
     {
         ArgumentNullException.ThrowIfNull(typography); ArgumentNullException.ThrowIfNull(cache);
@@ -29,7 +33,7 @@ public static class PanelWindowRenderer
         return plan;
     }
     private static PanelWindowRenderPlan Window(PanelWindowCache cache, GraphNode node, NodeResult? result,
-        SKRect bounds, double zoom, PanelTextStyle style, PanelFontMetrics metrics, int first, bool scroll, double reserve)
+        VectorRect bounds, double zoom, PanelTextStyle style, PanelFontMetrics metrics, int first, bool scroll, double reserve)
     {
         var body = bounds;
         if (scroll) body.Right = Math.Max(body.Left + 1, body.Right - (float)reserve);

@@ -3,7 +3,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using NurbsScene.Parametric;
 using NurbsScene.Presentation;
-using SkiaSharp;
+using NurbsScene.Controls.Drawing;
 using Windows.System;
 
 namespace NurbsScene.Controls;
@@ -67,7 +67,7 @@ public sealed partial class GraphCanvas
         }
         e.Handled=true;
     }
-    private void DrawNumberSlider(SKCanvas canvas,GraphNode node,SKRect rect)
+    private void DrawNumberSlider(VectorCanvas canvas,GraphNode node,VectorRect rect)
     {
         if(!NumberSliderSettings.TryRead(node,out var settings,out var value,out _))
         {
