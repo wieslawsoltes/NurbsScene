@@ -229,6 +229,9 @@ an empty draft retains the repeat-command behavior. The Rhino workspace campaign
 types a command and immediately presses Enter without waiting for focus, then
 checks ordinary Undo. These two assertions raise its minimum from 56 to 58 and
 the ten-campaign UI minimum from 349 to 351.
+Browser resize checks acknowledge the requested native workspace width and height
+before asserting responsive layout. New observer samples alone can still describe
+the preceding layout while the WebGPU host processes a browser resize.
 
 Graph clipboard/menu/selection scenarios run inside the same actual Uno test via
 `test_graph_editing_ui.py`. `editing.yml` separately runs fragment/arrangement

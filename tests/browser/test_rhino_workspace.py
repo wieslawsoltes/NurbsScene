@@ -246,10 +246,14 @@ async def verify_rhino_workspace(page):
         await page.keyboard.press('F3'); data=await settle(page)
         check(data['state']['inspectorVisible'] and data['state']['inspector']=='Properties',
               'F3 reopens Properties after the right sidebar has been hidden')
-        await page.set_viewport_size({'width':680,'height':1050}); data=await settle(page)
+        # Browser viewport changes and native Uno layout are delivered separately.
+        # Acknowledge the requested native size before asserting inspector behavior.
+        await page.set_viewport_size({'width':680,'height':1050})
+        data=await wait_for_ui(page, "value.state.workspaceWidth === 680 && value.state.workspaceHeight === 1050")
         check(data['state']['inspectorVisible'] and 'InspectorSplitter' not in data['controls'],
               'Narrow windows temporarily collapse the inspector without overwriting user preferences')
-        await page.set_viewport_size({'width':1600,'height':1100}); data=await settle(page)
+        await page.set_viewport_size({'width':1600,'height':1100})
+        data=await wait_for_ui(page, "value.state.workspaceWidth === 1600 && value.state.workspaceHeight === 1100")
         check(data['state']['inspectorWidth']==width and 'InspectorSplitter' in data['controls'],
               'Returning to a wide window restores the user-sized inspector')
         await click('PanelLayers'); await command('Grasshopper'); data=await settle(page)

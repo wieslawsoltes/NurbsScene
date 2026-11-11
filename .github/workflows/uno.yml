@@ -67,7 +67,7 @@ jobs:
           assert report["commit"] == os.environ["GITHUB_SHA"], "Wrong tested commit"
           adapters = re.findall(r"\[webgpu\] init device[^\n]*adapter='([^'\n]+)' backend=(\w+) type=(\w+)", log)
           assert adapters and all(backend == "Vulkan" and kind == "Cpu" for _, backend, kind in adapters), adapters
-          errors = re.findall(r"(?im)^.*(?:\[webgpu\] uncaptured error|\[webgpu\] device lost \((?!Destroyed|InstanceDropped)|\[wgpu Error\]|NURBSSCENE_UNHANDLED:|NURBSSCENE_WEBGPU:).*$", log)
+          errors = re.findall(r"(?im)^.*(?:\[webgpu\] uncaptured error|\[webgpu\] device lost|\[wgpu Error\]|NURBSSCENE_UNHANDLED:|NURBSSCENE_WEBGPU:).*$", log)
           assert not errors, errors
           report["adapterEvidence"] = {
               "source": "Uno native WebGPU device initialization log",
