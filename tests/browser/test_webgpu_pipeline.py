@@ -6,6 +6,9 @@ physical-GPU performance result. Adapter absence or any validation error fails.
 """
 import argparse
 import asyncio
+import base64
+import gzip
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -15,7 +18,7 @@ from playwright.async_api import async_playwright
 ROOT = Path(__file__).resolve().parents[2]
 SHADERS = ROOT / "src/NurbsScene.Rendering/Shaders"
 
-GPU_TEST = r"""async ({sources, software}) => {
+GPU_TEST = r"""async ({sources, software, environment}) => {
   if (!navigator.gpu) throw new Error('WebGPU is unavailable in this browser');
   const adapter = await navigator.gpu.requestAdapter({forceFallbackAdapter: software, powerPreference: 'high-performance'});
   if (!adapter) throw new Error('Requested WebGPU adapter is unavailable');
@@ -83,6 +86,68 @@ GPU_TEST = r"""async ({sources, software}) => {
     check(Math.abs(brdfValues[index*8+2]/reflected-1)<2e-5,'direct lighting preserves the analytic Fresnel/GGX peak at roughness '+roughness);
     report.brdfPeaks.push({roughness,expected:peak,actual});
   }
+  // Upload the same canonical payload used by both production renderer hosts.
+  const environmentBytes=Uint8Array.from(atob(environment),character=>character.charCodeAt(0));
+  const environmentHeader=new DataView(environmentBytes.buffer);
+  const cubeSize=environmentHeader.getUint32(8,true),mipCount=environmentHeader.getUint32(12,true),lutSize=environmentHeader.getUint32(16,true);
+  const environmentMap=device.createTexture({size:[cubeSize,cubeSize,6],mipLevelCount:mipCount,
+    format:'rgba16float',usage:GPUTextureUsage.TEXTURE_BINDING|GPUTextureUsage.COPY_DST});
+  const environmentBrdf=device.createTexture({size:[lutSize,lutSize],format:'rgba16float',
+    usage:GPUTextureUsage.TEXTURE_BINDING|GPUTextureUsage.COPY_DST});
+  owned.push(environmentMap,environmentBrdf);
+  let environmentOffset=176;
+  for(let mipLevel=0;mipLevel<mipCount;mipLevel++) {
+    const size=cubeSize>>mipLevel,length=size*size*6*8;
+    device.queue.writeTexture({texture:environmentMap,mipLevel},environmentBytes.subarray(environmentOffset,environmentOffset+length),
+      {bytesPerRow:size*8,rowsPerImage:size},[size,size,6]);environmentOffset+=length;
+  }
+  device.queue.writeTexture({texture:environmentBrdf},environmentBytes.subarray(environmentOffset),
+    {bytesPerRow:lutSize*8,rowsPerImage:lutSize},[lutSize,lutSize]);
+  const environmentView=environmentMap.createView({dimension:'cube'}),environmentBrdfView=environmentBrdf.createView();
+  const environmentSampler=device.createSampler({minFilter:'linear',magFilter:'linear',mipmapFilter:'linear',lodMaxClamp:mipCount-1});
+  const environmentSH=buffer(environmentBytes.subarray(32,176),GPUBufferUsage.UNIFORM);
+
+  const environmentProbe=device.createShaderModule({code:sources.scene+`
+    @group(2) @binding(0) var<storage, read_write> environmentResults: array<vec4<f32>>;
+    @compute @workgroup_size(1) fn probeEnvironment(@builtin(global_invocation_id) id:vec3<u32>) {
+      let key=normalize(vec3<f32>(-.6,-.45,.7));
+      let normal=select(key,-key,id.x==2u);
+      let roughness=select(.04,1.0,id.x==1u);
+      environmentResults[id.x*2u]=vec4<f32>(imageBasedLight(normal,normal,vec3<f32>(1.0),1.0,roughness),1.0);
+      environmentResults[id.x*2u+1u]=vec4<f32>(diffuseIrradiance(normal)/PI,1.0);
+    }`});
+  const environmentPipeline=await device.createComputePipelineAsync({layout:'auto',compute:{module:environmentProbe,entryPoint:'probeEnvironment'}});
+  const environmentOutput=device.createBuffer({size:96,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC});
+  const environmentReadback=device.createBuffer({size:96,usage:GPUBufferUsage.COPY_DST|GPUBufferUsage.MAP_READ});
+  owned.push(environmentOutput,environmentReadback);
+  async function probeEnvironment(cube,sh) {
+    const encoder=device.createCommandEncoder(),pass=encoder.beginComputePass();
+    pass.setPipeline(environmentPipeline);
+    pass.setBindGroup(0,device.createBindGroup({layout:environmentPipeline.getBindGroupLayout(0),entries:[
+      {binding:3,resource:cube},{binding:4,resource:environmentSampler},{binding:5,resource:environmentBrdfView},
+      {binding:6,resource:{buffer:sh,size:144}}]}));
+    pass.setBindGroup(1,device.createBindGroup({layout:environmentPipeline.getBindGroupLayout(1),entries:[]}));
+    pass.setBindGroup(2,device.createBindGroup({layout:environmentPipeline.getBindGroupLayout(2),entries:[{binding:0,resource:{buffer:environmentOutput}}]}));
+    pass.dispatchWorkgroups(3);pass.end();encoder.copyBufferToBuffer(environmentOutput,0,environmentReadback,0,96);
+    device.queue.submit([encoder.finish()]);await environmentReadback.mapAsync(GPUMapMode.READ);
+    const result=new Float32Array(environmentReadback.getMappedRange()).slice();environmentReadback.unmap();return result;
+  }
+  const studio=await probeEnvironment(environmentView,environmentSH);
+  const radiance=(values,offset)=>values[offset]+values[offset+1]+values[offset+2];
+  check(studio.every(value=>Number.isFinite(value)&&value>=0),'prefiltered HDR image lighting produces finite nonnegative radiance');
+  check(radiance(studio,0)>radiance(studio,8)*2,'roughness-prefiltered image lighting broadens and attenuates the studio softbox reflection');
+  check(radiance(studio,0)>radiance(studio,16)*5,'metallic reflection samples the authored softbox direction rather than an analytic hemisphere');
+  const whiteCube=device.createTexture({size:[1,1,6],format:'rgba16float',usage:GPUTextureUsage.TEXTURE_BINDING|GPUTextureUsage.COPY_DST});
+  owned.push(whiteCube);
+  device.queue.writeTexture({texture:whiteCube},new Uint16Array(24).fill(0x3c00),{bytesPerRow:8,rowsPerImage:1},[1,1,6]);
+  const whiteSHData=new Float32Array(36);whiteSHData.fill(Math.PI/.28209479177387814,0,3);
+  const whiteSH=buffer(whiteSHData,GPUBufferUsage.UNIFORM);
+  const white=await probeEnvironment(whiteCube.createView({dimension:'cube'}),whiteSH);
+  check([4,12,20].every(offset=>[0,1,2].every(channel=>Math.abs(white[offset+channel]-1)<2e-5)),
+    'uniform white-image irradiance remains one after cosine convolution and Lambertian division');
+  check([0,8,16].every(offset=>[0,1,2].every(channel=>white[offset+channel]>=0&&white[offset+channel]<=1.01)),
+    'image-based metallic BRDF stays energy-bounded in a white environment');
+  report.imageLighting={cubeSize,mipCount,lutSize,sharpKeyRadiance:Array.from(studio.slice(0,3)),roughKeyRadiance:Array.from(studio.slice(8,11))};
   const frameBytes = new Float32Array(64);
   for (const offset of [0,16]) for (let i=0;i<4;i++) frameBytes[offset+i*5]=1;
   frameBytes.set([0,0,3,1],32);
@@ -98,13 +163,19 @@ GPU_TEST = r"""async ({sources, software}) => {
   const frameLayout = device.createBindGroupLayout({entries:[
     {binding:0,visibility:GPUShaderStage.VERTEX|GPUShaderStage.FRAGMENT,buffer:{type:'uniform',minBindingSize:256}},
     {binding:1,visibility:GPUShaderStage.FRAGMENT,texture:{sampleType:'depth'}},
-    {binding:2,visibility:GPUShaderStage.FRAGMENT,sampler:{type:'comparison'}}]});
+    {binding:2,visibility:GPUShaderStage.FRAGMENT,sampler:{type:'comparison'}},
+    {binding:3,visibility:GPUShaderStage.FRAGMENT,texture:{sampleType:'float',viewDimension:'cube'}},
+    {binding:4,visibility:GPUShaderStage.FRAGMENT,sampler:{type:'filtering'}},
+    {binding:5,visibility:GPUShaderStage.FRAGMENT,texture:{sampleType:'float'}},
+    {binding:6,visibility:GPUShaderStage.FRAGMENT,buffer:{type:'uniform',minBindingSize:144}}]});
   const shadowLayout = device.createBindGroupLayout({entries:[
     {binding:0,visibility:GPUShaderStage.VERTEX|GPUShaderStage.FRAGMENT,buffer:{type:'uniform',minBindingSize:256}}]});
   const objectLayout = device.createBindGroupLayout({entries:[
     {binding:0,visibility:GPUShaderStage.VERTEX|GPUShaderStage.FRAGMENT,buffer:{type:'uniform',hasDynamicOffset:true,minBindingSize:32}}]});
   const frameGroup = device.createBindGroup({layout:frameLayout,entries:[
-    {binding:0,resource:{buffer:frame,size:256}},{binding:1,resource:shadowView},{binding:2,resource:shadowSampler}]});
+    {binding:0,resource:{buffer:frame,size:256}},{binding:1,resource:shadowView},{binding:2,resource:shadowSampler},
+    {binding:3,resource:environmentView},{binding:4,resource:environmentSampler},{binding:5,resource:environmentBrdfView},
+    {binding:6,resource:{buffer:environmentSH,size:144}}]});
   const shadowGroup = device.createBindGroup({layout:shadowLayout,entries:[{binding:0,resource:{buffer:frame,size:256}}]});
   const objectGroup = device.createBindGroup({layout:objectLayout,entries:[{binding:0,resource:{buffer:object,size:32}}]});
   const sceneLayout = device.createPipelineLayout({bindGroupLayouts:[frameLayout,objectLayout]});
@@ -323,13 +394,15 @@ GPU_TEST = r"""async ({sources, software}) => {
 
 async def main(args):
     shaders = {name: (SHADERS / f"{name}.wgsl").read_text() for name in ("scene", "bloom", "composite")}
+    environment = gzip.decompress((ROOT / "src/NurbsScene.Rendering/Lighting/studio.ibl.gz").read_bytes())
     launch_args = json.loads(os.getenv("NURBSSCENE_CHROMIUM_ARGS", "[]"))
     if args.software:
         launch_args += ["--enable-unsafe-webgpu", "--use-angle=swiftshader"]
     options = {"headless": True, "args": launch_args}
     if os.getenv("CHROMIUM_PATH"):
         options["executable_path"] = os.environ["CHROMIUM_PATH"]
-    report = {"status": "failed", "browserLaunchArgs": launch_args, "softwareRequested": args.software}
+    report = {"status": "failed", "browserLaunchArgs": launch_args, "softwareRequested": args.software,
+              "environmentSourceSha256": hashlib.sha256(environment).hexdigest()}
     try:
         async with async_playwright() as pw:
             browser = await pw.chromium.launch(**options)
@@ -339,7 +412,8 @@ async def main(args):
                 await page.route("https://nurbsscene-gpu.invalid/", lambda route: route.fulfill(
                     status=200, content_type="text/html", body="<!doctype html><title>NurbsScene WGSL qualification</title>"))
                 await page.goto("https://nurbsscene-gpu.invalid/")
-                report.update(await page.evaluate(GPU_TEST, {"sources": shaders, "software": args.software}))
+                report.update(await page.evaluate(GPU_TEST, {"sources": shaders, "software": args.software,
+                    "environment": base64.b64encode(environment).decode("ascii")}))
             finally:
                 await browser.close()
     except Exception as error:

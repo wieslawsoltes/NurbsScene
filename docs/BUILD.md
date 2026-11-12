@@ -31,8 +31,9 @@ The mandatory `desktop` CI job also runs the real X11 application with Mesa
 Lavapipe, an explicit CPU Vulkan adapter. Xvfb supplies the display server; the
 WebGPU renderer and native asynchronous mapping path are unchanged. The opt-in
 hook loads the existing Pavilion definition, captures empty/filled/orbited frames,
-checks real pixel differences and zero camera-induced geometry uploads, then
-closes the native window normally. It writes JSON and three PPM framebuffers to
+checks real pixel differences and zero camera-induced geometry uploads, exercises
+shadow/material caches, font scaling and pending capture lifetimes, then closes
+the native window normally. It writes JSON and three PPM framebuffers to
 `artifacts/uno-desktop/`, alongside the build/runtime logs and adapter identity.
 
 For an interactive desktop with a working native WebGPU driver:
@@ -51,9 +52,19 @@ Lavapipe ICD selection, Xvfb invocation and strict evidence verifier in
 The source hook records each 60-second capture budget, 65-second outer deadline,
 completion phase and elapsed time. The process deadline is 420 seconds.
 
-This run establishes native rendering/readback correctness and normal shutdown
-after completed captures. It does not test cancellation of an in-flight native map,
-provide physical-GPU timing, or certify Windows/macOS drivers.
+The 40 native assertions retain the original image/model checks and add actual-frame
+shadow/material invalidation, canonical-font scale/style equivalence, and a separate
+160 × 128 WebGPU canvas for capture cancellation/disposal/recovery. That probe uses
+the public renderer API and Uno's actual borrowed device. Native map callbacks can
+complete concurrently with cancellation: each operation must begin while its task
+is pending and end in the documented cancellation exception or a complete, opaque,
+byte-correct framebuffer. JSON records the observed outcome. A successful completion
+race is never reported as observed cancellation. Recovery must produce identical
+complete pixels on the same device, and the probe must unload normally. No retry
+until a preferred outcome or timing delay is used.
+
+This run establishes native rendering/readback/lifetime correctness and normal
+shutdown. It does not provide physical-GPU timing or certify Windows/macOS drivers.
 
 ## Managed numerical, graph and document suites
 
@@ -297,9 +308,23 @@ The npm graphics renderer is WebGPU-only. `auto` selects WebGPU; explicit `webgl
 
 ```bash
 node packages/graphics/generate-shaders.mjs --check
-node --test tests/graphics-webgpu.test.mjs
+node --test tests/graphics-*.test.mjs
 bash tools/build-kernel.sh
 python tests/browser/test_gpu.py --software --output evidence/javascript-webgpu.json
 ```
 
 The package campaign requires real WebGPU frames, differential NURBS surface pixels, camera changes, reverse-Z, shadows, transparency, clipping, rebasing, resize/readback, viewport bloom separation and explicit unsupported-device errors. Shader/API failures cannot fall back to GL. Hosted software rendering verifies correctness; target GPU performance remains a separate measurement. See [the package API guide](../packages/graphics/README.md) for resource ownership and the complete migration contract.
+
+## HDR environment and rendering preferences
+
+Both renderers use the same authored HDR environment payload. The GPU job reproduces
+the offline integration with `python tools/bake-studio-environment.py --check` using
+NumPy 2.3.5, verifies all generated asset/shader bytes, then executes the real shader
+and package campaigns. See [WEBGPU-ENVIRONMENT.md](WEBGPU-ENVIRONMENT.md) for the
+format, equations, primary references and standalone reproduction commands.
+
+The application exposes **Tools → Rendering…**. Validated Apply saves a separate
+version-one rendering preference record; draft Revert/Defaults and Cancel leave the
+live value intact. The Rhino campaign exercises native controls and persistence
+through its existing reload, raising its minimum to 64 and the combined ten-campaign
+UI minimum to 357. The mandatory pre-reload GPU checkpoint remains unchanged.

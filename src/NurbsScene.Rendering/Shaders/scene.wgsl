@@ -16,6 +16,11 @@ struct ObjectUniforms { color: vec4<f32>, material: vec4<f32> };
 @group(0) @binding(0) var<uniform> frame: Frame;
 @group(0) @binding(1) var shadowMap: texture_depth_2d;
 @group(0) @binding(2) var shadowSampler: sampler_comparison;
+@group(0) @binding(3) var environmentMap: texture_cube<f32>;
+@group(0) @binding(4) var environmentSampler: sampler;
+@group(0) @binding(5) var environmentBrdf: texture_2d<f32>;
+struct EnvironmentIrradiance { coefficients: array<vec4<f32>, 9> };
+@group(0) @binding(6) var<uniform> environmentIrradiance: EnvironmentIrradiance;
 @group(1) @binding(0) var<uniform> object: ObjectUniforms;
 
 const PI: f32 = 3.141592653589793;
@@ -113,6 +118,35 @@ fn shadowVisibility(world: vec3<f32>, normal: vec3<f32>, light: vec3<f32>) -> f3
     return visibility / 16.0;
 }
 
+// The canonical HDR studio image is integrated offline: cosine-convolved real
+// SH (l <= 2), GGX-prefiltered radiance mips, and a correlated-Smith DFG LUT.
+// SH coefficients are irradiance, so Lambertian reflection divides by PI once.
+fn diffuseIrradiance(normal: vec3<f32>) -> vec3<f32> {
+    let x = normal.x; let y = normal.y; let z = normal.z;
+    let basis = array<f32, 9>(0.2820947918, 0.4886025119 * y, 0.4886025119 * z,
+        0.4886025119 * x, 1.0925484306 * x * y, 1.0925484306 * y * z,
+        0.3153915653 * (3.0 * z * z - 1.0), 1.0925484306 * x * z,
+        0.5462742153 * (x * x - y * y));
+    var irradiance = vec3<f32>(0.0);
+    for (var i = 0u; i < 9u; i++) {
+        irradiance += environmentIrradiance.coefficients[i].rgb * basis[i];
+    }
+    // Finite-order SH can ring slightly below zero near high contrast lights.
+    return max(irradiance, vec3<f32>(0.0));
+}
+
+fn imageBasedLight(normal: vec3<f32>, view: vec3<f32>, base: vec3<f32>, metallic: f32, roughness: f32) -> vec3<f32> {
+    let nDotV = clamp(dot(normal, view), 0.0, 1.0);
+    let f0 = mix(vec3<f32>(0.04), base, metallic);
+    let fresnel = fresnelSchlick(nDotV, f0);
+    let diffuse = base * (1.0 - metallic) * (vec3<f32>(1.0) - fresnel) * diffuseIrradiance(normal) / PI;
+    let reflected = reflect(-view, normal);
+    let lod = roughness * f32(textureNumLevels(environmentMap) - 1u);
+    let radiance = textureSampleLevel(environmentMap, environmentSampler, reflected, lod).rgb;
+    let dfg = textureSampleLevel(environmentBrdf, environmentSampler, vec2<f32>(nDotV, roughness), 0.0).rg;
+    return diffuse + radiance * (f0 * dfg.x + vec3<f32>(dfg.y));
+}
+
 fn shadeSurface(input: SurfaceOutput, front: bool) -> vec3<f32> {
     // Derivative fallback covers degenerate NURBS normals without propagating NaN.
     let geometric = safeNormalize(cross(dpdx(input.world), dpdy(input.world)), vec3<f32>(0.0, 0.0, 1.0));
@@ -125,15 +159,7 @@ fn shadeSurface(input: SurfaceOutput, front: bool) -> vec3<f32> {
     let metallic = clamp(object.material.x, 0.0, 1.0);
     let roughness = clamp(object.material.y, 0.04, 1.0);
     let light = safeNormalize(frame.light.xyz, vec3<f32>(0.0, 0.0, 1.0));
-    let f0 = mix(vec3<f32>(0.04), base, metallic);
-    let fresnel = fresnelSchlick(max(dot(normal, view), 0.0), f0);
-    // Analytic hemispherical studio illumination. This is not image-based lighting.
-    let skyAmount = clamp(normal.z * 0.5 + 0.5, 0.0, 1.0);
-    let irradiance = mix(vec3<f32>(0.16, 0.145, 0.13), vec3<f32>(0.45, 0.52, 0.64), skyAmount);
-    var color = base * (1.0 - metallic) * (vec3<f32>(1.0) - fresnel) * irradiance * frame.options.y;
-    let reflection = reflect(-view, normal);
-    let environment = mix(vec3<f32>(0.12, 0.105, 0.09), vec3<f32>(0.55, 0.65, 0.82), clamp(reflection.z * 0.5 + 0.5, 0.0, 1.0));
-    color += environment * fresnel * mix(0.65, 0.2, roughness) * frame.options.y;
+    var color = imageBasedLight(normal, view, base, metallic, roughness) * frame.options.y;
     color += directLight(normal, view, light, base, metallic, roughness,
         vec3<f32>(1.0, 0.95, 0.86) * frame.options.z) * shadowVisibility(input.world, normal, light);
     color += directLight(normal, view, normalize(vec3<f32>(0.65, 0.4, 0.5)), base, metallic, roughness,

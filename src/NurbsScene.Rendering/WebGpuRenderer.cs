@@ -25,7 +25,7 @@ public sealed record WebGpuRenderSettings
             || !float.IsFinite(AmbientIntensity) || AmbientIntensity < 0 || AmbientIntensity > 32
             || !float.IsFinite(LightIntensity) || LightIntensity < 0 || LightIntensity > 128
             || !float.IsFinite(BloomStrength) || BloomStrength < 0 || BloomStrength > 1
-            || !LightDirection.IsFinite || LightDirection.Length < 1e-12)
+            || !LightDirection.IsFinite || LightDirection == Vec3.Zero)
             throw new ArgumentException("Invalid WebGPU studio lighting settings.");
     }
 }
@@ -243,12 +243,15 @@ public sealed unsafe partial class WebGpuRenderer : IDisposable
         data[32] = (float)eye.X; data[33] = (float)eye.Y; data[34] = (float)eye.Z; data[35] = settings.Exposure;
         if (scene.ClipPlane is { } clip)
         {
-            data[36] = (float)clip.Normal.X; data[37] = (float)clip.Normal.Y; data[38] = (float)clip.Normal.Z;
-            data[39] = (float)(clip.Offset + Vec3.Dot(clip.Normal, scene.Origin)); data[48] = 1;
+            var relative = WebGpuRenderMath.RelativeClipPlane(clip.Normal, clip.Offset, scene.Origin);
+            data[36] = (float)relative.Normal.X; data[37] = (float)relative.Normal.Y; data[38] = (float)relative.Normal.Z;
+            data[39] = (float)relative.Offset; data[48] = 1;
         }
         data[40] = width; data[41] = height; data[42] = 1f / width; data[43] = 1f / height;
         data[44] = (float)light.X; data[45] = (float)light.Y; data[46] = (float)light.Z; data[47] = settings.Shadows ? 1 : 0;
         data[49] = settings.AmbientIntensity; data[50] = settings.LightIntensity;
+        foreach (var value in data)
+            if (!float.IsFinite(value)) throw new ArithmeticException("A rendering uniform exceeds Float32 range after rebasing.");
     }
 
     private static RenderPassColorAttachment Attachment(TextureView* view, TextureView* resolve, Color clear) => new()
@@ -385,6 +388,7 @@ public sealed unsafe partial class WebGpuRenderer : IDisposable
         foreach (var grid in _grids.Values) Release(ref grid.Buffer); _grids.Clear();
         ReleaseTargets(); Release(ref _frameGroup); Release(ref _shadowGroup); Release(ref _objectGroup);
         Release(ref _framesBuffer); Release(ref _objectsBuffer); Release(ref _bloomParameters); Release(ref _compositeParameters);
+        DisposeEnvironment();
         _shadow?.Dispose(); _shadow = null;
         if (_shadowSampler != null) _api.SamplerRelease(_shadowSampler); _shadowSampler = null;
         if (_linearSampler != null) _api.SamplerRelease(_linearSampler); _linearSampler = null;

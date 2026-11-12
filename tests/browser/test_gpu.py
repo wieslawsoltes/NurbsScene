@@ -11,9 +11,12 @@ no adapter absence, shader failure or framebuffer failure is skipped.
 """
 import argparse
 import asyncio
+import base64
 import json
 import mimetypes
 import os
+import struct
+import zlib
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
@@ -79,9 +82,13 @@ PACKAGE_TEST = r"""async ({software}) => {
     shadows: false, bloomStrength: 0,
   });
   const renderer = result.renderer;
+  const { STUDIO_ENVIRONMENT_SHA256 } = await import('/packages/graphics/environment.js');
+  const environmentResources=[renderer.environment.texture,renderer.environmentBrdf.texture,renderer.environmentIrradiance];
   check(result.canvas === canvas && document.querySelector('#fixture') === canvas &&
     result.failures.length === 0 && renderer.backend === 'WebGPU', 'auto returns WebGPU and preserves canvas identity');
   check(!software || renderer.info.software, 'software request is identified honestly');
+  check(renderer.info.environmentSourceSha256===STUDIO_ENVIRONMENT_SHA256,
+    'renderer identifies the canonical baked HDR image-lighting payload');
   const scene = new RenderScene();
   scene.showGrid = false; scene.showIsocurves = false;
   const camera = new Camera('Top');
@@ -159,6 +166,11 @@ PACKAGE_TEST = r"""async ({software}) => {
     const left = (Math.floor(canvas.height/2)*canvas.width+Math.floor(canvas.width*.35))*4;
     check(clipped.slice(left,left+4).every((value,index) => value === empty[left+index]),
       'discarded half exposes the true background');
+    for (const scale of [1e100,1e-100]) {
+      scene.clipPlane=[scale,0,0,0];
+      check(difference(clipped,await capture(),0).pixels===0,
+        'equivalent clipping-plane scale '+scale+' preserves every real GPU pixel');
+    }
     scene.clipPlane = null;
 
     const beforeUploads = renderer.geometryUploads;
@@ -181,6 +193,16 @@ PACKAGE_TEST = r"""async ({software}) => {
     canvas.width = originalWidth; canvas.height = originalHeight;
     const restored = await capture();
     check(difference(compact,restored,0).pixels === 0, 'odd-size target recreation preserves the rendered image');
+    check(environmentResources[0]===renderer.environment.texture && environmentResources[1]===renderer.environmentBrdf.texture
+      && environmentResources[2]===renderer.environmentIrradiance,
+      'camera, selection, transparency and resize retain the same immutable environment GPU resources');
+    install([fixture('image-lit-metal',.3,.8,[1,1,1,1])]);
+    renderer.setOptions({metallic:1,roughness:.04,lightIntensity:0,ambientIntensity:0});
+    const withoutImageLight=await capture();
+    renderer.setOptions({ambientIntensity:1});
+    check(difference(withoutImageLight,await capture()).pixels>500,
+      'ambient control applies sampled HDR image lighting to actual metallic surface pixels');
+    renderer.setOptions({metallic:.12,roughness:.36,lightIntensity:3.2,ambientIntensity:.55});
 
     const origin = [1e9,-2e9,3e9];
     scene.origin = origin; camera.target = [...origin];
@@ -337,6 +359,17 @@ async def serve_fixture(route):
     await route.fulfill(status=200, content_type=content_type, body=source.read_bytes())
 
 
+def save_rgba_png(path, width, height, rgba):
+    """Lossless format conversion of captured pixels, without an imaging dependency."""
+    if len(rgba) != width * height * 4:
+        raise ValueError("Incomplete material-showcase RGBA readback")
+    def chunk(kind, content):
+        return struct.pack(">I", len(content)) + kind + content + struct.pack(">I", zlib.crc32(kind + content))
+    rows = b"".join(b"\0" + rgba[y * width * 4:(y + 1) * width * 4] for y in range(height))
+    path.write_bytes(b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0))
+                     + chunk(b"IDAT", zlib.compress(rows)) + chunk(b"IEND", b""))
+
+
 async def main(args):
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -385,6 +418,15 @@ async def main(args):
                 page.on("pageerror", lambda error: page_errors.append(str(error)))
                 await page.goto(SECURE + "/__gpu.html", wait_until="domcontentloaded")
                 report["packagePipeline"] = await page.evaluate(PACKAGE_TEST, {"software": args.software})
+                showcase = await page.evaluate("""async software => {
+                  const {captureMaterialShowcase} = await import('/tests/browser/material_showcase.mjs');
+                  return captureMaterialShowcase(document.querySelector('#fixture'), software);
+                }""", args.software)
+                pixels = base64.b64decode(showcase.pop("rgbaBase64"), validate=True)
+                image_path = output.parent / "javascript-webgpu-material-showcase.png"
+                save_rgba_png(image_path, showcase["width"], showcase["height"], pixels)
+                showcase["image"] = image_path.name
+                report["materialShowcase"] = showcase
                 await page.close()
 
                 page = await context.new_page()

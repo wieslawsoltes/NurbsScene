@@ -14,6 +14,28 @@ public static class WebGpuRenderMath
     public const int TextureRowAlignment = 256;
 
     /// <summary>
+    /// Normalize an equivalent clipping half-space before origin-relative Float32
+    /// encoding. Reject offsets that overflow binary64 normalization or cannot be
+    /// represented after rebasing; never send infinity or NaN to a shader.
+    /// </summary>
+    public static (Vec3 Normal, double Offset) RelativeClipPlane(Vec3 normal, double offset, Vec3 origin)
+    {
+        var scale = Math.Max(Math.Abs(normal.X), Math.Max(Math.Abs(normal.Y), Math.Abs(normal.Z)));
+        if (!normal.IsFinite || !(scale > 0) || !double.IsFinite(offset) || !origin.IsFinite)
+            throw new ArgumentException("A clipping plane requires a finite nonzero normal, offset and origin.");
+        var scaled = normal / scale;
+        var length = Math.Sqrt(Vec3.Dot(scaled, scaled));
+        var unit = scaled / length;
+        // Select the division order so a representable unit offset is not lost
+        // merely because an intermediate division by a tiny scale overflows.
+        var unitOffset = scale >= 1 ? offset / scale / length : offset / length / scale;
+        if (!double.IsFinite(unitOffset)) throw new ArithmeticException("Clipping-plane normalization exceeds binary64 range.");
+        var relativeOffset = unitOffset + Vec3.Dot(unit, origin);
+        if (!float.IsFinite((float)relativeOffset)) throw new ArithmeticException("Clipping-plane offset exceeds Float32 range after rebasing.");
+        return (unit, relativeOffset);
+    }
+
+    /// <summary>
     /// Column-major, right-handed WebGPU clip transform. Near maps to one and far
     /// maps to zero, without subtracting a rounded legacy GL depth from clip W.
     /// </summary>

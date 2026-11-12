@@ -51,6 +51,7 @@ flowchart TD
     Shadow --> OIT
     Opaque -- "Reverse-Z depth" --> OIT
     Opaque --> Bloom["Compute bloom by viewport"]
+    OIT --> Bloom
     Opaque --> Composite["HDR composition, ACES fit and sRGB"]
     OIT --> Composite
     Bloom --> Composite
@@ -68,11 +69,12 @@ never releases Uno-owned handles and never retains the target view after a frame
 
 | Pass | GPU resources and behavior |
 |---|---|
-| Shadow | 2048 × 2048 depth32float map; directional light; caster bias; clip plane; refreshed after scene/light changes |
+| Shadow | 2048 × 2048 depth32float map; directional light; caster bias; clip plane; refreshed after geometry/caster/clip/light changes |
+| Environment | Authored HDR image; 128 × 128 RGBA16F GGX cube with eight mips; nine diffuse SH coefficients; 128 × 128 DFG lookup; uploaded once |
 | Opaque | RGBA16F HDR, four samples; depth32float reverse-Z, near = 1 / far = 0; depth clear = 0 |
 | Curves and isocurves | Six-vertex instanced ribbons; pixel-width expansion; analytic coverage; depth test; homogeneous near clipping |
 | Ghosted and alpha surfaces | Four-sample RGBA16F weighted accumulation plus R8 revealage; opaque depth read-only; independent blending |
-| Bloom | Half-resolution soft-threshold extraction and two separable compute blur passes |
+| Bloom | Half-resolution soft-threshold extraction from opaque plus transparent HDR and two separable compute blur passes |
 | Presentation | Linear HDR transparency composition, bloom, ACES curve fit and one output transfer conversion |
 | Requested capture | Separate composite target, GPU-to-staging copy, asynchronous mapping, padded-row removal and RGBA normalization |
 
@@ -84,8 +86,12 @@ two-pixel separators; maximizing a viewport selects the single-view path.
 
 The surface shader evaluates GGX/Trowbridge-Reitz normal distribution, correlated
 Smith visibility and Schlick Fresnel with metallic and roughness parameters.
-Three directional studio lights and analytic hemispherical illumination provide
-form and reflection cues. Surface color is decoded to linear light before shading.
+Three directional lights combine with a sampled HDR studio environment. Offline
+GGX roughness mips, diffuse spherical harmonics and a correlated-Smith DFG lookup
+provide image-based lighting without per-frame convolution. Surface color is
+decoded to linear light before shading. The [environment format and integration
+guide](WEBGPU-ENVIRONMENT.md) documents the authored image, equations, reproducible
+bake, shared payload and numerical checks.
 
 The directional shadow uses comparison sampling with a weighted nine-position
 kernel and a slope-aware receiver bias. Clipped surfaces also clip in the shadow
@@ -94,10 +100,11 @@ display normals without propagating invalid values.
 
 `WebGpuRenderSettings` exposes validated exposure, metallic, roughness, ambient
 intensity, key-light intensity, bloom strength, shadow enablement and light
-direction. These settings affect display only.
+direction. **Tools → Rendering…** exposes validated Apply/Cancel and draft
+Revert/Defaults, with persistent preferences. These settings affect display only.
 
-The environment is analytic studio lighting, not HDR image-based lighting. The
-tone mapper is the common ACES response fit, not the complete ACES color-management
+The prefiltered environment uses the split-sum approximation and a single-scatter
+microfacet model. The tone mapper is the common ACES response fit, not the complete ACES color-management
 pipeline. Weighted blended transparency is order-independent in its accumulation,
 but remains an approximation to exact sorted transmission.
 
@@ -242,8 +249,8 @@ This is a substantial replacement of the rendering architecture and presentation
 pipeline. It is not a measured claim of AAA game-engine visual equivalence.
 Physical-device GPU timings, before/after performance comparisons, representative
 complex-scene screenshots and a cross-device visual review remain required.
-The pipeline does not currently implement ray tracing, image-based environment
-lighting, temporal antialiasing, screen-space ambient occlusion or GPU NURBS
+The pipeline does not currently implement ray tracing, scene-reflection probes,
+temporal antialiasing, screen-space ambient occlusion or GPU NURBS
 tessellation. Existing geometric/parity limitations remain in the compatibility
 inventory.
 
@@ -399,4 +406,18 @@ Viewport diagnostics are dispatched after compositor recording and suppressed wh
 
 Qualification adds four managed preference contracts and six real native-control assertions in the existing Rhino browser campaign, including invalid drafts, Apply, Revert, Cancel and persistence through its existing reload. The registry minimum becomes 64 Rhino checks and 357 across all ten UI campaigns; previous assertions and the pre-reload GPU checkpoint remain mandatory. The 51 artifact contracts pass locally.
 
-Native qualification adds 13 actual-frame cache assertions, seven pending-map lifetime/recovery assertions and three font metric/resolution assertions, for 40 total. The capture probe runs in a real `WebGpuCanvasElement` on Uno's borrowed device, requires a genuinely pending map before cancellation/disposal, recovers with the same renderer or a replacement on that device, compares the resulting opaque pixels and unloads normally. Cache checks observe real frame advancement without adding full-size readbacks. Font checks compare four actual faces with independently sized managed fonts, then exercise 512 size changes per face and an installed family while requiring one physical resolution. Hosted App compilation/runtime remains required: local .NET libraries compile, but Uno's separate MSBuild resource-injection task host is blocked by this workspace's IPC restrictions (`MSB4216`).
+Native qualification adds 13 actual-frame cache assertions, seven pending-map lifetime/recovery assertions and three font metric/resolution assertions, for 40 total. The capture probe runs in a real `WebGpuCanvasElement` on Uno's borrowed device, requires a genuinely pending map before cancellation/disposal, validates cancellation or a complete readback that wins the race, recovers with the same renderer or a replacement on that device, compares the resulting opaque pixels and unloads normally. Cache checks observe real frame advancement without adding full-size readbacks. Font checks compare four actual faces with independently sized managed fonts, then exercise 512 size changes per face and an installed family while requiring one physical resolution. Hosted App compilation/runtime remains required: local .NET libraries compile, but Uno's separate MSBuild resource-injection task host is blocked by this workspace's IPC restrictions (`MSB4216`).
+
+### Native qualification: completion versus cancellation
+
+At `5c0d712`, both desktop compilation and browser publication passed. The actual native run passed the original 17 image/model assertions, all three font assertions and all 13 cache assertions. The new lifetime probe advanced past a successful `CancelCapture` cancellation, then observed a valid completed readback after disposal began with the task still pending. Its initial test incorrectly required disposal cancellation to win. The production capture code was unchanged: its completion and cancellation paths serialize on the request gate, and native callbacks may run spontaneously.
+
+The corrected probe accepts only the two legal terminal outcomes for each operation: its documented cancellation exception or complete opaque pixels exactly matching both recovery captures. It records `CancelOutcome` and `DisposeOutcome`, including byte counts and SHA-256 when completion wins. Pending-before-call, idempotent repeated calls, same-device recovery, exact pixels and normal unload remain mandatory. There are no retries or timing delays. Evidence distinguishes observed map abortion from a successful completion race; one is never presented as the other. [Original native/build evidence](https://github.com/wieslawsoltes/NurbsScene/actions/runs/43167225399).
+
+### HDR environment integration and final numerical review
+
+Both production renderers now upload and sample the same original HDR studio environment: a 128px RGBA16F cube with eight GGX roughness mips, nine cosine-convolved diffuse SH coefficients and a 128px correlated-Smith DFG lookup. Its decoded payload SHA-256 is `8a72c9015e07baaaaec137b69322f4f48e5df448d2a24740c6bef55df0c03c21`. The native assembly embeds the canonical gzip file; the standalone npm module embeds those exact compressed bytes and needs no runtime fetch. All convolution is offline, with one upload per renderer and normal owned-resource teardown. The [environment guide](WEBGPU-ENVIRONMENT.md) documents the source image, equations, binary/cube conventions, costs and approximation limits.
+
+The reproducible baker retains uniform radiance under GGX filtering, reconstructs constant diffuse irradiance, checks finite HDR and bounded single-scatter DFG, and compares selected LUT texels with independent 65,536-sample integrations. Byte-for-byte rebaking and three asset/provenance contracts passed locally. The mandatory GPU job now repeats the bake with pinned NumPy, then validates actual cube direction, roughness response, white diffuse normalization and metallic white-furnace behavior. Its package campaign also produces a 960 × 540 contact sheet from six untouched production sphere/floor captures, spanning dielectric/metallic materials and roughness 0.08/0.32/0.8. A seventh environment-disabled capture establishes differential lighting, while all seven must retain identical geometry buffers and one cached shadow pass. These procedural fixtures qualify display behavior and support visual review; they are not an exact modeling or hardware-performance benchmark.
+
+Final numerical review also found that a valid binary64 clipping plane could overflow when copied directly into Float32 uniforms. Both hosts now normalize the half-space safely before rebasing, preserving equivalent equations scaled from 1e-100 through 1e300. Nonrepresentable normalized/relative offsets fail explicitly before submission. Finite nonzero light directions normalize without length overflow or reciprocal underflow. The ten C# render-math contracts, 16 Node graphics contracts, 49 managed presentation contracts and 51 artifact-gate contracts pass locally; the final hosted workflow establishes integrated runtime acceptance.

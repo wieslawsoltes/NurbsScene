@@ -90,8 +90,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: python -m pip install playwright
+      - run: python -m pip install playwright numpy==2.3.5
       - run: python -m playwright install --with-deps chromium
+      - name: Reproduce the shared HDR environment integration
+        run: python tools/bake-studio-environment.py --check
       - name: Compile and execute the production WGSL pipelines
         shell: bash
         run: |
@@ -111,7 +113,7 @@ jobs:
           sudo apt-get install -y clang lld cmake
           npm ci --offline --ignore-scripts
           bash tools/build-kernel.sh
-          node --test tests/graphics-webgpu.test.mjs 2>&1 | tee evidence/javascript-webgpu-contracts.log
+          node --test tests/graphics-*.test.mjs 2>&1 | tee evidence/javascript-webgpu-contracts.log
       - name: Execute reusable WebGPU package and real NURBS framebuffer qualification
         shell: bash
         run: |

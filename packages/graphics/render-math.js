@@ -1,5 +1,30 @@
 import { M4, V3 } from '@nurbsscene/geometry/math.js';
 
+/** Normalize a display direction without overflowing its length or 1/scale. */
+export function normalizeRenderDirection(direction) {
+  if (!V3.finite(direction)) throw new RangeError('A finite nonzero rendering direction is required.');
+  const scale = Math.max(...direction.map(Math.abs));
+  if (!(scale > 0)) throw new RangeError('A finite nonzero rendering direction is required.');
+  const scaled = direction.map(value => value / scale), length = Math.hypot(...scaled);
+  return scaled.map(value => value / length);
+}
+
+/** Equivalent normalized half-space in the renderer's local coordinate frame.
+ * Reject binary64 normalization overflow and unrepresentable Float32 offsets.
+ */
+export function relativeClipPlane(plane, origin = [0, 0, 0]) {
+  if (!(Array.isArray(plane) || ArrayBuffer.isView(plane)) || plane.length !== 4 || !plane.every(Number.isFinite) || !V3.finite(origin)) {
+    throw new RangeError('A finite clipping plane and origin are required.');
+  }
+  const direction = Array.from(plane).slice(0, 3), unit = normalizeRenderDirection(direction);
+  const scale = Math.max(...direction.map(Math.abs)), length = Math.hypot(...direction.map(value => value / scale));
+  const offset = scale >= 1 ? plane[3] / scale / length : plane[3] / length / scale;
+  if (!Number.isFinite(offset)) throw new RangeError('Clipping-plane normalization exceeds binary64 range.');
+  const relativeOffset = offset + V3.dot(unit, origin);
+  if (!Number.isFinite(Math.fround(relativeOffset))) throw new RangeError('Clipping-plane offset exceeds Float32 range after rebasing.');
+  return [...unit, relativeOffset];
+}
+
 /** Column-major, right-handed WebGPU camera transform; near=1, far=0.
  * Keep binary64 through rebasing and projection, then encode uniforms as float32.
  * The adaptive clipping distances preserve Camera.matrices' public framing.

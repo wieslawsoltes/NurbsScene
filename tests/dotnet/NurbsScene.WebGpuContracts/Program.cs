@@ -148,6 +148,8 @@ Test("copy rows align correctly at odd widths and reject integer overflow", () =
     Throws<ArgumentException>(() => WebGpuRenderMath.ShadowMatrix(Bounds3.Empty, Vec3.Zero, Vec3.Zero));
 });
 
+ClipPlaneContracts.Register(Test);
+
 var failed = 0;
 foreach (var (name, run) in tests)
 {

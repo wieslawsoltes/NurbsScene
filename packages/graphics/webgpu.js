@@ -1,6 +1,7 @@
 import { SHADERS, SHADER_SOURCE_SHA256 } from './shaders.js';
+import { decodeStudioEnvironment, STUDIO_ENVIRONMENT_SHA256 } from './environment.js';
 import { V3 } from '@nurbsscene/geometry/math.js';
-import { reverseZMatrices, shadowMatrix, isVisible, alignedBytesPerRow } from './render-math.js';
+import { reverseZMatrices, shadowMatrix, isVisible, alignedBytesPerRow, relativeClipPlane, normalizeRenderDirection } from './render-math.js';
 
 const DEFAULTS = Object.freeze({
   exposure: 1, metallic: .12, roughness: .36, ambientIntensity: .55,
@@ -34,10 +35,10 @@ function settingsFrom(options, previous = DEFAULTS) {
   }
   if (typeof result.shadows !== 'boolean' || !Number.isInteger(result.shadowResolution) ||
       result.shadowResolution < 64 || result.shadowResolution > 8192 ||
-      !V3.finite(result.lightDirection) || V3.length(result.lightDirection) < 1e-12) {
+      !V3.finite(result.lightDirection) || result.lightDirection.every(value => value === 0)) {
     throw new RangeError('Invalid WebGPU directional shadow settings.');
   }
-  result.lightDirection = Object.freeze(V3.unit(result.lightDirection));
+  result.lightDirection = Object.freeze(normalizeRenderDirection(result.lightDirection));
   return Object.freeze(result);
 }
 
@@ -111,7 +112,8 @@ export class WebGpuRenderer {
       sampleCount: 4, depth: 'reverse-Z / depth32float',
       color: 'linear rgba16float HDR / ACES fit / sRGB',
       transparency: 'weighted blended order-independent transparency',
-      lighting: 'GGX studio lighting / directional PCF shadows / analytic environment',
+      lighting: 'GGX studio lighting / directional PCF shadows / prefiltered HDR image-based lighting',
+      environmentSourceSha256: STUDIO_ENVIRONMENT_SHA256,
       shaderSourceSha256: SHADER_SOURCE_SHA256, shaderMessages: {},
     };
     this.errorListener = event => {
@@ -176,6 +178,10 @@ export class WebGpuRenderer {
       { binding: 0, visibility: stages, buffer: uniform(256, true) },
       { binding: 1, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'depth' } },
       { binding: 2, visibility: GPUShaderStage.FRAGMENT, sampler: { type: 'comparison' } },
+      { binding: 3, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float', viewDimension: 'cube' } },
+      { binding: 4, visibility: GPUShaderStage.FRAGMENT, sampler: { type: 'filtering' } },
+      { binding: 5, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },
+      { binding: 6, visibility: GPUShaderStage.FRAGMENT, buffer: uniform(144) },
     ] });
     this.shadowLayout = device.createBindGroupLayout({ entries: [
       { binding: 0, visibility: stages, buffer: uniform(256, true) },
@@ -245,9 +251,31 @@ export class WebGpuRenderer {
       'depth32float', 1, usage, 'NurbsScene directional shadow');
     this.bloomParameters = this.#buffer(32, GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST, 'Bloom parameters');
     this.compositeParameters = this.#buffer(32, GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST, 'Composite parameters');
+    await this.#initializeEnvironment();
     this.#ensureArenas(5, 1);
     this.context.configure({ device, format: this.format, alphaMode: 'opaque',
       usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC });
+  }
+
+  async #initializeEnvironment() {
+    const data = await decodeStudioEnvironment(), device = this.device;
+    const usage = GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST;
+    const texture = this.#own(device.createTexture({
+      label: 'Canonical GGX prefiltered HDR studio', size: [data.cubeSize, data.cubeSize, 6],
+      mipLevelCount: data.mipCount, format: 'rgba16float', usage,
+    }));
+    this.environment = { texture, view: texture.createView({ dimension: 'cube', mipLevelCount: data.mipCount, arrayLayerCount: 6 }) };
+    for (const [mipLevel, mip] of data.mips.entries()) {
+      device.queue.writeTexture({ texture, mipLevel }, mip.pixels,
+        { bytesPerRow: mip.size * 8, rowsPerImage: mip.size }, [mip.size, mip.size, 6]);
+    }
+    this.environmentBrdf = this.#texture(data.lutSize, data.lutSize, 'rgba16float', 1, usage, 'Correlated Smith DFG');
+    device.queue.writeTexture({ texture: this.environmentBrdf.texture }, data.brdfLut,
+      { bytesPerRow: data.lutSize * 8, rowsPerImage: data.lutSize }, [data.lutSize, data.lutSize]);
+    this.environmentIrradiance = this.#buffer(144, GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+      'Cosine-convolved studio spherical harmonics', data.sphericalHarmonics);
+    this.environmentSampler = device.createSampler({ minFilter: 'linear', magFilter: 'linear', mipmapFilter: 'linear',
+      addressModeU: 'clamp-to-edge', addressModeV: 'clamp-to-edge', addressModeW: 'clamp-to-edge', lodMaxClamp: data.mipCount - 1 });
   }
 
   setOptions(options) {
@@ -278,6 +306,8 @@ export class WebGpuRenderer {
       this.frameGroup = this.device.createBindGroup({ layout: this.frameLayout, entries: [
         { binding: 0, resource: { buffer: this.frameBuffer, size: 256 } },
         { binding: 1, resource: this.shadow.view }, { binding: 2, resource: this.shadowSampler },
+        { binding: 3, resource: this.environment.view }, { binding: 4, resource: this.environmentSampler },
+        { binding: 5, resource: this.environmentBrdf.view }, { binding: 6, resource: { buffer: this.environmentIrradiance, size: 144 } },
       ] });
       this.shadowGroup = this.device.createBindGroup({ layout: this.shadowLayout, entries: [
         { binding: 0, resource: { buffer: this.frameBuffer, size: 256 } },
@@ -405,9 +435,7 @@ export class WebGpuRenderer {
     data.set(matrix, offset); data.set(shadow, offset + 16);
     data.set([...eye, this.settings.exposure], offset + 32);
     if (this.scene.clipPlane) {
-      const plane = this.scene.clipPlane;
-      if (plane.length !== 4 || !plane.every(Number.isFinite)) throw new TypeError('Clip plane must contain four finite coefficients.');
-      data.set([plane[0], plane[1], plane[2], plane[3] + V3.dot(plane, this.scene.origin)], offset + 36);
+      data.set(relativeClipPlane(this.scene.clipPlane, this.scene.origin), offset + 36);
       data[offset + 48] = 1;
     }
     data.set([width, height, 1 / width, 1 / height], offset + 40);

@@ -38,10 +38,15 @@ browsers receive an explicit capability error. See its [API migration guide](pac
 The migration pins Uno.Sdk 7.0.5 / Uno Platform 7.0.32 and removes the Uno 6 GL
 viewport and private readback adapter. WGSL shaders provide a linear HDR pipeline,
 multisample antialiasing, reverse-Z depth, physically based surface shading,
-shadow filtering, order-independent transparency, pixel-width curves and a
+shadow filtering, baked HDR image-based lighting, order-independent transparency, pixel-width curves and a
 bloom/tone-mapping pass. Renderer-owned resources are reused across frames and
 rebuilt when the target changes. Explicit captures use asynchronous staging-buffer
 readback; displayed frames do not round-trip through CPU memory.
+
+Use **Tools → Rendering…** to adjust and persist exposure, material roughness/metallic,
+ambient/key lighting, shadows and bloom. Both renderers share the same authored
+[HDR studio environment](docs/WEBGPU-ENVIRONMENT.md), including GGX-prefiltered
+reflections, diffuse spherical harmonics and a preintegrated BRDF lookup.
 
 The graph and UI drawing adapter uses Uno's managed drawing interfaces and WebGPU
 surfaces, with retained shaped text and bundled DejaVu fonts for offline fallback.

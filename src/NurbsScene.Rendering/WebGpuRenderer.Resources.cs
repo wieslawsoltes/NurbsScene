@@ -57,16 +57,26 @@ public sealed unsafe partial class WebGpuRenderer
         private readonly WebGPU _api;
         public Texture* Texture { get; private set; }
         public TextureView* View { get; private set; }
-        public GpuTexture(WebGPU api, Device* device, uint width, uint height, TextureFormat format, TextureUsage usage, uint samples = 1)
+        public GpuTexture(WebGPU api, Device* device, uint width, uint height, TextureFormat format, TextureUsage usage,
+            uint samples = 1, uint mipLevels = 1, uint layers = 1, TextureViewDimension? viewDimension = null)
         {
             _api = api;
             var descriptor = new TextureDescriptor
             {
-                Dimension = TextureDimension.Dimension2D, Size = new(width, height, 1), Format = format,
-                MipLevelCount = 1, SampleCount = samples, Usage = usage
+                Dimension = TextureDimension.Dimension2D, Size = new(width, height, layers), Format = format,
+                MipLevelCount = mipLevels, SampleCount = samples, Usage = usage
             };
             Texture = Require(api.DeviceCreateTexture(device, &descriptor), "texture");
-            try { View = Require(api.TextureCreateView(Texture, null), "texture view"); }
+            try
+            {
+                if (viewDimension is null) View = Require(api.TextureCreateView(Texture, null), "texture view");
+                else
+                {
+                    var view = new TextureViewDescriptor { Format = format, Dimension = viewDimension.Value,
+                        MipLevelCount = mipLevels, ArrayLayerCount = layers, Aspect = TextureAspect.All };
+                    View = Require(api.TextureCreateView(Texture, &view), "texture view");
+                }
+            }
             catch { Dispose(); throw; }
         }
         public void Dispose()
@@ -147,7 +157,9 @@ public sealed unsafe partial class WebGpuRenderer
 
     private void InitializeResources()
     {
-        _frameLayout = Layout([Uniform(0, 256, ShaderStage.Vertex | ShaderStage.Fragment, true), Sampled(1, ShaderStage.Fragment, TextureSampleType.Depth), SamplerEntry(2, SamplerBindingType.Comparison)]);
+        _frameLayout = Layout([Uniform(0, 256, ShaderStage.Vertex | ShaderStage.Fragment, true), Sampled(1, ShaderStage.Fragment, TextureSampleType.Depth), SamplerEntry(2, SamplerBindingType.Comparison),
+            new() { Binding = 3, Visibility = ShaderStage.Fragment, Texture = new() { SampleType = TextureSampleType.Float, ViewDimension = TextureViewDimension.DimensionCube } },
+            SamplerEntry(4, SamplerBindingType.Filtering), Sampled(5, ShaderStage.Fragment), Uniform(6, 144, ShaderStage.Fragment)]);
         _objectLayout = Layout([Uniform(0, 32, ShaderStage.Vertex | ShaderStage.Fragment, true)]);
         _shadowLayout = Layout([Uniform(0, 256, ShaderStage.Vertex | ShaderStage.Fragment, true)]);
         _bloomLayout = Layout([Sampled(0, ShaderStage.Compute), new() { Binding = 1, Visibility = ShaderStage.Compute, StorageTexture = new() { Access = StorageTextureAccess.WriteOnly, Format = TextureFormat.Rgba16float, ViewDimension = TextureViewDimension.Dimension2D } }, Uniform(2, 32, ShaderStage.Compute), Sampled(3, ShaderStage.Compute), Sampled(4, ShaderStage.Compute)]);
@@ -189,7 +201,10 @@ public sealed unsafe partial class WebGpuRenderer
         _framesBuffer = CreateBuffer(_frameStride * 5ul, BufferUsage.Uniform | BufferUsage.CopyDst);
         _bloomParameters = CreateBuffer(32, BufferUsage.Uniform | BufferUsage.CopyDst);
         _compositeParameters = CreateBuffer(32, BufferUsage.Uniform | BufferUsage.CopyDst);
-        _frameGroup = Group(_frameLayout, [new() { Binding = 0, Buffer = _framesBuffer, Size = 256 }, new() { Binding = 1, TextureView = _shadow.View }, new() { Binding = 2, Sampler = _shadowSampler }]);
+        InitializeEnvironment();
+        _frameGroup = Group(_frameLayout, [new() { Binding = 0, Buffer = _framesBuffer, Size = 256 }, new() { Binding = 1, TextureView = _shadow.View }, new() { Binding = 2, Sampler = _shadowSampler },
+            new() { Binding = 3, TextureView = _environment!.View }, new() { Binding = 4, Sampler = _environmentSampler },
+            new() { Binding = 5, TextureView = _environmentBrdf!.View }, new() { Binding = 6, Buffer = _environmentIrradiance, Size = 144 }]);
         _shadowGroup = Group(_shadowLayout, [new() { Binding = 0, Buffer = _framesBuffer, Size = 256 }]);
         EnsureObjectCapacity(16);
     }

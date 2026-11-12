@@ -62,5 +62,5 @@ test('integrated BRDF retains Schlick limits and a bounded white-furnace respons
   const normalMirror = texel(127, 0), grazingMirror = texel(0, 0), roughNormal = texel(127, 127);
   assert.ok(normalMirror[0] > .99 && normalMirror[1] < 1e-5);
   assert.ok(grazingMirror[1] > .95, 'Schlick Fresnel approaches one at grazing incidence.');
-  assert.ok(roughNormal[0] > .25 && roughNormal[0] < .4, 'The diffuse GGX lobe must retain single-scatter masking loss.');
+  assert.ok(roughNormal[0] > .25 && roughNormal[0] < .4, 'The rough GGX lobe must retain single-scatter masking loss.');
 });

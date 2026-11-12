@@ -46,10 +46,10 @@ textures, geometry, uniform arenas and pending readbacks.
 | Precision | Binary64 authoritative geometry and camera arithmetic; origin-relative float32 GPU vertices and uniforms |
 | Depth | Native WebGPU reverse-Z projection with `depth32float`, near=1 and far=0 |
 | Surfaces | Linear `rgba16float` HDR, 4x MSAA, two-sided GGX, correlated Smith visibility and Schlick Fresnel |
-| Lighting | Analytic studio environment, directional key light, two fill lights and a texel-snapped PCF shadow map |
+| Lighting | HDR image lighting with GGX cube mips, diffuse SH and DFG lookup; directional key light, two fill lights and a texel-snapped PCF shadow map |
 | Transparency | Weighted blended accumulation/revealage with depth-tested 4x MSAA; no object-order sorting dependency |
 | Curves and grids | Instanced screen-space ribbons, homogeneous near-plane clipping, analytic coverage and relative depth bias |
-| Postprocessing | Half-resolution separable compute bloom, ACES response fit and exactly one sRGB encoding |
+| Postprocessing | Half-resolution bloom from opaque plus transparent HDR, separable compute blur, ACES response fit and exactly one sRGB encoding |
 | Four views | Shared geometry, per-view frame uniforms/scissors, independent depth pixels and bloom constrained to each quadrant |
 
 Opaque-only scenes bind cleared 1x1 OIT textures. Transparent surfaces allocate
@@ -71,8 +71,17 @@ without surface draws. Four-view and maximized layouts include odd-size and one-
 targets. Custom viewport rectangles remain supported; bloom is disabled for layouts
 that do not match a single full target or a regular two-by-two partition.
 
-These are concrete raster rendering capabilities. The analytic environment is not
-image-based lighting, weighted transparency is an approximation, and the ACES curve
+The original authored HDR studio image is integrated offline into a 128px
+RGBA16F cube with eight GGX roughness mips, nine diffuse SH coefficients and a
+128px correlated-Smith DFG lookup. The package embeds exactly the same compressed
+payload as the native rendering assembly, decompresses it once and uploads it once
+per renderer. No runtime fetch or repository-relative asset path is required.
+`renderer.info.environmentSourceSha256` records its decoded payload provenance.
+Ambient intensity scales this environment lighting. See the repository's
+[environment guide](../../docs/WEBGPU-ENVIRONMENT.md) for equations and reproduction.
+
+These are concrete raster rendering capabilities. Split-sum image lighting and
+weighted transparency are approximations, and the ACES curve
 fit is not the complete ACES color pipeline. Transparent surfaces do not cast opaque
 shadows. The package does not implement ray tracing, screen-space reflections, ambient
 occlusion, temporal antialiasing or automatic device-loss reconstruction. Recreate the
@@ -107,7 +116,7 @@ Edit `src/NurbsScene.Rendering/Shaders/{scene,bloom,composite}.wgsl`, then run:
 ```sh
 node packages/graphics/generate-shaders.mjs
 node packages/graphics/generate-shaders.mjs --check
-node --test tests/graphics-webgpu.test.mjs
+node --test tests/graphics-*.test.mjs
 ```
 
 `shaders.js` is deterministic generated ESM included in the independently installable
