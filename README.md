@@ -52,8 +52,10 @@ The graph and UI drawing adapter uses Uno's managed drawing interfaces and WebGP
 surfaces, with retained shaped text and bundled DejaVu fonts for offline fallback.
 Read the [migration journal](docs/UNO7-WEBGPU-MIGRATION.md) for architecture,
 resource ownership, per-commit evidence and remaining quality work. Production
-WGSL execution and all ten actual Uno input/framebuffer campaigns are required
-by CI. Hardware performance and an AAA production quality claim require their own
+WGSL execution and all eleven actual Uno input/framebuffer campaigns are required
+by CI, with a combined minimum of 407 native UI checks. The original ten campaigns
+and their 357 checks remain intact; the new `rhino-grasshopper-ui` campaign adds 50.
+Hardware performance and an AAA production quality claim require their own
 representative scenes, visual review and device/driver measurements.
 
 ## Build and validate
@@ -72,16 +74,27 @@ python -m http.server 8766 --bind 127.0.0.1 --directory artifacts/site
 qualification. GitHub Pages deploys only the exact Uno artifact that passed the
 main-branch browser/framebuffer workflow. Every new revision needs its own tests;
 compilation, software-WebGPU correctness checks and physical-GPU performance are distinct.
+The two persistence campaigns retain separate pre-reload GPU checkpoints,
+`uno-rhino-pre-reload-gpu.json` and `uno-rhino-grasshopper-pre-reload-gpu.json`;
+both must pass so a new device after reload cannot hide earlier interaction errors.
+Hosted acceptance of the Rhino/Grasshopper interface refinement is pending final
+evidence for the candidate revision. See its [implementation and acceptance record](docs/RHINO-GRASSHOPPER-UI.md).
 
 ## Modeling and visual programming
 
 The compact modeling-first workspace starts with an empty document, four viewports,
-tabbed icon tools, selectable command history, native camera/object/layer properties,
-persistent keyboard-accessible splitters and an optional right/bottom-docked definition.
+tabbed icon tools, a category-driven modeling sidebar, selectable command history,
+native camera/object/layer properties, and persistent keyboard-accessible splitters.
+The definition editor can dock right or below the viewports, or float in a movable,
+resizable window with a folding title bar and saved placement. Compact inspector
+tabs expose aligned properties and a filterable layer table with actual current,
+visibility, lock and display-color controls. The definition editor adds grouped
+component palettes, retained canvas appearance settings and native workspace menus.
 Model-canvas typing starts command entry; short right-click/Space repeat, modifier
 navigation, cursor-anchored zoom and camera-draft validation use the actual controls.
-See the [Rhino-style UI/UX review](docs/RHINO-UI-REVIEW.md) for the delivered behavior,
-qualification requirements and remaining differences.
+See the [Rhino/Grasshopper interface implementation](docs/RHINO-GRASSHOPPER-UI.md)
+for the current behavior and acceptance requirements, and the earlier
+[Rhino-style UI/UX review](docs/RHINO-UI-REVIEW.md) for that milestone's evidence and differences.
 The graph editor provides executable search, typed wiring, numeric sliders,
 copy/paste/duplicate, arrangement, preview, baking and undo/redo. Authored icons and
 controls follow familiar conventions without claiming identical original artwork.
