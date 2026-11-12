@@ -117,9 +117,9 @@ completion still restores the disposable session immediately, and expiry still
 fails the campaign. All eleven campaigns and their combined minimum of 407 native
 UI checks are mandatory. The original ten campaigns retain their 357 checks; the
 new `rhino-grasshopper-ui` campaign adds 50. The [campaign registry](../tests/browser/uno-campaigns.json)
-is the source of the required per-campaign minima. Hosted acceptance of the new
-interface refinement is pending final evidence for the candidate revision; see
-[the implementation and acceptance record](RHINO-GRASSHOPPER-UI.md).
+is the source of the required per-campaign minima. The interface implementation
+passed this complete gate on source `157b92229ab2094c648245aa59038fd34c25a3ad`; see
+[the exact acceptance record and captures](RHINO-GRASSHOPPER-UI.md).
 
 The viewport derives from Uno 7's `WebGpuCanvasElement`, borrows Uno's WebGPU device and queue, and renders directly into the compositor target. It does not create an independent browser canvas or copy each displayed frame to CPU memory. Readback runs only for explicit capture/qualification requests. A 16 ms dispatcher timer enforces bounded capture lifetime. It requests rendering until the capture frame has been submitted on either target, then continues requesting compositor frames only on native targets, where Uno's device polling completes asynchronous mapping. The browser map progresses from its JavaScript promise without extra frames after submission. The timer stops on completion, failure or unload; its deadline identifies whether the request was awaiting viewport submission or GPU mapping. The old reflected GL readback adapter and pinned Uno 6 packages are removed.
 
@@ -283,9 +283,12 @@ drag is active, then verifies that reload restores the committed floating geomet
 This campaign retains its own progress/observed-state reports, floating and final
 workspace screenshots, reload modeling/framebuffer report, and the mandatory
 pre-reload GPU checkpoint listed above. All eleven campaigns must pass against
-the same staged publication before its artifact qualifies. Hosted acceptance of
-this interface refinement remains pending final per-commit evidence; details and
-references are recorded in [RHINO-GRASSHOPPER-UI.md](RHINO-GRASSHOPPER-UI.md).
+the same staged publication before its artifact qualifies. All eleven passed in
+[Uno run 43219452340](https://github.com/wieslawsoltes/NurbsScene/actions/runs/43219452340),
+with 407 UI checks and 33 modeling/framebuffer checks per campaign. Exact source
+identity, artifact hashes and actual captures are recorded in
+[RHINO-GRASSHOPPER-UI.md](RHINO-GRASSHOPPER-UI.md). Every subsequent source revision
+still requires its own complete gate.
 
 A deferred native text-input focus handoff can leave the model canvas receiving
 keys after a command draft has started. The command console keeps that draft active

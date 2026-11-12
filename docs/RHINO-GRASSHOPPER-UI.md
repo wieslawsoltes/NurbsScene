@@ -173,10 +173,53 @@ close glyph. Further observation fixes wait for color-dialog continuation comple
 and respect collapsed ancestors of retained native menus. Bounded input/gesture
 records preserve evidence without dispatching input or extending wait budgets.
 
-The complete implementation is committed. Final hosted results and actual Uno
-captures are being collected for the candidate revision. A successful earlier
-partial batch does not qualify a later source tree. The final record will link
-the exact workflow, tested commit/tree, screenshots and aggregate results.
+The corrected implementation passed **all 23 workflows**, including all **15 Uno
+jobs**, in [run 43219452340](https://github.com/wieslawsoltes/NurbsScene/actions/runs/43219452340).
+The aggregate records **407 passed UI checks across 11 campaigns**, each with
+**33 modeling/framebuffer checks**. The new campaign passed all 50 checks on its
+first execution after the fix, including the original resize expectations and
+both ordinary cancellation and persistence during a canceled drag. There were no
+reported page errors, graph errors or unexpected GPU errors.
+
+| Identity | Accepted value |
+|---|---|
+| Source head | `157b92229ab2094c648245aa59038fd34c25a3ad` |
+| Tested PR merge commit | `a44ca0f79600c1c71e969f0cc48ebc2aed7e1ab8` |
+| Tested tree | `52e76bc49d6fc905d11d0d79cb2d70cbba9a74c5` |
+| Aggregate artifact | [`13945548020`](https://github.com/wieslawsoltes/NurbsScene/actions/runs/43219452340/artifacts/13945548020) |
+| Publication manifest | 849 files; byte-identical across all 11 campaigns |
+| Publication manifest SHA-256 | `d3e0ac8ef7f266d0abca0a5f2194cc496d1394bb6673e5355c74f7131fc7665e` |
+| Aggregate report SHA-256 | `9548ceaaa65bbf7446142b0d66ce59065a6f4d8eaefb903162ca8b0933d982ef` |
+
+The [machine-readable evidence record](RHINO-GRASSHOPPER-UI-EVIDENCE.json) retains
+campaign counts, the verified ZIP digest, GPU checkpoint summaries and every
+committed screenshot's source path and SHA-256. These documentation additions
+preserve the accepted application and test code. Their final PR revision remains
+subject to the same required checks before merging.
+
+### Actual application captures
+
+These are unmodified captures of the real Uno WebAssembly application with the
+pavilion sample, copied from that accepted aggregate. Hosted Chromium uses
+SwiftShader; native desktop qualification uses software Vulkan. These runs verify
+API, shader, framebuffer and interaction correctness, without a physical-GPU
+throughput claim. The screenshots remain in the repository after CI artifacts
+expire.
+
+**Modeling workspace:** compact command band, retained tools and sidebar, four
+viewports, active title/frame, aligned camera properties and segmented status.
+
+![Rhino-style modeling workspace](images/rhino-grasshopper/rhino-modeling.png)
+
+**Floating definition:** grouped component palette, native menus, canvas tools,
+component capsules and wires, solution status, and the active resize corner.
+
+![Grasshopper-style floating definition](images/rhino-grasshopper/grasshopper-floating.png)
+
+**Validated layer-color edit:** the native dialog rejects an invalid hex draft
+while preserving the live color and its document transaction history.
+
+![Layer-color validation](images/rhino-grasshopper/rhino-layer-color.png)
 
 ## Compatibility boundary
 

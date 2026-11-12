@@ -77,8 +77,9 @@ compilation, software-WebGPU correctness checks and physical-GPU performance are
 The two persistence campaigns retain separate pre-reload GPU checkpoints,
 `uno-rhino-pre-reload-gpu.json` and `uno-rhino-grasshopper-pre-reload-gpu.json`;
 both must pass so a new device after reload cannot hide earlier interaction errors.
-Hosted acceptance of the Rhino/Grasshopper interface refinement is pending final
-evidence for the candidate revision. See its [implementation and acceptance record](docs/RHINO-GRASSHOPPER-UI.md).
+The Rhino/Grasshopper interface implementation passed all 23 workflows and 407
+native UI checks. See its [implementation, actual captures and acceptance record](docs/RHINO-GRASSHOPPER-UI.md)
+for the exact accepted source, artifact hashes and the documentation-only follow-up.
 
 ## Modeling and visual programming
 
