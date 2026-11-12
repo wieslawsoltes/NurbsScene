@@ -23,45 +23,55 @@ public sealed class VectorFontStyle(VectorFontStyleWeight weight, VectorFontStyl
 /// </summary>
 public sealed class VectorTypeface : IDisposable
 {
+    internal const float CanonicalSize = 64;
     private static readonly IFontProvider Provider = ManagedBackend.CreateFontProvider();
-    private static readonly Dictionary<(bool Bold, bool Italic), IFontFile> Bundled = [];
-    private readonly Dictionary<float, IFont> _fonts = [];
+    private static readonly Dictionary<(bool Bold, bool Italic), IFont> Bundled = [];
+    private IFont? _font;
+    private bool _disposed;
     private readonly string _family;
     private readonly bool _requestedBold, _requestedItalic;
     private (bool Bold, bool Italic)? _resolvedStyle;
     public static VectorTypeface Default { get; } = new("", false, false);
     public bool IsBold => ResolvedStyle.Bold;
     public bool IsItalic => ResolvedStyle.Italic;
-    private (bool Bold, bool Italic) ResolvedStyle => _resolvedStyle ??= ReadStyle(Resolve(12));
-    public string FamilyName => Resolve(12).FamilyName;
+    private (bool Bold, bool Italic) ResolvedStyle => _resolvedStyle ??= ReadStyle(Resolve());
+    public string FamilyName => Resolve().FamilyName;
+    /// <summary>Completed physical-face resolutions; requested text sizes reuse the same face.</summary>
+    public long ResolutionCount { get; private set; }
     private VectorTypeface(string family, bool bold, bool italic)
     { _family = family; _requestedBold = bold; _requestedItalic = italic; }
     public static VectorTypeface FromFamilyName(string? family, VectorFontStyle style)
         => new(family ?? "", style.Bold, style.Italic);
-    internal IFont Resolve(float size)
+    internal IFont Resolve()
     {
-        if (!float.IsFinite(size) || size <= 0 || size > 1024) throw new ArgumentOutOfRangeException(nameof(size));
-        if (_fonts.TryGetValue(size, out var existing)) return existing;
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (_font is { } existing) return existing;
         var weight = new FontWeight { Weight = (ushort)(_requestedBold ? 700 : 400) };
         var style = _requestedItalic ? FontStyle.Italic : FontStyle.Normal;
         // Request explicit families from the OS when available. Unavailable names resolve to a bundled face
         // with the requested weight and slant, so a missing font never loses text or synthetic styling.
-        var font = _family.Length > 0 ? Provider.MatchFamily(_family, weight, FontStretch.Normal, style, size) : null;
+        // Uno's managed installed-font provider retains a complete font file for every exact size.
+        // Resolve once at a canonical size; metrics, shaping and GPU drawing scale together below.
+        // Continuous panel zoom must not create an unbounded OS-font cache behind our own cache.
+        var font = _family.Length > 0 ? Provider.MatchFamily(_family, weight, FontStretch.Normal, style, CanonicalSize) : null;
         if (font is null)
         {
-            if (!Bundled.TryGetValue((_requestedBold, _requestedItalic), out var file))
+            lock (Bundled)
             {
-                var suffix = _requestedBold ? (_requestedItalic ? "-BoldOblique" : "-Bold") : _requestedItalic ? "-Oblique" : "";
-                using var stream = typeof(VectorTypeface).Assembly.GetManifestResourceStream($"NurbsScene.Controls.Drawing.Fonts.DejaVuSans{suffix}.ttf")
-                    ?? throw new InvalidOperationException("The bundled vector font is missing.");
-                Bundled[(_requestedBold, _requestedItalic)] = file = Provider.LoadFontFile(stream);
+                if (!Bundled.TryGetValue((_requestedBold, _requestedItalic), out font))
+                {
+                    var suffix = _requestedBold ? (_requestedItalic ? "-BoldOblique" : "-Bold") : _requestedItalic ? "-Oblique" : "";
+                    using var stream = typeof(VectorTypeface).Assembly.GetManifestResourceStream($"NurbsScene.Controls.Drawing.Fonts.DejaVuSans{suffix}.ttf")
+                        ?? throw new InvalidOperationException("The bundled vector font is missing.");
+                    using var file = Provider.LoadFontFile(stream);
+                    font = file.CreateFont("DejaVu Sans", weight, FontStretch.Normal, style, CanonicalSize)
+                        ?? throw new InvalidOperationException("The bundled vector font is invalid.");
+                    Bundled.Add((_requestedBold, _requestedItalic), font);
+                }
             }
-            font = file.CreateFont("DejaVu Sans", weight, FontStretch.Normal, style, size)
-                ?? throw new InvalidOperationException("The bundled vector font is invalid.");
         }
-        // Arbitrary panel zoom/size edits must not retain an unbounded collection of sized fonts.
-        if (_fonts.Count >= 32) _fonts.Clear();
-        _fonts[size] = font;
+        _font = font;
+        ResolutionCount++;
         return font;
     }
     // MatchFamily chooses the closest installed face, which can be regular even when bold/italic was
@@ -82,7 +92,7 @@ public sealed class VectorTypeface : IDisposable
         }
         return (false, false);
     }
-    public void Dispose() { if (!ReferenceEquals(this, Default)) _fonts.Clear(); }
+    public void Dispose() { if (!ReferenceEquals(this, Default)) { _disposed = true; _font = null; } }
 }
 
 public readonly record struct VectorFontMetrics(float Ascent, float Descent);
@@ -104,13 +114,22 @@ public sealed class VectorFont(VectorTypeface typeface, float size) : IDisposabl
     }
     public bool Embolden { get; set; }
     public float SkewX { get; set; }
-    internal IFont Font => Typeface.Resolve(Size);
-    public VectorFontMetrics Metrics => new(Font.Ascent, Font.Descent);
+    internal IFont Font
+    {
+        get
+        {
+            if (!float.IsFinite(Size) || Size <= 0 || Size > 1024) throw new ArgumentOutOfRangeException(nameof(Size));
+            return Typeface.Resolve();
+        }
+    }
+    internal float FontScale => Size / VectorTypeface.CanonicalSize;
+    public VectorFontMetrics Metrics => new(Font.Ascent * FontScale, Font.Descent * FontScale);
     public float MeasureText(string text)
     {
         if (_widths.TryGetValue(text, out var width)) return width;
         var run = Font.Shape(text.AsSpan(), out _);
         width = 0; foreach (var advance in run.Advances) width += advance;
+        width *= FontScale;
         if (_widths.Count >= 256) _widths.Clear();
         _widths[text] = width; return width;
     }
@@ -124,11 +143,12 @@ public sealed class VectorTextBlob : IDisposable
     internal ushort[] Glyphs { get; }
     internal Vector2[] Positions { get; }
     internal float Size { get; }
+    internal float FontScale { get; }
     internal bool Embolden { get; }
     internal float SkewX { get; }
     private VectorTextBlob(string text, VectorFont font)
     {
-        Font = font.Font; Size = font.Size; Embolden = font.Embolden; SkewX = font.SkewX;
+        Font = font.Font; Size = font.Size; FontScale = font.FontScale; Embolden = font.Embolden; SkewX = font.SkewX;
         var run = Font.Shape(text.AsSpan(), out _);
         Glyphs = run.Glyphs; Positions = new Vector2[run.Count];
         float advance = 0;

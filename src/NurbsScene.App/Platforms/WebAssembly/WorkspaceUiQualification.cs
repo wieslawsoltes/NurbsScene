@@ -22,6 +22,7 @@ public partial class App
     private static async Task ObserveWorkspaceUiAsync(WorkspaceView view)
     {
         var controller=view.Controller;var source=controller.Save();var preferences=view.Preferences;
+        var renderingSettings=view.Viewport.Canvas.RenderSettings;
         var watch=Stopwatch.StartNew();var drawing=new GraphPresentation();long sample=0;
         // A bounded, passive trace explains native input ordering without sending
         // input, changing focus, retrying actions, or keeping handlers after qualification.
@@ -87,7 +88,7 @@ public partial class App
                     // Bounds include a TextBox's header. Observe the actual
                     // focused draft so input tests cannot silently type into a
                     // previous field after clicking a header or template border.
-                    var draft=element is TextBox textBox&&(AutomationProperties.GetAutomationId(element).StartsWith("Slider",StringComparison.Ordinal)||AutomationProperties.GetAutomationId(element).StartsWith("Typography",StringComparison.Ordinal)||AutomationProperties.GetAutomationId(element).StartsWith("ViewportProperty",StringComparison.Ordinal))
+                    var draft=element is TextBox textBox&&(AutomationProperties.GetAutomationId(element).StartsWith("Slider",StringComparison.Ordinal)||AutomationProperties.GetAutomationId(element).StartsWith("Typography",StringComparison.Ordinal)||AutomationProperties.GetAutomationId(element).StartsWith("ViewportProperty",StringComparison.Ordinal)||AutomationProperties.GetAutomationId(element).StartsWith("Rendering",StringComparison.Ordinal))
                         ? textBox.Text : null;
                     if(draft?.Length>256)draft=draft[..256];
                     return new{x=p.X,y=p.Y,width=element.ActualWidth,height=element.ActualHeight,enabled=element is not Control c||c.IsEnabled,
@@ -108,6 +109,7 @@ public partial class App
                 if(view.GraphEditor.PanelTypographyEditorIsOpen&&view.GraphEditor.PanelTypographyEditor is{} typographyDialog)Visit(typographyDialog);
                 if(view.GraphEditor.ValueEditorIsOpen&&view.GraphEditor.ValueEditor is{} valueDialog)Visit(valueDialog);
                 if(view.GraphEditor.NumberSliderEditorIsOpen&&view.GraphEditor.NumberSliderEditor is{} sliderDialog)Visit(sliderDialog);
+                if(view.RenderingSettingsEditorIsOpen&&view.RenderingSettingsEditor is{} renderingDialog)Visit(renderingDialog);
                 // Native menu/flyout presenters live in the popup root rather
                 // than under WorkspaceView. Observe only loaded controls.
                 foreach(var item in view.GraphEditor.ActionElements.Concat(view.ActionElements))if(item.IsLoaded)Visit(item);
@@ -164,6 +166,9 @@ public partial class App
                     toolbar=view.Toolbar.Category,category=view.GraphEditor.Shelf.Category,inspector=view.Inspector.ActiveTab,
                     startupPreferences=preferences.Encode(),preferences=view.Preferences.Encode(),sidebarVisible=view.Preferences.SidebarVisible,inspectorWidth=view.Preferences.InspectorWidth,historyExpanded=view.Console.HistoryExpanded,commandInput=view.Console.InputText,commandHistoryCount=view.Console.HistoryCount,commandHistory=view.Console.HistoryText,
                     modelContextMenuOpen=view.ModelContextMenuIsOpen,viewportPropertyDraft=view.ViewportPropertyDraft,viewportPropertyValidation=view.ViewportPropertyValidation,
+                    renderingSettings=RenderSettingsPreferences.Serialize(cad.RenderSettings),startupRenderingSettings=RenderSettingsPreferences.Serialize(renderingSettings),
+                    renderingDialogOpen=view.RenderingSettingsEditorIsOpen,renderingValidation=view.RenderingSettingsValidation,renderFrames=cad.Frames,
+                    geometryUploadBytes=cad.GeometryUploadBytes,geometryUploadCount=cad.GeometryUploadCount,
                     cameras=cad.Cameras.ToDictionary(p=>p.Key,p=>new{target=p.Value.Target.ToArray(),distance=p.Value.Distance,scale=p.Value.Scale,azimuth=p.Value.Azimuth,elevation=p.Value.Elevation,fov=p.Value.FieldOfView}),
                     dock=view.Preferences.Dock,definitionVisible=view.Preferences.DefinitionVisible,inspectorVisible=view.Preferences.InspectorVisible,
                     activeViewport=cad.ActiveViewport, maximized=cad.Maximized,gridSnap=view.Aids.GridSnap,ortho=view.Aids.Ortho,endSnap=view.Aids.EndSnap,
@@ -174,6 +179,7 @@ public partial class App
             view.GraphEditor.Canvas.ObservePointerEvents=false;
             controller.Load(source);controller.Scene.ShowGrid=true;controller.Scene.ShowIsocurves=true;
             view.SetPreferences(preferences,false);view.Aids.GridSnap=false;view.Aids.Ortho=false;view.Aids.EndSnap=false;
+            view.Viewport.Canvas.RenderSettings=renderingSettings;
             view.Viewport.Canvas.RestoreFourViews();view.Viewport.Canvas.Fit();view.GraphEditor.Canvas.Fit();
             if(watch.Elapsed>=TimeSpan.FromMinutes(10))
                 PublishUi(new{status="failed",error="The qualification observation lifetime expired before the test finished."});

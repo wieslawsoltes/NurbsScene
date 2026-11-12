@@ -19,7 +19,7 @@ Retrieval mirror: https://github.com/go-opentype/fonts/tree/main/dejavusans
 | DejaVuSans-BoldOblique.ttf | 753f2d80b1f9a13026d641b6fd4cafb8d85dd479 |
 
 The packaged font names and version strings were checked directly in their sfnt
-name tables. The packaged DejaVu Sans family resolves to these embedded faces on every host.
+name tables. The global XAML provider resolves the DejaVu Sans family to these embedded faces on every host.
 Other requested desktop families retain Uno's managed installed-font matching.
 Missing families use the bundled face with the requested weight and slant. The bundled fonts do not cover every Unicode script; a full font
 fallback system for scripts outside their coverage is a separate requirement.
@@ -48,3 +48,22 @@ and asynchronous platform fallback for characters outside the bundled coverage:
 
 - https://github.com/unoplatform/uno/blob/7.0.32/src/Uno.UI.Composition.Drawing/IFontProvider.cs
 - https://github.com/unoplatform/uno/blob/7.0.32/src/Uno.UI.Composition.Managed/ManagedFontManager.cs
+
+## Vector font lifetime and continuous zoom
+
+Custom vector text resolves each requested physical family/style once at a
+canonical size of 64. Uno's managed installed-font provider retains a font file
+for every exact size it resolves; asking it for each `8 / zoom` panel-text size
+would retain new font data throughout a continuous zoom gesture, even after the
+control's own size cache evicted those entries. Canonical resolution removes
+that source of growth. The four embedded fallback faces are also shared at the
+canonical size.
+
+Shaping keeps HarfBuzz's actual glyph IDs, kerning, ligatures, advances and
+offsets. Measurements and vertical metrics scale by the requested size divided
+by 64. Drawing applies the same scale once after positioning the baseline, so
+the rendered geometry and measured placement agree. Synthetic bold thickness is
+specified in canonical coordinates before that scale; synthetic slant remains
+dimensionless. `VectorTextBlob.Size` continues to describe the requested size.
+`VectorTypeface.ResolutionCount` reports completed physical-face resolutions for
+native qualification and profiling.

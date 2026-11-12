@@ -56,11 +56,11 @@ async def verify_rhino_workspace(page):
         await page.mouse.click(*text_editor_point(data['controls'][identity]))
         focus = await settle(page)
         if not focus['controls'][identity]['focused']:
-            raise AssertionError('Native camera editor did not receive focus: '+identity)
+            raise AssertionError('Native editor did not receive focus: '+identity)
         await page.keyboard.press('Control+A'); await page.keyboard.insert_text(text)
         data = await settle(page)
         if data['controls'][identity]['text'] != text:
-            raise AssertionError('Camera edit landed in the wrong native field: '+identity)
+            raise AssertionError('Edit landed in the wrong native field: '+identity)
     def check(ok, name):
         if not ok: raise AssertionError(name)
         checks.append(name)
@@ -313,6 +313,37 @@ async def verify_rhino_workspace(page):
         check(data['state']['modelContextMenuOpen'],'Shift+F10 opens the model context menu without a mouse hold')
         await page.keyboard.press('Escape'); await settle(page)
         await command('Layers')
+
+        # Rendering preferences use the same native dialog path as ordinary users.
+        # Invalid/canceled drafts do not reach the live GPU or document history.
+        original_rendering=(await state())['renderingSettings']
+        await click('ModelMenu_Tools'); await click('Menu_Tools_Rendering')
+        await editor('RenderingExposure','NaN'); await click('RenderingApply'); data=await settle(page)
+        check(data['state']['renderingDialogOpen'] and data['state']['renderingValidation']
+              and data['state']['renderingSettings']==original_rendering and data['state']['gpuError'] is None,
+              'Invalid rendering drafts remain local and cannot fault the live WebGPU canvas')
+        await click('RenderingRevert'); data=await settle(page)
+        check(not data['state']['renderingValidation'] and data['state']['renderingSettings']==original_rendering
+              and float(data['controls']['RenderingExposure']['text'])==json.loads(original_rendering)['exposure'],
+              'Revert restores the current rendering settings without applying the draft')
+        await editor('RenderingExposure','1.25'); await click('RenderingShadows')
+        await page.screenshot(path=str(ROOT/'evidence/uno-rendering-settings.png'))
+        before_apply=await state(); await click('RenderingApply')
+        data=await wait_for_ui(page, '!value.state.renderingDialogOpen && value.state.renderFrames > '+str(before_apply['renderFrames']))
+        expected_settings=json.loads(original_rendering)
+        expected_settings.update(exposure=1.25,shadows=not expected_settings['shadows'])
+        applied_rendering=data['state']['renderingSettings']
+        check(json.loads(applied_rendering)==expected_settings
+              and data['state']['documentRevision']==before_apply['documentRevision']
+              and data['state']['graphRevision']==before_apply['graphRevision']
+              and data['state']['meshBuilds']==before_apply['meshBuilds']
+              and data['state']['geometryUploadBytes']==before_apply['geometryUploadBytes']
+              and data['state']['geometryUploadCount']==before_apply['geometryUploadCount'],
+              'Rendering Apply submits the validated settings without model edits or geometry reuploads')
+        await click('ModelMenu_Tools'); await click('Menu_Tools_Rendering')
+        await editor('RenderingExposure','2'); await click('RenderingCancel'); data=await settle(page)
+        check(not data['state']['renderingDialogOpen'] and data['state']['renderingSettings']==applied_rendering,
+              'Cancel discards rendering edits and preserves the applied settings')
         expected=(await state())['preferences']
         # Navigation creates a fresh device observer. Preserve and validate this
         # document's actual GPU errors before persistence testing replaces it.
@@ -326,6 +357,15 @@ async def verify_rhino_workspace(page):
         reloaded=await wait_ready(page,timeout=20000)
         check(report['status']=='passed' and reloaded['state']['startupPreferences']==expected,
               'A fresh application load restores the exact persisted version-two workspace preferences')
+        check(reloaded['state']['startupRenderingSettings']==applied_rendering
+              and reloaded['state']['renderingSettings']==applied_rendering,
+              'A fresh application load restores the exact persisted rendering preferences')
+        await click('ModelMenu_Tools'); await click('Menu_Tools_Rendering')
+        await click('RenderingDefaults'); before_apply=await state(); await click('RenderingApply')
+        data=await wait_for_ui(page, '!value.state.renderingDialogOpen && value.state.renderFrames > '+str(before_apply['renderFrames']))
+        defaults=json.loads(data['state']['renderingSettings'])
+        check(defaults['exposure']==1 and defaults['shadows'] and data['state']['gpuError'] is None,
+              'Rendering Defaults restores the authored studio appearance through native Apply')
         data=await command('ModelingLayout')
         check(data['state']['gpuError'] is None and data['state']['graphErrors']==0,
               'The real GPU and definition remain error-free after shell, input, camera and persistence workflows')

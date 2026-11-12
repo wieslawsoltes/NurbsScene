@@ -16,6 +16,8 @@ namespace NurbsScene.Controls;
 public sealed class CadViewport : WebGpuCanvasElement
 {
     private WebGpuRenderer? _renderer;
+    private WebGpuRenderSettings _renderSettings=new();
+    private long _diagnosticGeneration;
     private bool _dragged;
     private Point _start,_last;
     private string _gesture="";
@@ -34,6 +36,21 @@ public sealed class CadViewport : WebGpuCanvasElement
     private const long MaximumCaptureTimeoutMilliseconds=60_000;
     private long _captureTimeoutMilliseconds=DefaultCaptureTimeoutMilliseconds;
     public DisplayScene Scene {get;set;}=new();
+    /// <summary>Validated display settings retained across device and element reloads.</summary>
+    public WebGpuRenderSettings RenderSettings
+    {
+        get=>_renderSettings;
+        set
+        {
+            ArgumentNullException.ThrowIfNull(value);
+            if(!DispatcherQueue.HasThreadAccess)throw new InvalidOperationException("Change rendering settings on the viewport's UI thread.");
+            value.Validate();
+            if(value==_renderSettings)return;
+            if(_renderer is not null)_renderer.Settings=value;
+            _renderSettings=value;
+            Invalidate();
+        }
+    }
     public IReadOnlyDictionary<string,Camera> Cameras {get;}=new[]{"Top","Perspective","Front","Right"}.ToDictionary(n=>n,n=>new Camera(n));
     public string? Maximized {get;private set;}
     public string ActiveViewport {get;private set;}="Perspective";
@@ -50,6 +67,10 @@ public sealed class CadViewport : WebGpuCanvasElement
     /// <summary>Cumulative geometry residency counters for this renderer lifetime.</summary>
     public long GeometryUploadBytes=>_renderer?.GeometryUploadBytes??0;
     public long GeometryUploadCount=>_renderer?.GeometryUploadCount??0;
+    /// <summary>Cumulative shadow and material work for cache diagnostics.</summary>
+    public long ShadowPassCount=>_renderer?.ShadowPassCount??0;
+    public long ShadowCasterDrawCount=>_renderer?.ShadowCasterDrawCount??0;
+    public long MaterialUploadCount=>_renderer?.MaterialUploadCount??0;
     /// <summary>Submitted work in the last frame, including its rendering passes.</summary>
     public int DrawCalls=>_renderer?.DrawCalls??0;
     public int TriangleCount=>_renderer?.TriangleCount??0;
@@ -69,7 +90,7 @@ public sealed class CadViewport : WebGpuCanvasElement
         // BorderVisual performs the geometry hit test; a GPU texture alone supplies no input shape.
         Background=new SolidColorBrush(Microsoft.UI.Colors.Transparent);
         IsTabStop=true;SizeChanged+=(_,_)=>{CancelNavigation();Invalidate();};
-        Unloaded+=(_,_)=>{CancelNavigation();FailCapture(new InvalidOperationException("The WebGPU viewport was unloaded."));};
+        Unloaded+=(_,_)=>{_diagnosticGeneration++;CancelNavigation();FailCapture(new InvalidOperationException("The WebGPU viewport was unloaded."));};
         _capturePump.Tick+=(_,_)=>PumpCapture();
         PointerPressed+=Pressed;PointerMoved+=Moved;PointerReleased+=Released;
         PointerCanceled+=(_,e)=>{if(_pointerId==e.Pointer.PointerId)CancelNavigation();};
@@ -98,16 +119,27 @@ public sealed class CadViewport : WebGpuCanvasElement
     {
         LastError=text;
         System.Console.Error.WriteLine("NURBSSCENE_WEBGPU: "+text);
-        DiagnosticsChanged?.Invoke(text);
+        QueueDiagnostics(text);
+    }
+    private void QueueDiagnostics(string text)
+    {
+        // Init and RenderOverride run inside Uno's compositor recording. Native
+        // text/layout subscribers must execute only after that paint completes.
+        var generation=_diagnosticGeneration;
+        DispatcherQueue.TryEnqueue(()=>
+        {
+            if(IsLoaded&&generation==_diagnosticGeneration)DiagnosticsChanged?.Invoke(text);
+        });
     }
     protected override unsafe void Init(WebGpuCanvasContext context)
     {
+        _diagnosticGeneration++;
         try
         {
             _renderer=new(context.Api,context.Device,context.Queue,context.TargetFormat,
-                browserReadback:OperatingSystem.IsBrowser()?ReadBrowserBufferAsync:null);
+                browserReadback:OperatingSystem.IsBrowser()?ReadBrowserBufferAsync:null){Settings=_renderSettings};
             LastError=null;
-            DiagnosticsChanged?.Invoke(_renderer.Backend);
+            QueueDiagnostics(_renderer.Backend);
         }
         catch(Exception error)
         {
@@ -141,7 +173,7 @@ public sealed class CadViewport : WebGpuCanvasElement
                 LastCapturePhase="awaiting GPU buffer mapping";
                 _=CompleteCaptureAsync(capture,_renderer.CaptureRgbaAsync());
             }
-            if(_renderer.Frames==1)DiagnosticsChanged?.Invoke(_renderer.Backend+"; GPU frame submitted");
+            if(_renderer.Frames==1)QueueDiagnostics(_renderer.Backend+"; GPU frame submitted");
         }
         catch(Exception error)
         {
@@ -218,6 +250,7 @@ public sealed class CadViewport : WebGpuCanvasElement
     }
     protected override void OnDestroy(WebGpuCanvasContext context)
     {
+        _diagnosticGeneration++;
         FailCapture(new InvalidOperationException("The WebGPU viewport was unloaded."));
         _renderer?.Dispose();
         _renderer=null;
@@ -276,13 +309,13 @@ public sealed class CadViewport : WebGpuCanvasElement
     {
         var point=e.GetCurrentPoint(this);var p=point.Position;
         if(_pointerId is not null&&_pointerId!=e.Pointer.PointerId)return;
-        try{UpdateCursor(p);}catch(Exception error){DiagnosticsChanged?.Invoke(error.Message);}
+        try{UpdateCursor(p);}catch(Exception error){QueueDiagnostics(error.Message);}
         if(_pointerId is null||_active is null)return;
         if(e.Pointer.PointerDeviceType.ToString()=="Mouse"&&!StillPressed(point.Properties.IsLeftButtonPressed,point.Properties.IsMiddleButtonPressed,point.Properties.IsRightButtonPressed)){CancelNavigation();return;}
         _dragged|=Math.Abs(p.X-_start.X)+Math.Abs(p.Y-_start.Y)>3;
         if(_dragged&&_navigation is not null)
             try{_navigation.Move(p.X-_originX,p.Y-_originY);NotifyViewChanged();}
-            catch(Exception error){CancelNavigation();DiagnosticsChanged?.Invoke(error.Message);}
+            catch(Exception error){CancelNavigation();QueueDiagnostics(error.Message);}
         _last=p;e.Handled=true;
     }
     private void Released(object sender,PointerRoutedEventArgs e)
@@ -303,7 +336,7 @@ public sealed class CadViewport : WebGpuCanvasElement
                 ObjectSelectionRequested?.Invoke(picked,e.KeyModifiers);
                 if(hit is not null)ConstructionPointPicked?.Invoke(hit.Point);
             }
-            catch(Exception error){DiagnosticsChanged?.Invoke(error.Message);}
+            catch(Exception error){QueueDiagnostics(error.Message);}
         }
         else if(!_dragged&&button==3)
         {

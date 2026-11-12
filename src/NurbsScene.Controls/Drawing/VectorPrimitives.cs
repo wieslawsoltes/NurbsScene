@@ -162,9 +162,11 @@ public sealed class VectorCanvas(IDrawingSession session)
         try
         {
             Session.Translate(x, y);
+            Session.Scale(run.FontScale, run.FontScale);
             if (run.SkewX != 0) Session.Concat(new Matrix4x4(1, 0, 0, 0, run.SkewX, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1));
             Session.DrawGlyphRun(run.Font, run.Glyphs, run.Positions, 0, paint.Color.Color);
-            if (run.Embolden) Session.StrokeGlyphRun(run.Font, run.Glyphs, run.Positions, 0, paint.Color.Color, run.Size / 32);
+            // Thickness is in canonical-font coordinates; the session transform supplies requested size once.
+            if (run.Embolden) Session.StrokeGlyphRun(run.Font, run.Glyphs, run.Positions, 0, paint.Color.Color, VectorTypeface.CanonicalSize / 32);
         }
         finally { Session.Restore(); }
     }
