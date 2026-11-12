@@ -187,6 +187,8 @@ export class WebGpuRenderer {
       { binding: 0, visibility: GPUShaderStage.COMPUTE, texture: { sampleType: 'float' } },
       { binding: 1, visibility: GPUShaderStage.COMPUTE, storageTexture: { access: 'write-only', format: 'rgba16float' } },
       { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: uniform(32) },
+      { binding: 3, visibility: GPUShaderStage.COMPUTE, texture: { sampleType: 'float' } },
+      { binding: 4, visibility: GPUShaderStage.COMPUTE, texture: { sampleType: 'float' } },
     ] });
     this.compositeLayout = device.createBindGroupLayout({ entries: [
       ...[0, 1, 2, 3].map(binding =>
@@ -354,13 +356,6 @@ export class WebGpuRenderer {
         const bloomUsage = GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING;
         next.bloomA = make('rgba16float', 1, bloomUsage, 'Bloom A', next.halfWidth, next.halfHeight);
         next.bloomB = make('rgba16float', 1, bloomUsage, 'Bloom B', next.halfWidth, next.halfHeight);
-        const group = (source, destination) => this.device.createBindGroup({ layout: this.bloomLayout, entries: [
-          { binding: 0, resource: source.view }, { binding: 1, resource: destination.view },
-          { binding: 2, resource: { buffer: this.bloomParameters, size: 32 } },
-        ] });
-        next.downsampleGroup = group(next.hdr, next.bloomA);
-        next.horizontalGroup = group(next.bloomA, next.bloomB);
-        next.verticalGroup = group(next.bloomB, next.bloomA);
       } catch (error) { this.#destroyCollection(next); throw error; }
       this.#destroyCollection(this.targets); this.targets = next; changed = true;
     }
@@ -377,12 +372,24 @@ export class WebGpuRenderer {
       } catch (error) { this.#destroyCollection(next); throw error; }
       this.#destroyCollection(this.oit); this.oit = next; changed = true;
     }
-    if (changed) this.compositeGroup = this.device.createBindGroup({ layout: this.compositeLayout, entries: [
-      { binding: 0, resource: this.targets.hdr.view }, { binding: 1, resource: this.oit.accum.view },
-      { binding: 2, resource: this.oit.reveal.view }, { binding: 3, resource: this.targets.bloomA.view },
-      { binding: 4, resource: this.linearSampler },
-      { binding: 5, resource: { buffer: this.compositeParameters, size: 32 } },
-    ] });
+    if (changed) {
+      // OIT may transition between a full image and neutral 1x1 targets without
+      // resizing HDR. Rebuild every binding that reads it after both sets exist.
+      const group = (source, destination) => this.device.createBindGroup({ layout: this.bloomLayout, entries: [
+        { binding: 0, resource: source.view }, { binding: 1, resource: destination.view },
+        { binding: 2, resource: { buffer: this.bloomParameters, size: 32 } },
+        { binding: 3, resource: this.oit.accum.view }, { binding: 4, resource: this.oit.reveal.view },
+      ] });
+      this.targets.downsampleGroup = group(this.targets.hdr, this.targets.bloomA);
+      this.targets.horizontalGroup = group(this.targets.bloomA, this.targets.bloomB);
+      this.targets.verticalGroup = group(this.targets.bloomB, this.targets.bloomA);
+      this.compositeGroup = this.device.createBindGroup({ layout: this.compositeLayout, entries: [
+        { binding: 0, resource: this.targets.hdr.view }, { binding: 1, resource: this.oit.accum.view },
+        { binding: 2, resource: this.oit.reveal.view }, { binding: 3, resource: this.targets.bloomA.view },
+        { binding: 4, resource: this.linearSampler },
+        { binding: 5, resource: { buffer: this.compositeParameters, size: 32 } },
+      ] });
+    }
   }
 
   #writeObject(slot, color, metallic, roughness, width = 1) {

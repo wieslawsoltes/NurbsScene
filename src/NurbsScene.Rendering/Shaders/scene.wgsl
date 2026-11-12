@@ -53,21 +53,38 @@ fn fresnelSchlick(cosine: f32, f0: vec3<f32>) -> vec3<f32> {
     return f0 + (vec3<f32>(1.0) - f0) * grazing;
 }
 
-// Correlated Smith visibility and GGX/Trowbridge-Reitz normal distribution.
+// GGX/Trowbridge-Reitz distribution with alpha = perceptualRoughness^2.
+// |N x H|^2 avoids the cancellation in 1 - (N.H)^2 near a sharp peak.
+// At the supported minimum roughness (.04), alpha^2 is still representable;
+// a fixed denominator floor would erase the physically valid specular peak.
+fn distributionGGX(normal: vec3<f32>, halfVector: vec3<f32>, roughness: f32) -> f32 {
+    let alpha = roughness * roughness;
+    let alphaSquared = alpha * alpha;
+    let nDotH = clamp(dot(normal, halfVector), 0.0, 1.0);
+    let crossNH = cross(normal, halfVector);
+    let denominator = dot(crossNH, crossNH) + alphaSquared * nDotH * nDotH;
+    return alphaSquared / (PI * denominator * denominator);
+}
+
+// Height-correlated Smith visibility. Nonzero alpha and NoV keep the sum
+// positive, including a light exactly on the horizon; no highlight-sized floor.
+fn visibilityGGX(nDotV: f32, nDotL: f32, roughness: f32) -> f32 {
+    let alpha = roughness * roughness;
+    let alphaSquared = alpha * alpha;
+    let visibilityV = nDotL * sqrt(nDotV * nDotV * (1.0 - alphaSquared) + alphaSquared);
+    let visibilityL = nDotV * sqrt(nDotL * nDotL * (1.0 - alphaSquared) + alphaSquared);
+    return 0.5 / (visibilityV + visibilityL);
+}
+
+// Correlated Smith visibility and energy-conserving Fresnel diffuse reduction.
 fn directLight(normal: vec3<f32>, view: vec3<f32>, light: vec3<f32>, base: vec3<f32>,
                metallic: f32, roughness: f32, radiance: vec3<f32>) -> vec3<f32> {
     let halfVector = safeNormalize(view + light, normal);
-    let nDotL = max(dot(normal, light), 0.0);
-    let nDotV = max(dot(normal, view), 1e-4);
-    let nDotH = max(dot(normal, halfVector), 0.0);
-    let vDotH = max(dot(view, halfVector), 0.0);
-    let alpha = roughness * roughness;
-    let alphaSquared = alpha * alpha;
-    let denominator = nDotH * nDotH * (alphaSquared - 1.0) + 1.0;
-    let distribution = alphaSquared / max(PI * denominator * denominator, 1e-6);
-    let visibilityV = nDotL * sqrt(nDotV * nDotV * (1.0 - alphaSquared) + alphaSquared);
-    let visibilityL = nDotV * sqrt(nDotL * nDotL * (1.0 - alphaSquared) + alphaSquared);
-    let visibility = 0.5 / max(visibilityV + visibilityL, 1e-5);
+    let nDotL = clamp(dot(normal, light), 0.0, 1.0);
+    let nDotV = clamp(dot(normal, view), 1e-4, 1.0);
+    let vDotH = clamp(dot(view, halfVector), 0.0, 1.0);
+    let distribution = distributionGGX(normal, halfVector, roughness);
+    let visibility = visibilityGGX(nDotV, nDotL, roughness);
     let fresnel = fresnelSchlick(vDotH, mix(vec3<f32>(0.04), base, metallic));
     let diffuse = (vec3<f32>(1.0) - fresnel) * (1.0 - metallic) * base / PI;
     return (diffuse + fresnel * distribution * visibility) * radiance * nDotL;
@@ -106,7 +123,7 @@ fn shadeSurface(input: SurfaceOutput, front: bool) -> vec3<f32> {
     normal = faceForward(normal, -view, normal);
     let base = srgbToLinear(clamp(object.color.rgb, vec3<f32>(0.0), vec3<f32>(1.0)));
     let metallic = clamp(object.material.x, 0.0, 1.0);
-    let roughness = clamp(object.material.y, 0.075, 1.0);
+    let roughness = clamp(object.material.y, 0.04, 1.0);
     let light = safeNormalize(frame.light.xyz, vec3<f32>(0.0, 0.0, 1.0));
     let f0 = mix(vec3<f32>(0.04), base, metallic);
     let fresnel = fresnelSchlick(max(dot(normal, view), 0.0), f0);

@@ -16,7 +16,8 @@ public sealed record WebGpuRenderSettings
     public float BloomStrength { get; init; } = .055f;
     public bool Shadows { get; init; } = true;
     public Vec3 LightDirection { get; init; } = new(-.45, -.6, 1);
-    internal void Validate()
+    /// <summary>Reject invalid settings before replacing the renderer's retained configuration.</summary>
+    public void Validate()
     {
         if (!float.IsFinite(Exposure) || Exposure <= 0 || Exposure > 32
             || !float.IsFinite(Metallic) || Metallic < 0 || Metallic > 1
@@ -42,14 +43,16 @@ public sealed unsafe partial class WebGpuRenderer : IDisposable
     private readonly List<DrawItem> _draws = [];
     private readonly List<PreparedView> _views = [];
     private readonly List<DrawItem>[] _visible = [[], [], [], []];
+    private HashSet<Guid> _casters = [], _nextCasters = [];
     private DisplayScene? _lastScene;
     private long _meshRevision = -1, _itemRevision = -1, _shadowRevision = -1;
     private Vec3 _origin = new(double.NaN, 0, 0);
     private (Vec3 Normal, double Offset)? _shadowClip;
-    private DisplayMode _itemMode, _shadowMode;
-    private WebGpuRenderSettings? _itemSettings, _shadowSettings;
+    private DisplayMode _itemMode;
+    private Vec3 _shadowLight;
+    private float _itemMetallic = float.NaN, _itemRoughness = float.NaN;
     private float[] _objectData = [], _frameData = [];
-    private bool _shadowValid, _hasTransparency;
+    private bool _shadowValid, _shadowEnabled, _hasTransparency;
     private CaptureRequest? _captureRequest;
 
     public WebGpuRenderSettings Settings { get; set; } = new();
@@ -61,6 +64,9 @@ public sealed unsafe partial class WebGpuRenderer : IDisposable
     public int CulledItems { get; private set; }
     public long GeometryUploadBytes { get; private set; }
     public long GeometryUploadCount { get; private set; }
+    public long ShadowPassCount { get; private set; }
+    public long ShadowCasterDrawCount { get; private set; }
+    public long MaterialUploadCount { get; private set; }
     public double LastSubmissionMilliseconds { get; private set; }
 
     private sealed class GpuLines(GpuBuffer* buffer, uint count)
@@ -119,11 +125,13 @@ public sealed unsafe partial class WebGpuRenderer : IDisposable
             foreach (var grid in _grids.Values) Release(ref grid.Buffer);
             _grids.Clear(); _origin = scene.Origin;
         }
-        if (sceneChanged || _itemRevision != scene.Revision || _itemMode != scene.Mode || _itemSettings != settings)
+        if (sceneChanged || _itemRevision != scene.Revision || _itemMode != scene.Mode
+            || _itemMetallic != settings.Metallic || _itemRoughness != settings.Roughness)
         {
             EnsureObjectCapacity(checked(scene.Items.Count * 2 + 1));
             SetObject(0, new(.46f, .50f, .54f, .48f), .8f, settings);
             _draws.Clear();
+            _nextCasters.Clear();
             _hasTransparency = false;
             for (var i = 0; i < scene.Items.Count; i++)
             {
@@ -133,12 +141,17 @@ public sealed unsafe partial class WebGpuRenderer : IDisposable
                 SetObject(surfaceSlot, color, 1, settings);
                 SetObject(lineSlot, item.Selected ? new(1, .62f, .03f) : new(.13f, .27f, .27f, .78f), item.Selected ? 2 : 1.15f, settings);
                 var mesh = _meshes[item.Geometry.Id];
+                if (mesh.Source.Indices.Length > 0 && item.Color.A >= .999f) _nextCasters.Add(item.Geometry.Id);
                 _draws.Add(new(item, mesh, checked((uint)surfaceSlot * _objectStride), checked((uint)lineSlot * _objectStride)));
                 _hasTransparency |= scene.Mode != DisplayMode.Wireframe && mesh.Source.Indices.Length > 0
                     && item.Color.A > 0 && (scene.Mode == DisplayMode.Ghosted || item.Color.A < .999f);
             }
             Write(_objectsBuffer, _objectData.AsSpan(0, checked((scene.Items.Count * 2 + 1) * (int)_objectStride / 4)));
-            _itemRevision = scene.Revision; _itemMode = scene.Mode; _itemSettings = settings;
+            MaterialUploadCount++;
+            if (!_casters.SetEquals(_nextCasters)) _shadowValid = false;
+            (_casters, _nextCasters) = (_nextCasters, _casters);
+            _itemRevision = scene.Revision; _itemMode = scene.Mode;
+            _itemMetallic = settings.Metallic; _itemRoughness = settings.Roughness;
         }
         if (sceneChanged) _shadowValid = false;
         _lastScene = scene;
@@ -163,6 +176,7 @@ public sealed unsafe partial class WebGpuRenderer : IDisposable
         Synchronize(scene, settings); Resize(width, height);
         TriangleCount = LineCount = DrawCalls = CulledItems = 0;
         var light = settings.LightDirection.Normalized();
+        var shadowEnabled = settings.Shadows && scene.Mode == DisplayMode.Shaded;
         var shadowMatrix = WebGpuRenderMath.ShadowMatrix(scene.Bounds, scene.Origin, light, ShadowSize);
         PrepareViews(scene, viewports, shadowMatrix, settings, light);
         Span<float> post = stackalloc float[8]; post.Clear();
@@ -174,15 +188,18 @@ public sealed unsafe partial class WebGpuRenderer : IDisposable
         var encoder = Require(_api.DeviceCreateCommandEncoder(_device, null), "frame command encoder");
         try
         {
-            // The shadow map depends on scene/light changes, never on orbit/pan/zoom.
-            if (!_shadowValid || _shadowRevision != scene.Revision || _shadowClip != scene.ClipPlane || _shadowSettings != settings || _shadowMode != scene.Mode)
+            // Material/selection/exposure changes do not alter a depth-only map.
+            // While disabled, retain the neutral map without redrawing it for light edits.
+            if (!_shadowValid || _shadowEnabled != shadowEnabled || (shadowEnabled
+                && (_shadowRevision != scene.MeshRevision || _shadowClip != scene.ClipPlane || _shadowLight != light)))
             {
-                RenderShadow(encoder, scene, settings.Shadows);
-                _shadowRevision = scene.Revision; _shadowClip = scene.ClipPlane; _shadowSettings = settings; _shadowMode = scene.Mode; _shadowValid = true;
+                RenderShadow(encoder, scene, shadowEnabled);
+                _shadowRevision = scene.MeshRevision; _shadowClip = scene.ClipPlane; _shadowLight = light;
+                _shadowEnabled = shadowEnabled; _shadowValid = true;
             }
             RenderOpaque(encoder, scene);
             RenderTransparency(encoder, scene);
-            RenderBloom(encoder);
+            if (settings.BloomStrength > 0) RenderBloom(encoder);
             Composite(encoder, targetView);
             Submit(encoder); Frames++;
         }
@@ -207,10 +224,12 @@ public sealed unsafe partial class WebGpuRenderer : IDisposable
             if (view.X < 0 || view.Y < 0 || (long)view.X + view.Width > _width || (long)view.Y + view.Height > _height)
                 throw new ArgumentException("A viewport extends outside its render target.");
             var matrix = WebGpuRenderMath.ReverseZCameraMatrix(view.Camera, view.Width, view.Height, scene.Origin);
-            SetFrame(i, matrix, shadowMatrix, view.Camera.Basis().Eye - scene.Origin, scene, settings, light, view.Width, view.Height);
+            SetFrame(i, matrix, shadowMatrix, view.Camera.Basis(scene.Origin).Eye, scene, settings, light, view.Width, view.Height);
             var visible = _visible[i]; visible.Clear();
             foreach (var draw in _draws)
-                if (WebGpuRenderMath.IsVisible(draw.Mesh.Source.Bounds, matrix, scene.Origin)) visible.Add(draw); else CulledItems++;
+                // A curve's centerline may be outside while its screen-space ribbon
+                // still covers edge pixels. Preserve pure curves for GPU clipping.
+                if (draw.Mesh.Source.Indices.Length == 0 || WebGpuRenderMath.IsVisible(draw.Mesh.Source.Bounds, matrix, scene.Origin)) visible.Add(draw); else CulledItems++;
             _views.Add(new(view, checked((uint)i * _frameStride), visible));
             if (scene.ShowGrid && !_grids.ContainsKey(view.Name)) _grids.Add(view.Name, UploadLines(MeshBuilder.Grid(scene.Origin, view.Name)));
         }
@@ -242,13 +261,15 @@ public sealed unsafe partial class WebGpuRenderer : IDisposable
         var depth = new RenderPassDepthStencilAttachment { View = _shadow!.View, DepthLoadOp = LoadOp.Clear, DepthStoreOp = StoreOp.Store, DepthClearValue = 1 };
         var descriptor = new RenderPassDescriptor { DepthStencilAttachment = &depth };
         var pass = Require(_api.CommandEncoderBeginRenderPass(encoder, &descriptor), "shadow pass");
+        ShadowPassCount++;
         try
         {
-            if (!enabled || scene.Mode == DisplayMode.Wireframe) return;
+            if (!enabled || scene.Mode != DisplayMode.Shaded) return;
             _api.RenderPassEncoderSetPipeline(pass, _shadowPipeline);
             var offset = 4 * _frameStride; _api.RenderPassEncoderSetBindGroup(pass, 0, _shadowGroup, 1, &offset);
             foreach (var draw in _draws)
-                if (draw.Mesh.Source.Indices.Length > 0 && draw.Item.Color.A >= .999f) DrawMesh(pass, draw.Mesh, false);
+                if (draw.Mesh.Source.Indices.Length > 0 && draw.Item.Color.A >= .999f)
+                { DrawMesh(pass, draw.Mesh, false); ShadowCasterDrawCount++; }
         }
         finally { _api.RenderPassEncoderEnd(pass); _api.RenderPassEncoderRelease(pass); }
     }

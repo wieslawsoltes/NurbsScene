@@ -48,6 +48,41 @@ GPU_TEST = r"""async ({sources, software}) => {
       usage: GPUTextureUsage.RENDER_ATTACHMENT | extra});
     owned.push(result); return result;
   };
+  // Evaluate the production BRDF in float32 storage, not an RGBA16 target that
+  // cannot represent GGX's valid .04-roughness peak. The aligned closed form
+  // D = 1 / (pi * roughness^4) is independent of the shader's vector algorithm.
+  const brdfProbe = device.createShaderModule({code: sources.scene + `
+    @group(2) @binding(0) var<storage, read_write> brdfResults: array<vec4<f32>>;
+    @compute @workgroup_size(1) fn probeBRDF(@builtin(global_invocation_id) id: vec3<u32>) {
+      let roughness = array<f32,5>(.04,.075,.12,.36,1.0)[id.x / 2u];
+      let cosine = select(1.0, 1e-4, id.x % 2u == 1u);
+      let normal = vec3<f32>(0.0,0.0,1.0);
+      brdfResults[id.x] = vec4<f32>(distributionGGX(normal,normal,roughness),
+        visibilityGGX(cosine,cosine,roughness),
+        directLight(normal,normal,normal,vec3<f32>(.5),0.0,roughness,vec3<f32>(1.0)).r,0.0);
+    }`});
+  const brdfPipeline = await device.createComputePipelineAsync({layout:'auto',compute:{module:brdfProbe,entryPoint:'probeBRDF'}});
+  const brdfOutput = device.createBuffer({size:160,usage:GPUBufferUsage.STORAGE|GPUBufferUsage.COPY_SRC});
+  const brdfReadback = device.createBuffer({size:160,usage:GPUBufferUsage.COPY_DST|GPUBufferUsage.MAP_READ});
+  owned.push(brdfOutput,brdfReadback);
+  const brdfEncoder=device.createCommandEncoder(),brdfPass=brdfEncoder.beginComputePass();
+  brdfPass.setPipeline(brdfPipeline);
+  for(let group=0;group<2;group++)brdfPass.setBindGroup(group,device.createBindGroup({layout:brdfPipeline.getBindGroupLayout(group),entries:[]}));
+  brdfPass.setBindGroup(2,device.createBindGroup({layout:brdfPipeline.getBindGroupLayout(2),entries:[{binding:0,resource:{buffer:brdfOutput}}]}));
+  brdfPass.dispatchWorkgroups(10);brdfPass.end();brdfEncoder.copyBufferToBuffer(brdfOutput,0,brdfReadback,0,160);
+  device.queue.submit([brdfEncoder.finish()]);await brdfReadback.mapAsync(GPUMapMode.READ);
+  const brdfValues=new Float32Array(brdfReadback.getMappedRange()).slice();brdfReadback.unmap();
+  check(brdfValues.every(Number.isFinite),'GGX peak and grazing evaluations stay finite across the complete public roughness range');
+  report.brdfPeaks=[];
+  for(const [index,roughness] of [.04,.075,.12,.36,1].entries()) {
+    const peak=1/(Math.PI*roughness**4),actual=brdfValues[index*8];
+    const grazing=1/(4e-4*Math.sqrt(1e-8*(1-roughness**4)+roughness**4));
+    check(Math.abs(actual/peak-1)<2e-5 && Math.abs(brdfValues[index*8+5]/grazing-1)<2e-5,
+      'GGX distribution and correlated Smith grazing visibility match closed forms at roughness '+roughness);
+    const reflected=.5*.96/Math.PI+.04*peak/4;
+    check(Math.abs(brdfValues[index*8+2]/reflected-1)<2e-5,'direct lighting preserves the analytic Fresnel/GGX peak at roughness '+roughness);
+    report.brdfPeaks.push({roughness,expected:peak,actual});
+  }
   const frameBytes = new Float32Array(64);
   for (const offset of [0,16]) for (let i=0;i<4;i++) frameBytes[offset+i*5]=1;
   frameBytes.set([0,0,3,1],32);
@@ -103,7 +138,9 @@ GPU_TEST = r"""async ({sources, software}) => {
   const bloomLayout = device.createBindGroupLayout({entries:[
     {binding:0,visibility:GPUShaderStage.COMPUTE,texture:{sampleType:'float'}},
     {binding:1,visibility:GPUShaderStage.COMPUTE,storageTexture:{access:'write-only',format:'rgba16float'}},
-    {binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:'uniform',minBindingSize:32}}]});
+    {binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:'uniform',minBindingSize:32}},
+    {binding:3,visibility:GPUShaderStage.COMPUTE,texture:{sampleType:'float'}},
+    {binding:4,visibility:GPUShaderStage.COMPUTE,texture:{sampleType:'float'}}]});
   const bloomPipelineLayout = device.createPipelineLayout({bindGroupLayouts:[bloomLayout]});
   const bloomPipelines = {};
   for (const entryPoint of ['downsample','blurHorizontal','blurVertical'])
@@ -149,7 +186,8 @@ GPU_TEST = r"""async ({sources, software}) => {
     const revealView=revealTex.createView(),revealMsView=revealMs.createView(),depthView=depth.createView(),outputView=output.createView();
     const bloomAView=bloomA.createView(),bloomBView=bloomB.createView();
     const bloomGroup=(source,target)=>device.createBindGroup({layout:bloomLayout,entries:[
-      {binding:0,resource:source},{binding:1,resource:target},{binding:2,resource:{buffer:bloomParameters}}]});
+      {binding:0,resource:source},{binding:1,resource:target},{binding:2,resource:{buffer:bloomParameters}},
+      {binding:3,resource:accumView},{binding:4,resource:revealView}]});
     const bloomGroups=[bloomGroup(hdrView,bloomAView),bloomGroup(bloomAView,bloomBView),bloomGroup(bloomBView,bloomAView)];
     const composeGroup=device.createBindGroup({layout:compose.getBindGroupLayout(0),entries:[
       {binding:0,resource:hdrView},{binding:1,resource:accumView},{binding:2,resource:revealView},
@@ -216,6 +254,14 @@ GPU_TEST = r"""async ({sources, software}) => {
   const ghostAB=await h.render({ghost:[2,3]});const ghostBA=await h.render({ghost:[3,2]});
   check(delta(empty,ghostAB)>300,'weighted OIT produces visible transparent surfaces');
   check(maxDelta(ghostAB,ghostBA)<=1,'weighted OIT is independent of transparent object order');
+  const savedFrame=frameBytes.slice(),savedObjects=objectBytes.slice();
+  frameBytes.set([0,0,1e6],32);frameBytes.set([0,0,1,0],44);frameBytes[49]=0;frameBytes[50]=.0001;
+  setObject(0,[1,1,1,1],.04);device.queue.writeBuffer(object,0,objectBytes);
+  const smoothPeak=await h.render({opaque:[0]});
+  setObject(0,[1,1,1,1],.075);device.queue.writeBuffer(object,0,objectBytes);
+  const rougherPeak=await h.render({opaque:[0]});
+  check(smoothPeak[center]>rougherPeak[center]+60,'surface shader honors .04 roughness instead of silently clamping to .075');
+  frameBytes.set(savedFrame);objectBytes.set(savedObjects);device.queue.writeBuffer(object,0,objectBytes);
   const clipped=await h.render({opaque:[0],clip:true});
   const left=(Math.floor(h.height/2)*h.width+Math.floor(h.width*.35))*4;
   const right=(Math.floor(h.height/2)*h.width+Math.floor(h.width*.65))*4;
@@ -230,6 +276,22 @@ GPU_TEST = r"""async ({sources, software}) => {
   check(delta(distantBase,distantCoplanar)>10,'coplanar distant CAD curves remain visible with relative depth bias');
   const bloomed=await h.render({opaque:[0],bloom:.6});
   check(delta(unshadowed,bloomed)>30,'compute bloom modifies the HDR composite');
+  setObject(2,[1,1,1,.65]);device.queue.writeBuffer(object,0,objectBytes);
+  const transparentBase=await h.render({ghost:[2]});
+  const transparentBloom=await h.render({ghost:[2],bloom:.6});
+  const halo=(60*h.width+Math.floor(h.width/2))*4;
+  check([0,1,2].every(c=>transparentBase[halo+c]===empty[halo+c])
+      && [0,1,2].some(c=>transparentBloom[halo+c]>transparentBase[halo+c]+2),
+    'transparent highlights produce a visible bloom halo outside their geometry');
+  const occludedBloom=await h.render({opaque:[0],ghost:[3],bloom:.6});
+  check(maxDelta(bloomed,occludedBloom)<=1,'opaque depth occlusion also excludes hidden transparent highlights from bloom');
+  const transparentPartitionBase=await h.render({ghost:[2],clip:true,quad:true});
+  const transparentPartitionBloom=await h.render({ghost:[2],clip:true,quad:true,bloom:.6});
+  let transparentLeftDelta=0;
+  for(let y=0;y<65;y++)for(let x=0;x<47;x++)for(let c=0;c<3;c++)
+    transparentLeftDelta=Math.max(transparentLeftDelta,Math.abs(transparentPartitionBase[(y*97+x)*4+c]-transparentPartitionBloom[(y*97+x)*4+c]));
+  check(transparentLeftDelta<=1,'transparent bloom remains isolated to its own CAD viewport');
+  objectBytes.set(savedObjects);device.queue.writeBuffer(object,0,objectBytes);
   const partitionBase=await h.render({opaque:[0],clip:true,quad:true});
   const partitionBloom=await h.render({opaque:[0],clip:true,quad:true,bloom:.6});
   let leftDelta=0;

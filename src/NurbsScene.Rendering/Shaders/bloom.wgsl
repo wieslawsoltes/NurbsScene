@@ -4,6 +4,8 @@ struct BloomParameters { settings: vec4<f32>, reserved: vec4<f32> };
 @group(0) @binding(0) var source: texture_2d<f32>;
 @group(0) @binding(1) var destination: texture_storage_2d<rgba16float, write>;
 @group(0) @binding(2) var<uniform> parameters: BloomParameters;
+@group(0) @binding(3) var accumulation: texture_2d<f32>;
+@group(0) @binding(4) var revealage: texture_2d<f32>;
 
 // reserved.xy is the first separator pixel; reserved.zw is separator thickness.
 // Keep each tap in its CAD view, including when a two-pixel footprint meets a gap.
@@ -30,6 +32,20 @@ fn loadClamped(position: vec2<i32>, bounds: vec4<i32>) -> vec3<f32> {
     return textureLoad(source, clamp(position, bounds.xy, bounds.zw), 0).rgb;
 }
 
+// Resolve the same linear HDR scene as composite before threshold extraction.
+// Keeping this in the downsample avoids a full-resolution intermediate/pass.
+// The neutral opaque-only OIT textures are 1x1, so each load uses its own extent.
+fn loadComposed(position: vec2<i32>, bounds: vec4<i32>) -> vec3<f32> {
+    let pixel = clamp(position, bounds.xy, bounds.zw);
+    let accumPixel = clamp(pixel, vec2<i32>(0), vec2<i32>(textureDimensions(accumulation)) - vec2<i32>(1));
+    let revealPixel = clamp(pixel, vec2<i32>(0), vec2<i32>(textureDimensions(revealage)) - vec2<i32>(1));
+    let background = textureLoad(source, pixel, 0).rgb;
+    let accumulated = textureLoad(accumulation, accumPixel, 0);
+    let transmission = clamp(textureLoad(revealage, revealPixel, 0).r, 0.0, 1.0);
+    let transparent = min(accumulated.rgb, vec3<f32>(65504.0)) / clamp(accumulated.a, 1e-5, 65504.0);
+    return mix(transparent, background, transmission);
+}
+
 @compute @workgroup_size(8, 8)
 fn downsample(@builtin(global_invocation_id) id: vec3<u32>) {
     let dimensions = textureDimensions(destination);
@@ -40,8 +56,8 @@ fn downsample(@builtin(global_invocation_id) id: vec3<u32>) {
         textureStore(destination, vec2<i32>(id.xy), vec4<f32>(0.0));
         return;
     }
-    let color = (loadClamped(position, bounds) + loadClamped(position + vec2<i32>(1, 0), bounds)
-        + loadClamped(position + vec2<i32>(0, 1), bounds) + loadClamped(position + vec2<i32>(1, 1), bounds)) * 0.25;
+    let color = (loadComposed(position, bounds) + loadComposed(position + vec2<i32>(1, 0), bounds)
+        + loadComposed(position + vec2<i32>(0, 1), bounds) + loadComposed(position + vec2<i32>(1, 1), bounds)) * 0.25;
     let threshold = max(parameters.settings.x, 0.0);
     let knee = max(parameters.settings.y, 1e-4);
     let brightness = max(color.r, max(color.g, color.b));

@@ -214,6 +214,25 @@ PACKAGE_TEST = r"""async ({software}) => {
     renderer.setOptions({bloomStrength:.5,bloomThreshold:.3,bloomKnee:.2});
     check(difference(noBloom,await capture()).pixels > 100, 'compute bloom changes actual HDR composition');
 
+    // Raise only the geometry above the extraction threshold. The neutral
+    // backdrop stays below it, so an exterior halo proves OIT enters bloom.
+    const brightGhost = fixture('bright-ghost', .3, .5, [1,1,1,.8]);
+    renderer.setOptions({lightIntensity:8,bloomStrength:0,bloomThreshold:1.2,bloomKnee:.05});
+    install([brightGhost]);
+    const ghostNoBloom = await capture();
+    renderer.setOptions({bloomStrength:.6});
+    const ghostBloom = await capture();
+    const haloY=Math.floor(canvas.height/2-.5*canvas.height/camera.scale)-3;
+    const halo=(haloY*canvas.width+Math.floor(canvas.width/2))*4;
+    check([0,1,2].every(channel=>ghostNoBloom[halo+channel]===empty[halo+channel]) &&
+      [0,1,2].some(channel=>ghostBloom[halo+channel]>ghostNoBloom[halo+channel]+2),
+      'transparent-only HDR highlights bloom outside their surface after full OIT target creation');
+    install([]); const afterTransparent = await capture();
+    check(difference(empty,afterTransparent,0).pixels===0 && renderer.metrics.oitSize.join(',')==='1,1',
+      'returning to compact OIT removes transparent bloom without stale texture bindings');
+    renderer.setOptions({lightIntensity:3.2,bloomStrength:.5,bloomThreshold:.3,bloomKnee:.2});
+    install([ground,caster]);
+
     scene.mode = 'Ghosted'; await capture();
     check(renderer.metrics.oitSize.join(',') === canvas.width+','+canvas.height,
       'Ghosted mode enters weighted OIT');

@@ -150,7 +150,7 @@ public sealed unsafe partial class WebGpuRenderer
         _frameLayout = Layout([Uniform(0, 256, ShaderStage.Vertex | ShaderStage.Fragment, true), Sampled(1, ShaderStage.Fragment, TextureSampleType.Depth), SamplerEntry(2, SamplerBindingType.Comparison)]);
         _objectLayout = Layout([Uniform(0, 32, ShaderStage.Vertex | ShaderStage.Fragment, true)]);
         _shadowLayout = Layout([Uniform(0, 256, ShaderStage.Vertex | ShaderStage.Fragment, true)]);
-        _bloomLayout = Layout([Sampled(0, ShaderStage.Compute), new() { Binding = 1, Visibility = ShaderStage.Compute, StorageTexture = new() { Access = StorageTextureAccess.WriteOnly, Format = TextureFormat.Rgba16float, ViewDimension = TextureViewDimension.Dimension2D } }, Uniform(2, 32, ShaderStage.Compute)]);
+        _bloomLayout = Layout([Sampled(0, ShaderStage.Compute), new() { Binding = 1, Visibility = ShaderStage.Compute, StorageTexture = new() { Access = StorageTextureAccess.WriteOnly, Format = TextureFormat.Rgba16float, ViewDimension = TextureViewDimension.Dimension2D } }, Uniform(2, 32, ShaderStage.Compute), Sampled(3, ShaderStage.Compute), Sampled(4, ShaderStage.Compute)]);
         _compositeLayout = Layout([Sampled(0, ShaderStage.Fragment), Sampled(1, ShaderStage.Fragment), Sampled(2, ShaderStage.Fragment), Sampled(3, ShaderStage.Fragment), SamplerEntry(4, SamplerBindingType.Filtering), Uniform(5, 32, ShaderStage.Fragment)]);
         var sceneLayout = PipelineLayout([(nint)_frameLayout, (nint)_objectLayout]);
         var shadowLayout = PipelineLayout([(nint)_shadowLayout]);
@@ -308,7 +308,7 @@ public sealed unsafe partial class WebGpuRenderer
         catch { ReleaseTargets(); throw; }
     }
     private BindGroup* BloomGroup(TextureView* source, TextureView* destination) => Group(_bloomLayout,
-        [new() { Binding = 0, TextureView = source }, new() { Binding = 1, TextureView = destination }, new() { Binding = 2, Buffer = _bloomParameters, Size = 32 }]);
+        [new() { Binding = 0, TextureView = source }, new() { Binding = 1, TextureView = destination }, new() { Binding = 2, Buffer = _bloomParameters, Size = 32 }, new() { Binding = 3, TextureView = _accum!.View }, new() { Binding = 4, TextureView = _reveal!.View }]);
     private void ReleaseTargets()
     {
         Release(ref _downsampleGroup); Release(ref _horizontalGroup); Release(ref _verticalGroup); Release(ref _compositeGroup);
