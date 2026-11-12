@@ -26,6 +26,10 @@ public sealed class CommandConsole : Grid
     public int HistoryCount=>_history.Count;
     public bool HistoryExpanded {get;private set;}
     public string InputText=>_input.Text;
+    /// <summary>Whether canvas text is awaiting the deferred native command-input focus transfer.</summary>
+    public bool IsCanvasFocusPending=>_canvasFocusQueued;
+    /// <summary>A canvas-entered draft waiting for native command-input focus.</summary>
+    public bool HasPendingCanvasCommand=>_canvasFocusQueued&&_input.Text.Length>0;
     public string HistoryText=>_log.Text;
     public CommandConsole()
     {
@@ -79,6 +83,13 @@ public sealed class CommandConsole : Grid
     {
         try{var command=string.IsNullOrWhiteSpace(input)?_repeatCommand:_history.Submit(input);SetText("");_input.IsSuggestionListOpen=false;if(command is not null)CommandSubmitted?.Invoke(command);}
         catch(Exception error){WriteLine(error.Message);}
+    }
+    /// <summary>Submits a canvas draft when Enter arrives before its queued focus transfer.</summary>
+    public bool TrySubmitPendingCanvasCommand()
+    {
+        if(!HasPendingCanvasCommand)return false;
+        Submit(_input.Text);
+        return true;
     }
     public void Repeat()=>Submit("");
     public void Remember(string command,bool repeatable=true){if(string.Equals(command,"Cancel",StringComparison.OrdinalIgnoreCase))return;_history.Submit(command);if(repeatable)_repeatCommand=command;}

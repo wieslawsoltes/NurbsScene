@@ -39,6 +39,7 @@ public sealed partial class GraphCanvas
         => GraphSelectionModifiers.Mode(Shift(modifiers), (modifiers & VirtualKeyModifiers.Control) != 0);
     private void ClearPointerDrafts()
     {
+        _pendingDoubleTap = null;
         _activePointerId = null; _pointerButton = 0; _dragPositions = null; _marqueeBefore = null; _navigationBefore = null;
     }
     private void InitializePointerInput()
@@ -143,6 +144,7 @@ public sealed partial class GraphCanvas
         if (_gesture == "" || _session is null) return;
         _lastPointerModifiers = e.KeyModifiers;
         _moved |= Math.Abs(point.X - _start.X) + Math.Abs(point.Y - _start.Y) > 2;
+        if (_moved) _pendingDoubleTap = null;
         try
         {
             if (_gesture is "pan" or "zoom") MoveNavigation(point);
@@ -166,6 +168,7 @@ public sealed partial class GraphCanvas
             || (_pointerButton == 3 && release.Properties.IsRightButtonPressed))
         { e.Handled = true; return; }
         Point? context = null;
+        DoubleTapActivation? activation = null;
         try
         {
             var screen = release.Position;
@@ -173,6 +176,7 @@ public sealed partial class GraphCanvas
             // Pointer-release coordinates are authoritative, even when the final
             // move event was coalesced or never delivered by the host.
             _moved |= Math.Abs(screen.X - _start.X) + Math.Abs(screen.Y - _start.Y) > 2;
+            if (!_moved) activation = _pendingDoubleTap;
             Observe("Released", screen);
             if (_gesture == "zoom") MoveNavigation(screen);
             else if (_gesture == "pan")
@@ -204,13 +208,14 @@ public sealed partial class GraphCanvas
                 Observe("SelectionCommitted", screen);
             }
         }
-        catch (Exception error) { CancelGesture(); Message?.Invoke(error.Message); }
+        catch (Exception error) { activation = null; CancelGesture(); Message?.Invoke(error.Message); }
         finally
         {
             CancelPanelScroll(false); ClearPanelResize(); ClearPointerDrafts(); _gesture = ""; _wire = null; _before = null; _slider = null;
             ReleasePointerCapture(e.Pointer); Invalidate(); SelectionChanged?.Invoke(); e.Handled = true;
         }
         if (context is { } point) ContextMenuRequested?.Invoke(point);
+        if (activation is not null) ActivateDoubleTap(activation);
     }
     private void AbandonStalePointerEdit()
     {

@@ -1,4 +1,4 @@
-# Panel typography, measured alignment and retained native text
+# Panel typography, measured alignment and retained WebGPU text
 
 Text and Panel offer a draft-only Typography dialog through their context menu
 or Ctrl+double-click. Family name, size (6–72 canvas units at 100%), bold, italic,
@@ -7,62 +7,69 @@ draft; Cancel and unchanged Apply preserve history. Optional `PanelTextStyle`
 metadata survives workspace/fragment/duplicate round trips; restoring defaults
 removes it. Typography changes do not alter numerical parameters, outputs, node
 bounds or wire paths. Stale owners and invalid serialized settings reject before
-changing the active graph. Font names cannot contain file/URI syntax; no font is
-embedded, downloaded or exported by this feature.
+changing the active graph. Font names cannot contain file/URI syntax.
 
-The native body renderer uses the chosen Skia typeface (with explicit synthetic
-bold/italic when necessary) to measure and draw the same text. The resolved family
-is observable, since unavailable family names may be substituted by the host.
-Alignment uses measured advances and ascent/descent rather than character-count
-estimates. Large panels retain the eight-pixel readability floor. Body ink is
-clipped separately from the heading and footer; overlong rows remain left-anchored
-so their beginning is visible. Font size changes the bounded row/column budget.
+## Uno 7 drawing and font resources
+
+The application body renderer uses Uno's managed font and shaping interfaces,
+retains shaped glyph runs, and draws through the WebGPU backend. The chosen or
+substituted font measures and draws the same text. The resolved family is
+observable because unavailable names may be substituted. Alignment uses measured
+advances and ascent/descent rather than character counts. Large panels retain the
+eight-pixel readability floor. Body ink is clipped separately from the heading and
+footer; overlong rows remain left-anchored so their beginning is visible. Font size
+changes the bounded row/column budget.
+
+The application embeds DejaVu Sans regular, bold, oblique and bold-oblique fonts
+for offline fallback. Their [license](../src/NurbsScene.Controls/Drawing/Fonts/LICENSE-DejaVu.txt)
+is included with the library and copied to output/publication. A document stores
+only style metadata; it neither contains font binaries nor downloads a selected
+family. Host font availability can still affect appearance.
 
 `PanelTextPlacementCache` retains local-coordinate positions and measured widths.
 Changing alignment reuses measurements; translating, selecting or panning reuses
 positions too. Failed measurements cannot poison the previous cache. Public layout
 validation rejects negative offsets, excessive budgets and invalid metrics.
-`PanelTypographyRenderer` retains Skia text blobs, capped at 128 panel entries and
+`PanelTypographyRenderer` retains glyph resources, capped at 128 panel entries and
 16 typeface entries with least-recently-used eviction. Deletion, graph replacement,
-unload and disposal clear the appropriate native resources. Drawing never stores
-native resources in the authoritative graph or serializable metadata.
+unload and disposal clear the appropriate resources. Drawing never stores GPU or
+font resources in the authoritative graph or serializable metadata.
 
-The native dialog preview uses Uno TextBlock, whereas the canvas uses Skia. Font
-resolution may differ. Skia's simple text-blob construction does not provide
-complex-script shaping, kerning, per-character fallback or complete bidi behavior.
-The existing bounded formatter segments complete graphemes, but segmentation is
-not shaping. Wrapping still uses a bounded approximate column budget, not a new
-pixel-measured paragraph layout. Full font fallback/shaping, panel scrolling,
-original application parity and a direct Uno WebGPU backend remain separate work.
+The dialog preview uses Uno TextBlock and the canvas uses the custom drawing
+adapter; their font resolution and caches can differ. Shaping individual runs does
+not establish full mixed-direction paragraph layout, per-character fallback or
+every script's visual quality. The bounded formatter segments complete graphemes,
+and wrapping still uses an approximate column budget rather than pixel-measured
+paragraph layout. [Panel item scrolling](PANEL-SCROLLING.md) remains available with
+its documented limits. The [migration journal](UNO7-WEBGPU-MIGRATION.md) documents
+the shared-device WebGPU adapter and rendering qualification.
 
 ## Validation
 
 The core contracts cover style validation, history, exact interchange, immutable
 output/path identity, all nine alignments, cache recovery and randomized placement.
-The native raster executable links the production renderer source against pinned
-SkiaSharp 3.119.2. It compares actual pixels with an immediate-text reference,
-checks changes from size/style/alignment, clipping, bounded eviction and disposal.
-A same-process CPU benchmark compares retained text blobs with immediate calls
-using identical placement; it is not a before/after whole-app or GPU/FPS benchmark.
-No font binaries are included in artifacts.
+The standalone raster executable defines `NURBSSCENE_SKIA_RASTER_TEST` and retains
+the pinned SkiaSharp 3.119.2 branch as a CPU reference for existing layout/cache
+contracts. It compares pixels with an immediate-text reference and checks
+size/style/alignment, clipping, bounded eviction and disposal. These CPU reference
+pixels and timings do not qualify production WebGPU rendering.
 
-`typography.yml` runs these suites. `test_typography_ui.py` is the seventh mandatory
-actual Uno mouse/keyboard campaign. It checks dialog validation, atomic Apply,
-Cancel/no-op/Reset, measured alignment, native menu cache reuse, exact duplication
-and restoration. Six existing campaigns and all differential framebuffer checks
-remain mandatory. Compilation or numerical contracts alone do not qualify the UI;
-use final-commit workflow artifacts for completed results.
+`typography.yml` continues to run those suites. `test_typography_ui.py` remains a
+mandatory actual Uno mouse/keyboard campaign. It checks dialog validation, atomic
+Apply, Cancel/no-op/Reset, measured alignment, menu cache reuse, exact duplication
+and restoration. All ten registered campaigns and differential framebuffer checks
+remain mandatory; the production WGSL pipeline job adds shader/API coverage.
+Compilation or numerical contracts alone do not qualify the UI. Consult the
+exact commit/tree workflow artifacts for results on the reconstructed source.
 
-The interrupted native implementation was preserved verbatim in recovery commit
-40a4b709. The first recovered Uno build diagnosed an obsolete Windows.UI.Text
-FontWeights reference; the dialog now uses Microsoft.UI.Text.FontWeights. This
-recovery checkpoint was not represented as qualified or merged.
+## Historical implementation evidence
 
-References:
-- https://api.skia.org/classSkFont.html (advance widths and font metrics)
-- https://api.skia.org/classSkTextBlob.html (retained runs and simple mapping limits)
-- https://discourse.mcneel.com/t/no-grasshopper-panel-text-options-in-rhino-8-sr6/181096
-  (panel property editing and alignment entry points as behavioral references)
+The account below records the earlier Skia renderer and its original qualification
+revision. Its shaping restrictions and CPU measurements are historical evidence;
+the current Uno 7/WebGPU path is described above. Recovery commit `40a4b709`
+preserved that interrupted implementation, and its first recovered build corrected
+an obsolete `Windows.UI.Text.FontWeights` reference to
+`Microsoft.UI.Text.FontWeights`.
 
 ## Solve/paint handoff and equal-output cache review
 

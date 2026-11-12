@@ -7,13 +7,14 @@
     "./camera": "./camera.js",
     "./picking": "./picking.js",
     "./shaders": "./shaders.js",
+    "./render-math": "./render-math.js",
     "./*.js": "./*.js"
   },
   "files": [
     "*.js"
   ],
   "license": "MIT",
-  "description": "Camera-relative WebGPU/WebGL2 CAD renderer with PBR shading, analytic screen-space lines and BVH selection.",
+  "description": "WebGPU CAD renderer with shared HDR PBR shaders, reverse-Z, 4x MSAA, weighted transparency, PCF shadows and BVH selection.",
   "dependencies": {
     "@nurbsscene/geometry": "0.1.0-alpha.1"
   },

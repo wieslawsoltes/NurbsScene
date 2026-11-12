@@ -97,5 +97,5 @@ public sealed class ViewportPropertiesPanel : StackPanel,IDisposable
         }
         catch(Exception error){_error.Text=error.Message;}
     }
-    public void Dispose(){if(_disposed)return;_disposed=true;_refreshTimer.Stop();_viewport.ViewChanged-=QueueRefresh;_viewport.SizeChanged-=OnSizeChanged;}
+    public new void Dispose(){if(_disposed)return;_disposed=true;_refreshTimer.Stop();_viewport.ViewChanged-=QueueRefresh;_viewport.SizeChanged-=OnSizeChanged;base.Dispose();}
 }

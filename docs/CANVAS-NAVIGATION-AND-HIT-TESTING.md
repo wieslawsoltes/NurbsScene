@@ -1,5 +1,9 @@
 # Canvas navigation and port-query review
 
+> Rendering statements and validation results below describe the recorded revision.
+> The current Uno 7/WebGPU architecture and its per-commit qualification are documented
+> in the [migration journal](UNO7-WEBGPU-MIGRATION.md).
+
 ## Behavior
 
 Control plus right-button dragging zooms about the pointer-down anchor; upward

@@ -54,7 +54,9 @@ async def verify_graph_inputs_ui(page):
     check(any('{0}' in t for t in data['previewLines']),'Inspector displays bounded path and exact-geometry metadata previews')
     await page.screenshot(path=str(ROOT/'evidence/uno-data-preview.png'))
     await control('GraphProperties');await control('GraphFit')
-    width=await node('Width');before=await read()
+    # The jitter press selects Width itself. A preparatory click would turn the
+    # jitter into a real double-click and legitimately open the slider editor.
+    before=await read();width=next(n for n in before['nodes'] if n['name']=='Width')
     at=(width['x']+width['width']/2,width['y']+5)
     await page.mouse.move(*at);await page.mouse.down();await page.mouse.move(at[0]+.5,at[1]+.5);await page.mouse.up();await settle(page)
     after=await read();n=next(n for n in after['nodes'] if n['id']==width['id'])

@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "minimumModelingChecks": 30,
+  "minimumModelingChecks": 33,
   "campaigns": [
     {
       "name": "workspace",
@@ -40,7 +40,7 @@
     },
     {
       "name": "rhino-workspace",
-      "minimumUiChecks": 56
+      "minimumUiChecks": 64
     }
   ]
 }

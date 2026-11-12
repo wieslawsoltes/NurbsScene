@@ -1,5 +1,9 @@
 > Historical local review. Its later divergence is reconciled in [the current panel-edge review](RECONCILED-PANEL-REVIEW.md); the validation statements below apply to their recorded commits.
 
+> Rendering statements and validation results below describe the recorded revision.
+> The current Uno 7/WebGPU architecture and its per-commit qualification are documented
+> in the [migration journal](UNO7-WEBGPU-MIGRATION.md).
+
 # Panel layout, input lifetime and canvas performance
 
 ## Implementation

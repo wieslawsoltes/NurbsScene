@@ -3,7 +3,8 @@
   <ItemGroup>
     <ProjectReference Include="../NurbsScene.Geometry/NurbsScene.Geometry.csproj" />
     <ProjectReference Include="../NurbsScene.Kernel/NurbsScene.Kernel.csproj" />
-    <PackageReference Include="Silk.NET.OpenGL" Version="2.23.0" />
-    <EmbeddedResource Include="Shaders/*.glsl" />
+    <PackageReference Include="Silk.NET.WebGPU" Version="2.23.0" />
+    <EmbeddedResource Include="Shaders/*.wgsl" />
+    <EmbeddedResource Include="Lighting/studio.ibl.gz" />
   </ItemGroup>
 </Project>

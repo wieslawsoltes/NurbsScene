@@ -22,16 +22,19 @@ public sealed class Camera(string name="Perspective")
             ||FieldOfView<=0||FieldOfView>=Math.PI||!double.IsFinite(FarClip))
             throw new ArgumentException("Invalid camera parameters.");
     }
-    public (Vec3 Eye,Vec3 Forward,Vec3 Right,Vec3 Up) Basis()
+    public (Vec3 Eye,Vec3 Forward,Vec3 Right,Vec3 Up) Basis()=>Basis(Vec3.Zero);
+    /// <summary>Subtract the world origin before adding the orbit offset, retaining local camera precision.</summary>
+    public (Vec3 Eye,Vec3 Forward,Vec3 Right,Vec3 Up) Basis(Vec3 origin)
     {
         Validate();
+        if(!origin.IsFinite)throw new ArgumentException("A finite camera origin is required.",nameof(origin));
         var offset=Name switch{"Top"=>new Vec3(0,0,Distance),"Front"=>new(0,-Distance,0),"Right"=>new(Distance,0,0),_=>new(Distance*Math.Cos(Elevation)*Math.Cos(Azimuth),Distance*Math.Cos(Elevation)*Math.Sin(Azimuth),Distance*Math.Sin(Elevation))};
-        var forward=(-offset).Normalized();var right=Vec3.Cross(forward,Name=="Top"?Vec3.UnitY:Vec3.UnitZ).Normalized();return(Target+offset,forward,right,Vec3.Cross(right,forward));
+        var forward=(-offset).Normalized();var right=Vec3.Cross(forward,Name=="Top"?Vec3.UnitY:Vec3.UnitZ).Normalized();return((Target-origin)+offset,forward,right,Vec3.Cross(right,forward));
     }
     public Transform3 Matrix(int width,int height,Vec3 origin)
     {
         if(width<=0||height<=0||!origin.IsFinite)throw new ArgumentException("Invalid viewport dimensions or origin.");
-        var(eye,forward,right,up)=Basis();eye-=origin;var backward=-forward;var view=new Transform3([right.X,up.X,backward.X,0,right.Y,up.Y,backward.Y,0,right.Z,up.Z,backward.Z,0,-Vec3.Dot(right,eye),-Vec3.Dot(up,eye),-Vec3.Dot(backward,eye),1]);
+        var(eye,forward,right,up)=Basis(origin);var backward=-forward;var view=new Transform3([right.X,up.X,backward.X,0,right.Y,up.Y,backward.Y,0,right.Z,up.Z,backward.Z,0,-Vec3.Dot(right,eye),-Vec3.Dot(up,eye),-Vec3.Dot(backward,eye),1]);
         var aspect=width/(double)Math.Max(1,height);var near=NearClip;var far=FarClip;Transform3 projection;
         if(Perspective){var f=1/Math.Tan(FieldOfView/2);projection=new([f/aspect,0,0,0,0,f,0,0,0,0,(far+near)/(near-far),-1,0,0,2*far*near/(near-far),0]);}
         else{var half=Scale/2;projection=new([1/(half*aspect),0,0,0,0,1/half,0,0,0,0,-2/(far-near),0,0,0,-(far+near)/(far-near),1]);}
@@ -49,7 +52,7 @@ public sealed class Camera(string name="Perspective")
     }
     public (double X,double Y,double Depth) Project(Vec3 p,double width,double height)
     {
-        var(eye,forward,right,up)=Basis();var d=p-eye;var depth=Vec3.Dot(d,forward);var h=Perspective?2*depth*Math.Tan(FieldOfView/2):Scale;return((Vec3.Dot(d,right)/(h*width/height)+.5)*width,(.5-Vec3.Dot(d,up)/h)*height,depth);
+        var(eye,forward,right,up)=Basis(p);var d=-eye;var depth=Vec3.Dot(d,forward);var h=Perspective?2*depth*Math.Tan(FieldOfView/2):Scale;return((Vec3.Dot(d,right)/(h*width/height)+.5)*width,(.5-Vec3.Dot(d,up)/h)*height,depth);
     }
 }
 public sealed record ViewportRectangle(string Name,int X,int Y,int Width,int Height,Camera Camera);

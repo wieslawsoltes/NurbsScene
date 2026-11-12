@@ -35,18 +35,30 @@ class QualificationContracts(unittest.TestCase):
             name = entry["name"]
             folder = self.evidence / name
             checks = ["fixture check " + str(i) for i in range(entry["minimumUiChecks"] - 1)] + ["Interaction test session restored: " + name]
-            record = {"campaign": name, "status": "passed", "checks": checks,
+            observation = {"version": 1, "installed": True, "requestCount": 1, "deviceCount": 1, "errors": []}
+            record = {"campaign": name, "status": "passed", "checks": checks, "gpuObservation": copy.deepcopy(observation),
                       "final": {"state": {"gpuError": None, "graphErrors": 0}}}
             report = {"status": "passed", "checks": checks, "campaigns": [record], "pageErrors": [],
-                      "modelingChecksPerCampaign": [30]}
+                      "modelingChecksPerCampaign": [33]}
+            metrics = {"Frames": 2, "GeometryUploadBytes": 4096, "GeometryUploadCount": 2,
+                       "DrawCalls": 4, "TriangleCount": 24, "LineCount": 0, "CpuSubmissionMilliseconds": 0.25}
+            performance = {"schema": 1, "sceneUnchanged": True, "geometryReused": True,
+                           "before": metrics, "after": metrics | {"Frames": 3}}
             modeling = {"application": "Uno Platform", "status": "passed", "pageErrors": [],
-                        "checks": ["model fixture " + str(i) for i in range(30)], "lastGpuError": None,
-                        "gpuBackend": "WebGL2 fixture", "frames": 1, "surfacePixels": 1,
+                        "checks": ["model fixture " + str(i) for i in range(33)], "lastGpuError": None,
+                        "gpuApi": "WebGPU", "gpuBackend": "WebGPU fixture", "frames": 1, "surfacePixels": 1,
+                        "gpuObservation": copy.deepcopy(observation), "renderingPerformance": performance,
+                        "captureMeasurements": [{"name": capture, "status": "passed", "phase": "completed",
+                            "budgetMilliseconds": 60_000, "outerBudgetMilliseconds": 65_000,
+                            "elapsedMilliseconds": 5.5, "byteCount": 4096} for capture in ("empty", "filled", "rotated")],
                         "gpuReadbackSha256": "A" * 64}
             GATE.write_json(folder / "uno-ui.json", report)
             GATE.write_json(folder / ("uno-browser-" + name + ".json"), modeling)
             GATE.write_json(folder / "uno-publication.json", self.manifest)
-            GATE.write_json(folder / "uno-console.json", {"errors": [], "console": []})
+            if name == "rhino-workspace":
+                GATE.write_json(folder / "uno-rhino-pre-reload-gpu.json", copy.deepcopy(observation))
+            GATE.write_json(folder / "uno-console.json", {"errors": [], "console": [],
+                "gpuObservations": [{"campaign": name, "state": copy.deepcopy(observation)}]})
 
     def collect(self):
         return GATE.collect(self.evidence, self.site, COMMIT, TREE, self.output)
@@ -64,15 +76,16 @@ class QualificationContracts(unittest.TestCase):
 
     def test_all_ten_campaigns_aggregate_without_losing_assertions(self):
         result = self.collect()
-        self.assertEqual(len(result["checks"]), 349)
+        self.assertEqual(len(result["checks"]), 357)
         self.assertEqual([r["campaign"] for r in result["campaigns"]], self.names)
-        self.assertEqual(result["modelingChecksPerCampaign"], [30] * 10)
+        self.assertEqual(result["modelingChecksPerCampaign"], [33] * 10)
         self.assertEqual(len(list((self.output / "campaigns").glob("*/uno-ui.json"))), 10)
         self.assertEqual(GATE.read_json(self.output / "uno-publication.json"), self.manifest)
 
     def test_original_campaign_registry_remains_mandatory(self):
         self.assertEqual(self.names, ["workspace", "inputs-sliders", "panels", "panel-edges", "ellipse-loft", "panel-display", "typography", "pointer-selection", "panel-scrolling", "rhino-workspace"])
-        self.assertEqual(self.registry["minimumModelingChecks"], 30)
+        self.assertEqual(self.registry["minimumModelingChecks"], 33)
+        self.assertEqual(next(entry["minimumUiChecks"] for entry in self.registry["campaigns"] if entry["name"] == "rhino-workspace"), 64)
 
     def test_hidden_site_files_are_part_of_exact_content_verification(self):
         self.assertIn(".nojekyll", self.manifest["files"])
@@ -147,8 +160,110 @@ class QualificationContracts(unittest.TestCase):
         self.edit("uno-browser-workspace.json", lambda r: r.update(application="offline JavaScript harness"))
         self.rejected()
 
+    def test_legacy_renderer_evidence_cannot_qualify_webgpu_migration(self):
+        self.edit("uno-browser-workspace.json", lambda r: r.update(gpuBackend="WebGL2 fixture"))
+        self.rejected()
+
+    def test_explicit_webgpu_api_evidence_is_required(self):
+        self.edit("uno-browser-workspace.json", lambda r: r.pop("gpuApi"))
+        self.rejected()
+
+    def test_uncaptured_webgpu_error_rejects_even_when_surface_pixels_differ(self):
+        self.edit("uno-browser-workspace.json", lambda r: r["gpuObservation"]["errors"].append({"kind": "uncaptured-error", "message": "invalid shadow pass"}))
+        self.rejected()
+
+    def test_missing_real_device_observation_rejects(self):
+        self.edit("uno-browser-workspace.json", lambda r: r.pop("gpuObservation"))
+        self.rejected()
+
+    def test_installed_observer_without_a_real_device_rejects(self):
+        self.edit("uno-browser-workspace.json", lambda r: r["gpuObservation"].update(deviceCount=0))
+        self.rejected()
+
+    def test_late_device_loss_rejects_the_final_campaign(self):
+        self.edit("uno-ui.json", lambda r: r["campaigns"][0]["gpuObservation"]["errors"].append({"kind": "device-lost", "reason": "unknown"}))
+        self.rejected()
+
+    def test_missing_rhino_pre_reload_device_observation_rejects(self):
+        (self.evidence / "rhino-workspace" / "uno-rhino-pre-reload-gpu.json").unlink()
+        self.rejected()
+
+    def test_pre_reload_device_error_cannot_be_hidden_by_clean_reloaded_device(self):
+        self.edit("uno-rhino-pre-reload-gpu.json",
+                  lambda r: r["errors"].append({"kind": "uncaptured-error", "message": "first document validation failure"}),
+                  name="rhino-workspace")
+        self.rejected()
+
+    def test_missing_final_device_observation_rejects(self):
+        self.edit("uno-ui.json", lambda r: r["campaigns"][0].pop("gpuObservation"))
+        self.rejected()
+
+    def test_console_cannot_omit_final_device_observation(self):
+        self.edit("uno-console.json", lambda r: r.pop("gpuObservations"))
+        self.rejected()
+
     def test_framebuffer_evidence_is_required(self):
         self.edit("uno-browser-workspace.json", lambda r: r.update(surfacePixels=0))
+        self.rejected()
+
+    def test_missing_capture_measurements_rejects(self):
+        self.edit("uno-browser-workspace.json", lambda r: r.pop("captureMeasurements"))
+        self.rejected()
+
+    def test_capture_measurements_cannot_omit_a_required_frame(self):
+        self.edit("uno-browser-workspace.json", lambda r: r["captureMeasurements"].pop())
+        self.rejected()
+
+    def test_capture_must_complete_actual_mapping(self):
+        self.edit("uno-browser-workspace.json", lambda r: r["captureMeasurements"][0].update(phase="awaiting GPU buffer mapping"))
+        self.rejected()
+
+    def test_capture_budget_cannot_silently_increase(self):
+        self.edit("uno-browser-workspace.json", lambda r: r["captureMeasurements"][0].update(budgetMilliseconds=120_000))
+        self.rejected()
+
+    def test_capture_duration_requires_a_finite_measurement(self):
+        self.edit("uno-browser-workspace.json", lambda r: r["captureMeasurements"][0].update(elapsedMilliseconds=float("nan")))
+        self.rejected()
+
+    def test_capture_duration_cannot_exceed_outer_budget(self):
+        self.edit("uno-browser-workspace.json", lambda r: r["captureMeasurements"][0].update(elapsedMilliseconds=65_001))
+        self.rejected()
+
+    def test_differential_captures_require_equal_rgba_byte_counts(self):
+        self.edit("uno-browser-workspace.json", lambda r: r["captureMeasurements"][0].update(byteCount=4092))
+        self.rejected()
+
+    def test_missing_camera_reuse_evidence_rejects(self):
+        self.edit("uno-browser-workspace.json", lambda r: r.pop("renderingPerformance"))
+        self.rejected()
+
+    def test_camera_mesh_reupload_rejects_even_with_claimed_reuse(self):
+        self.edit("uno-browser-workspace.json", lambda r: r["renderingPerformance"]["after"].update(GeometryUploadCount=3))
+        self.rejected()
+
+    def test_camera_vertex_or_line_reupload_rejects(self):
+        self.edit("uno-browser-workspace.json", lambda r: r["renderingPerformance"]["after"].update(GeometryUploadBytes=8192))
+        self.rejected()
+
+    def test_camera_sample_requires_uploaded_geometry(self):
+        self.edit("uno-browser-workspace.json", lambda r: r["renderingPerformance"]["before"].update(GeometryUploadCount=0))
+        self.rejected()
+
+    def test_camera_sample_requires_actual_mesh_draws(self):
+        self.edit("uno-browser-workspace.json", lambda r: r["renderingPerformance"]["after"].update(TriangleCount=0))
+        self.rejected()
+
+    def test_camera_sample_requires_another_frame(self):
+        self.edit("uno-browser-workspace.json", lambda r: r["renderingPerformance"]["after"].update(Frames=2))
+        self.rejected()
+
+    def test_camera_sample_cannot_change_the_scene(self):
+        self.edit("uno-browser-workspace.json", lambda r: r["renderingPerformance"].update(sceneUnchanged=False))
+        self.rejected()
+
+    def test_cpu_submission_time_requires_finite_measurement(self):
+        self.edit("uno-browser-workspace.json", lambda r: r["renderingPerformance"]["after"].update(CpuSubmissionMilliseconds=float("nan")))
         self.rejected()
 
     def test_inconsistent_modeling_counts_reject(self):
@@ -176,7 +291,7 @@ class QualificationContracts(unittest.TestCase):
 
     def test_registry_rejects_duplicates_and_reduced_modeling_minimum(self):
         path = self.root / "registry.json"
-        for registry in [self.registry | {"minimumModelingChecks": 0}, self.registry | {"campaigns": self.registry["campaigns"] * 2}]:
+        for registry in [self.registry | {"minimumModelingChecks": 0}, self.registry | {"minimumModelingChecks": 32}, self.registry | {"campaigns": self.registry["campaigns"] * 2}]:
             GATE.write_json(path, registry)
             with self.assertRaises(ValueError):
                 GATE.campaigns(path)

@@ -3,7 +3,7 @@ using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using NurbsScene.Parametric;
 using NurbsScene.Presentation;
-using SkiaSharp;
+using NurbsScene.Controls.Drawing;
 
 namespace NurbsScene.Controls;
 
@@ -23,7 +23,7 @@ public sealed partial class GraphCanvas
             try { CanvasValueEditing.Toggle(_session, _session.Graph, node); }
             catch (Exception error) { Message?.Invoke(error.Message); }
     }
-    private void DrawBooleanToggle(SKCanvas canvas, GraphNode node, SKRect rect)
+    private void DrawBooleanToggle(VectorCanvas canvas, GraphNode node, VectorRect rect)
     {
         string label;
         try { label = InputComponents.BooleanValue(node.Parameters) ? "True" : "False"; }
@@ -32,7 +32,7 @@ public sealed partial class GraphCanvas
         Fill(canvas, new(rect.Right - 56, rect.Top + 5, rect.Right - 7, rect.Bottom - 5), new(80,80,83), 3);
         Text(canvas, label, rect.Right - 50, rect.Top + 24, new(255,255,255), 11);
     }
-    private void DrawDataPanel(SKCanvas canvas, GraphNode node, SKRect rect, NodeResult? result)
+    private void DrawDataPanel(VectorCanvas canvas, GraphNode node, VectorRect rect, NodeResult? result)
     {
         var style = PanelTextStyle.For(node);
         var layout = PanelDisplayLayout.Create(new(rect.Left, rect.Top, rect.Width, rect.Height), _zoom, style.Size);

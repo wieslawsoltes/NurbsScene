@@ -1,7 +1,7 @@
 using Microsoft.UI.Xaml.Input;
 using NurbsScene.Parametric;
 using NurbsScene.Presentation;
-using SkiaSharp;
+using NurbsScene.Controls.Drawing;
 using Windows.Foundation;
 using Windows.System;
 
@@ -41,7 +41,7 @@ public sealed partial class GraphCanvas
         _panelScrollCapture = null; _panelOffsets.Clear(); _panelScrollbars.Clear();
         _panelWindows.Clear(); _panelDisplayLayouts.Clear(); _panelTypography.Clear();
     }
-    private void DrawScrollingPanel(SKCanvas canvas, GraphNode node, SKRect rect, NodeResult? result, PanelTextStyle style, PanelDisplayLayout original)
+    private void DrawScrollingPanel(VectorCanvas canvas, GraphNode node, VectorRect rect, NodeResult? result, PanelTextStyle style, PanelDisplayLayout original)
     {
         if (!_panelWindows.TryGetValue(node.Id, out var cache))
         {
@@ -71,7 +71,7 @@ public sealed partial class GraphCanvas
             var track = new CanvasBox(rect.Right - reserve + 2, rect.Top + clip.Y, reserve - 8, clip.Height);
             var bar = PanelScrollBar.Create(track, window, 14 / _zoom);
             _panelScrollbars[node.Id] = new(TypographySource(node, result), window, bar);
-            static SKRect Box(CanvasBox b) => new((float)b.X, (float)b.Y, (float)(b.X + b.Width), (float)(b.Y + b.Height));
+            static VectorRect Box(CanvasBox b) => new((float)b.X, (float)b.Y, (float)(b.X + b.Width), (float)(b.Y + b.Height));
             Fill(canvas, Box(bar.Track), new(110, 107, 60, 28), 2 / _zoom);
             Fill(canvas, Box(bar.Grip), new(115, 110, 62, 155), 2 / _zoom);
             Stroke(canvas, Box(bar.Grip), new(91, 88, 49), .7f / _zoom, 2 / _zoom);

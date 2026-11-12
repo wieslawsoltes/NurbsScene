@@ -5,20 +5,19 @@ using Microsoft.UI.Xaml.Input;
 using NurbsScene.Parametric;
 using NurbsScene.Presentation;
 using PortHit = NurbsScene.Presentation.GraphPortHit;
-using SkiaSharp;
-using Uno.WinUI.Graphics2DSK;
+using NurbsScene.Controls.Drawing;
 using Windows.Foundation;
 using Windows.System;
 
 namespace NurbsScene.Controls;
 
 /// <summary>Reusable vector-drawn visual editor with typed port wiring, graph history, numeric scrubbing, culling and zoom LOD.</summary>
-public sealed partial class GraphCanvas : SKCanvasElement,IDisposable
+public sealed partial class GraphCanvas : WebGpuVectorCanvasElement,IDisposable
 {
     private GraphSession? _session;private Graph? _graph;private bool _subscribed;
     private readonly HashSet<string> _selection=[];
-    private readonly SKFont _font=new(SKTypeface.Default,12);
-    private readonly SKPaint _paint=new(){IsAntialias=true};
+    private readonly VectorFont _font=new(VectorTypeface.Default,12);
+    private readonly VectorPaint _paint=new(){IsAntialias=true};
     private float _zoom=.8f,_panX=20,_panY=20;
     private Point _start,_last,_worldStart,_worldLast;
     private string _gesture="";private string? _slider;
@@ -28,9 +27,9 @@ public sealed partial class GraphCanvas : SKCanvasElement,IDisposable
     private readonly GraphPresentation _presentation=new();
     private GraphDrawing? _drawing;
     private readonly Dictionary<string,PresentedNode> _layouts=[];
-    private readonly List<SKPath> _paths=[];
-    private readonly Dictionary<string,(PresentedWire Wire,SKPath Path)> _wirePaths=[];
-    private readonly SKPathEffect _treeDash=SKPathEffect.CreateDash([5,4],0);
+    private readonly List<VectorPath> _paths=[];
+    private readonly Dictionary<string,(PresentedWire Wire,VectorPath Path)> _wirePaths=[];
+    private readonly VectorPathEffect _treeDash=VectorPathEffect.CreateDash([5,4],0);
     public long LayoutBuilds=>_presentation.BuildCount;
     public long PathBuilds {get;private set;}
     public long WireCachePasses {get;private set;}
@@ -138,7 +137,7 @@ public sealed partial class GraphCanvas : SKCanvasElement,IDisposable
     private void Solved(GraphResult result){CancelStalePanelScroll();Invalidate();}
     private Point World(Point point)=>new((point.X-_panX)/_zoom,(point.Y-_panY)/_zoom);
     private PresentedNode Layout(GraphNode node){Drawing();return _layouts[node.Id];}
-    private SKRect Rect(GraphNode node){var b=Layout(node).Bounds;return new((float)b.X,(float)b.Y,(float)(b.X+b.Width),(float)(b.Y+b.Height));}
+    private VectorRect Rect(GraphNode node){var b=Layout(node).Bounds;return new((float)b.X,(float)b.Y,(float)(b.X+b.Width),(float)(b.Y+b.Height));}
     private Point PortPoint(GraphNode node,bool output,int index){var p=Layout(node).Port(output,index);return new(p.X,p.Y);}
     private Point PortPoint(PortHit port)
     {
@@ -153,30 +152,30 @@ public sealed partial class GraphCanvas : SKCanvasElement,IDisposable
     }
     private PortHit? PortAt(Point point)
         =>_session is null?null:GraphHitTesting.PortAt(Drawing(),new(point.X,point.Y),9/_zoom);
-    private void Fill(SKCanvas canvas,SKRect rect,SKColor color,float radius=0){_paint.Style=SKPaintStyle.Fill;_paint.Color=color;if(radius>0)canvas.DrawRoundRect(rect,radius,radius,_paint);else canvas.DrawRect(rect,_paint);}
-    private void Stroke(SKCanvas canvas,SKRect rect,SKColor color,float width=1,float radius=0){_paint.Style=SKPaintStyle.Stroke;_paint.StrokeWidth=width;_paint.Color=color;if(radius>0)canvas.DrawRoundRect(rect,radius,radius,_paint);else canvas.DrawRect(rect,_paint);}
-    private void Text(SKCanvas canvas,string text,float x,float y,SKColor color,float size=12){_font.Size=size;_paint.Style=SKPaintStyle.Fill;_paint.Color=color;canvas.DrawText(text,x,y,_font,_paint);}
-    private static SKPath MakePath(Point a,Point b)
+    private void Fill(VectorCanvas canvas,VectorRect rect,VectorColor color,float radius=0){_paint.Style=VectorPaintStyle.Fill;_paint.Color=color;if(radius>0)canvas.DrawRoundRect(rect,radius,radius,_paint);else canvas.DrawRect(rect,_paint);}
+    private void Stroke(VectorCanvas canvas,VectorRect rect,VectorColor color,float width=1,float radius=0){_paint.Style=VectorPaintStyle.Stroke;_paint.StrokeWidth=width;_paint.Color=color;if(radius>0)canvas.DrawRoundRect(rect,radius,radius,_paint);else canvas.DrawRect(rect,_paint);}
+    private void Text(VectorCanvas canvas,string text,float x,float y,VectorColor color,float size=12){_font.Size=size;_paint.Style=VectorPaintStyle.Fill;_paint.Color=color;canvas.DrawText(text,x,y,_font,_paint);}
+    private static VectorPath MakePath(Point a,Point b)
     {
-        var path=new SKPath();var distance=(float)Math.Max(35,Math.Abs(b.X-a.X)*.48);path.MoveTo((float)a.X,(float)a.Y);path.CubicTo((float)a.X+distance,(float)a.Y,(float)b.X-distance,(float)b.Y,(float)b.X,(float)b.Y);return path;
+        var path=new VectorPath();var distance=(float)Math.Max(35,Math.Abs(b.X-a.X)*.48);path.MoveTo((float)a.X,(float)a.Y);path.CubicTo((float)a.X+distance,(float)a.Y,(float)b.X-distance,(float)b.Y,(float)b.X,(float)b.Y);return path;
     }
-    private void Wire(SKCanvas canvas,Point a,Point b,SKColor color,float thickness=2)
+    private void Wire(VectorCanvas canvas,Point a,Point b,VectorColor color,float thickness=2)
     {
-        using var path=MakePath(a,b);_paint.Style=SKPaintStyle.Stroke;_paint.StrokeWidth=thickness;_paint.Color=color;canvas.DrawPath(path,_paint);
+        using var path=MakePath(a,b);_paint.Style=VectorPaintStyle.Stroke;_paint.StrokeWidth=thickness;_paint.Color=color;canvas.DrawPath(path,_paint);
     }
-    protected override void RenderOverride(SKCanvas canvas,Size area)
+    protected override void Draw(VectorCanvas canvas,Size area)
     {
         canvas.Save();canvas.ClipRect(new(0,0,(float)area.Width,(float)area.Height));Fill(canvas,new(0,0,(float)area.Width,(float)area.Height),new(214,211,203));
         // Draw in screen coordinates using bounded integer indices. Adding a
         // 25-unit step to a float around 1e9 does not advance that float at all.
         if(CanvasGridLayout.TryCreate(area.Width,area.Height,_zoom,_panX,_panY,out var grid))
         {
-            _paint.Style=SKPaintStyle.Stroke;_paint.StrokeWidth=.6f;_paint.Color=new(194,192,185);
+            _paint.Style=VectorPaintStyle.Stroke;_paint.StrokeWidth=.6f;_paint.Color=new(194,192,185);
             for(var i=0;i<grid.Columns;i++){var x=(float)(grid.OffsetX+i*grid.Spacing);canvas.DrawLine(x,0,x,(float)area.Height,_paint);}
             for(var i=0;i<grid.Rows;i++){var y=(float)(grid.OffsetY+i*grid.Spacing);canvas.DrawLine(0,y,(float)area.Width,y,_paint);}
         }
         canvas.Translate(_panX,_panY);canvas.Scale(_zoom);
-        var bounds=new SKRect(-_panX/_zoom,-_panY/_zoom,((float)area.Width-_panX)/_zoom,((float)area.Height-_panY)/_zoom);
+        var bounds=new VectorRect(-_panX/_zoom,-_panY/_zoom,((float)area.Width-_panX)/_zoom,((float)area.Height-_panY)/_zoom);
         var view=new CanvasBox(bounds.Left,bounds.Top,bounds.Width,bounds.Height);
         if(_session is not null)
         {
@@ -186,7 +185,7 @@ public sealed partial class GraphCanvas : SKCanvasElement,IDisposable
                 var w=drawing.Wires[i];if(!WireCanvasBounds(w).Intersects(view))continue;
                 var wire=w.Wire;var selected=_selection.Contains(wire.From.Node)||_selection.Contains(wire.To.Node);
                 var tree=graph.LastResult?.Nodes.GetValueOrDefault(wire.From.Node)?.Outputs.GetValueOrDefault(wire.From.Port);
-                _paint.Style=SKPaintStyle.Stroke;_paint.StrokeWidth=tree?.ItemCount>1?2.8f:1.3f;_paint.Color=selected?new(120,171,47):new(93,91,86);
+                _paint.Style=VectorPaintStyle.Stroke;_paint.StrokeWidth=tree?.ItemCount>1?2.8f:1.3f;_paint.Color=selected?new(120,171,47):new(93,91,86);
                 _paint.PathEffect=tree?.Branches.Length>1?_treeDash:null;DrawWirePath(canvas,w,_paths[i]);_paint.PathEffect=null;
                 if(_zoom>.35f&&wire.Transform!="none")
                 {
@@ -199,9 +198,9 @@ public sealed partial class GraphCanvas : SKCanvasElement,IDisposable
             foreach(var n in drawing.Nodes)
             {
                 var b=CanvasBounds(n);if(!b.Intersects(view))continue;
-                var node=n.Node;var rect=new SKRect((float)b.X,(float)b.Y,(float)(b.X+b.Width),(float)(b.Y+b.Height));
+                var node=n.Node;var rect=new VectorRect((float)b.X,(float)b.Y,(float)(b.X+b.Width),(float)(b.Y+b.Height));
                 var selected=_selection.Contains(node.Id);var result=graph.LastResult?.Nodes.GetValueOrDefault(node.Id);var error=result?.Status is "error" or "blocked";
-                var body=!node.Enabled?new SKColor(184,184,182):error?new(241,163,59):selected?new(188,222,105):(node.Component is "Text" or "Panel")?new(249,245,163):new(220,220,226);
+                var body=!node.Enabled?new VectorColor(184,184,182):error?new(241,163,59):selected?new(188,222,105):(node.Component is "Text" or "Panel")?new(249,245,163):new(220,220,226);
                 Fill(canvas,new(rect.Left+2,rect.Top+3,rect.Right+2,rect.Bottom+3),new(0,0,0,32),7);
                 Fill(canvas,rect,body,n.Slider?12:6);Stroke(canvas,rect,selected?new(64,95,19):new(83,83,88),selected?2:1,n.Slider?12:6);
                 if(_zoom>.35f||PanelLayout.CanResize(node))
@@ -221,7 +220,7 @@ public sealed partial class GraphCanvas : SKCanvasElement,IDisposable
                     }
                     canvas.Restore();
                     if(PanelLayout.CanResize(node))DrawResizeHandles(canvas,rect,selected);
-                    for(var side=0;side<2;side++){var ports=side==1?n.Definition.Outputs:n.Definition.Inputs;for(var i=0;i<ports.Length;i++){var p=CanvasPort(n,side==1,i);_paint.Style=SKPaintStyle.Fill;_paint.Color=new(220,220,225);canvas.DrawCircle((float)p.X,(float)p.Y,3,_paint);_paint.Style=SKPaintStyle.Stroke;_paint.Color=new(65,65,70);_paint.StrokeWidth=1;canvas.DrawCircle((float)p.X,(float)p.Y,3,_paint);}}
+                    for(var side=0;side<2;side++){var ports=side==1?n.Definition.Outputs:n.Definition.Inputs;for(var i=0;i<ports.Length;i++){var p=CanvasPort(n,side==1,i);_paint.Style=VectorPaintStyle.Fill;_paint.Color=new(220,220,225);canvas.DrawCircle((float)p.X,(float)p.Y,3,_paint);_paint.Style=VectorPaintStyle.Stroke;_paint.Color=new(65,65,70);_paint.StrokeWidth=1;canvas.DrawCircle((float)p.X,(float)p.Y,3,_paint);}}
                 }
             }
             if(_wire is{} pending){var anchor=PortPoint(pending);Wire(canvas,pending.Output?anchor:_worldLast,pending.Output?_worldLast:anchor,new(110,155,35),2.2f);}
@@ -248,5 +247,5 @@ public sealed partial class GraphCanvas : SKCanvasElement,IDisposable
         _zoom=zoom;_panX=panX;_panY=panY;ViewChanged?.Invoke();Invalidate();
     }
     private bool _canvasDisposed;
-    public void Dispose(){if(_canvasDisposed)return;_canvasDisposed=true;CancelGesture();ReleasePointerCaptures();ClearPanelPresentation();_panelTypography.Dispose();ClearPanelResize();Unsubscribe();foreach(var path in _wirePaths.Values)path.Path.Dispose();_wirePaths.Clear();_paths.Clear();_treeDash.Dispose();_font.Dispose();_paint.Dispose();}
+    public new void Dispose(){if(_canvasDisposed)return;_canvasDisposed=true;CancelGesture();ReleasePointerCaptures();ClearPanelPresentation();_panelTypography.Dispose();ClearPanelResize();Unsubscribe();foreach(var path in _wirePaths.Values)path.Path.Dispose();_wirePaths.Clear();_paths.Clear();_treeDash.Dispose();_font.Dispose();_paint.Dispose();ReleaseDrawingResources();base.Dispose();}
 }

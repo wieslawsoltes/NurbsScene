@@ -9,6 +9,7 @@ application mutation occurs in this utility.
 import argparse
 import hashlib
 import json
+import math
 import re
 import shutil
 from pathlib import Path
@@ -30,7 +31,7 @@ def write_json(path, value):
 
 def campaigns(path=REGISTRY):
     registry = read_json(path)
-    if registry.get("schema") != 1 or registry.get("minimumModelingChecks", 0) < 29:
+    if registry.get("schema") != 1 or registry.get("minimumModelingChecks", 0) < 33:
         raise ValueError("Invalid modeling acceptance registry")
     entries = registry.get("campaigns", [])
     names = [entry.get("name") for entry in entries]
@@ -86,6 +87,57 @@ def check_strings(checks, minimum, label):
         raise ValueError("Missing or incomplete " + label)
 
 
+def require_gpu_observation(observation, name):
+    if (not isinstance(observation, dict) or observation.get("version") != 1
+            or observation.get("installed") is not True
+            or type(observation.get("deviceCount")) is not int or observation["deviceCount"] < 1
+            or observation.get("errors") != []):
+        raise ValueError("Missing or erroneous actual WebGPU device observation: " + name)
+
+
+def require_capture_measurements(captures, name):
+    if (not isinstance(captures, list) or len(captures) != 3
+            or any(not isinstance(sample, dict) for sample in captures)
+            or [sample.get("name") for sample in captures] != ["empty", "filled", "rotated"]):
+        raise ValueError("Missing one-shot framebuffer capture measurements: " + name)
+    for sample in captures:
+        if sample.get("status") != "passed" or sample.get("phase") != "completed":
+            raise ValueError("Framebuffer capture did not complete: " + name)
+        if sample.get("budgetMilliseconds") != 60_000 or sample.get("outerBudgetMilliseconds") != 65_000:
+            raise ValueError("Unexpected software qualification capture budget: " + name)
+        count = sample.get("byteCount")
+        elapsed = sample.get("elapsedMilliseconds")
+        if type(count) is not int or count < 4 or count % 4:
+            raise ValueError("Missing complete RGBA capture bytes: " + name)
+        if type(elapsed) not in (int, float) or not math.isfinite(elapsed) or not 0 <= elapsed <= 65_000:
+            raise ValueError("Missing or out-of-budget capture elapsed time: " + name)
+    if len({sample["byteCount"] for sample in captures}) != 1:
+        raise ValueError("Differential framebuffer captures have different dimensions: " + name)
+
+
+def require_camera_reuse(performance, name):
+    if (not isinstance(performance, dict) or performance.get("schema") != 1
+            or performance.get("sceneUnchanged") is not True or performance.get("geometryReused") is not True):
+        raise ValueError("Missing camera-only geometry reuse evidence: " + name)
+    for stage in ("before", "after"):
+        sample = performance.get(stage)
+        if not isinstance(sample, dict):
+            raise ValueError("Missing camera submission sample: " + name)
+        for field in ("Frames", "GeometryUploadBytes", "GeometryUploadCount", "DrawCalls", "TriangleCount"):
+            if type(sample.get(field)) is not int or sample[field] < 1:
+                raise ValueError("Missing resident geometry or submitted mesh work: " + name + " " + field)
+        if type(sample.get("LineCount")) is not int or sample["LineCount"] < 0:
+            raise ValueError("Missing line submission count: " + name)
+        timing = sample.get("CpuSubmissionMilliseconds")
+        if type(timing) not in (int, float) or not math.isfinite(timing) or timing < 0:
+            raise ValueError("Invalid CPU submission timing: " + name)
+    before, after = performance["before"], performance["after"]
+    if after["Frames"] <= before["Frames"]:
+        raise ValueError("Camera sample did not submit another frame: " + name)
+    if any(before[field] != after[field] for field in ("GeometryUploadBytes", "GeometryUploadCount")):
+        raise ValueError("Camera-only motion uploaded geometry again: " + name)
+
+
 def collect(evidence, site, commit, tree, output, registry_path=REGISTRY):
     manifest = verify_site(site, commit, tree)
     registry = campaigns(registry_path)
@@ -115,14 +167,22 @@ def collect(evidence, site, commit, tree, output, registry_path=REGISTRY):
         modeling = read_json(path.parent / ("uno-browser-" + name + ".json"))
         if modeling.get("application") != "Uno Platform" or modeling.get("status") != "passed" or modeling.get("pageErrors") != [] or "lastGpuError" not in modeling or modeling["lastGpuError"] is not None:
             raise ValueError("Actual Uno modeling/framebuffer qualification did not pass: " + name)
-        if not isinstance(modeling.get("gpuBackend"), str) or not modeling["gpuBackend"] or type(modeling.get("frames")) is not int or modeling["frames"] < 1 or type(modeling.get("surfacePixels")) is not int or modeling["surfacePixels"] < 1 or not re.fullmatch(r"[0-9a-fA-F]{64}", modeling.get("gpuReadbackSha256", "")):
+        if modeling.get("gpuApi") != "WebGPU" or not isinstance(modeling.get("gpuBackend"), str) or not modeling["gpuBackend"].startswith("WebGPU") or type(modeling.get("frames")) is not int or modeling["frames"] < 1 or type(modeling.get("surfacePixels")) is not int or modeling["surfacePixels"] < 1 or not re.fullmatch(r"[0-9a-fA-F]{64}", modeling.get("gpuReadbackSha256", "")):
             raise ValueError("Missing actual native framebuffer evidence: " + name)
+        require_capture_measurements(modeling.get("captureMeasurements"), name)
+        require_camera_reuse(modeling.get("renderingPerformance"), name)
+        require_gpu_observation(modeling.get("gpuObservation"), name + " modeling")
+        require_gpu_observation(record.get("gpuObservation"), name + " final")
+        if name == "rhino-workspace":
+            require_gpu_observation(read_json(path.parent / "uno-rhino-pre-reload-gpu.json"), name + " before reload")
         check_strings(modeling.get("checks"), registry["minimumModelingChecks"], name + " modeling/framebuffer assertions")
         if report.get("modelingChecksPerCampaign") != [len(modeling["checks"])]:
             raise ValueError("Inconsistent modeling assertion count: " + name)
         console = read_json(path.parent / "uno-console.json")
         if console.get("errors") != []:
             raise ValueError("Campaign recorded browser page errors: " + name)
+        if console.get("gpuObservations") != [{"campaign": name, "state": record["gpuObservation"]}]:
+            raise ValueError("Campaign WebGPU observation differs from its final evidence: " + name)
         reports[name] = (path.parent, record, modeling, console)
     if set(reports) != set(required):
         raise ValueError("Missing mandatory campaigns: " + ", ".join(sorted(set(required) - set(reports))))
@@ -141,7 +201,8 @@ def collect(evidence, site, commit, tree, output, registry_path=REGISTRY):
         shutil.copytree(folder, output / "campaigns" / name)
     write_json(output / "uno-ui.json", aggregate)
     write_json(output / "uno-browser.json", ordered[0][2])
-    write_json(output / "uno-console.json", {"errors": [], "console": [entry for _, _, _, console in ordered for entry in console.get("console", [])]})
+    write_json(output / "uno-console.json", {"errors": [], "console": [entry for _, _, _, console in ordered for entry in console.get("console", [])],
+        "gpuObservations": [entry for _, _, _, console in ordered for entry in console["gpuObservations"]]})
     write_json(output / "uno-publication.json", manifest)
     return aggregate
 

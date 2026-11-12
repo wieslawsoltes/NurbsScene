@@ -1,0 +1,28 @@
+{
+  "format": "NSIBL001",
+  "source": "studio.hdr",
+  "sourceSha256": "8a876b3f8d2133a29fc43b12ed79ddb15c7ab9fcb76692acf808460f98202432",
+  "payloadSha256": "8a72c9015e07baaaaec137b69322f4f48e5df448d2a24740c6bef55df0c03c21",
+  "compressedSha256": "e0115a51f1238b58d94953222f958eb5d1863963b7aa360cdad63f42052ac232",
+  "payloadBytes": 1179808,
+  "compressedBytes": 372830,
+  "cubeSize": 128,
+  "mipCount": 8,
+  "lutSize": 128,
+  "samples": 1024,
+  "sourceImageSize": [
+    512,
+    256
+  ],
+  "sourceMaximumRadiance": 6.40625,
+  "license": "MIT",
+  "provenance": "Original authored angular softboxes; no external image or generated AI asset.",
+  "brdf": "GGX with perceptual roughness squared and height-correlated Smith visibility",
+  "checks": [
+    "uniform-environment prefilter",
+    "constant irradiance SH",
+    "finite nonnegative HDR payload",
+    "single-scatter DFG energy bound",
+    "65536-sample independent DFG reference"
+  ]
+}

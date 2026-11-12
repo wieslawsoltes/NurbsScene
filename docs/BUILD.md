@@ -1,6 +1,6 @@
 # Build and validation
 
-`global.json` pins the Uno SDK and a compatible .NET 10 SDK range. The preserved source import is complete. Temporary transfer and dependency-cache workflows have been removed; their prior commits remain in Git history.
+`global.json` pins Uno.Sdk **7.0.5** (Uno Platform **7.0.32**) and a compatible .NET 10 SDK range. The desktop and browser application hosts select the WebGPU backend explicitly. The preserved source import is complete. Temporary transfer and dependency-cache workflows have been removed; their prior commits remain in Git history.
 
 ## Real Uno application
 
@@ -13,6 +13,58 @@ python -m http.server 8766 --bind 127.0.0.1 --directory artifacts/site
 ```
 
 `src/NurbsScene.App` contains the host; reusable controls and modeling/application logic live in separate projects. Desktop compilation does not substitute for running every desktop platform.
+
+Both host composition roots register `FontProvider(BundledFonts.CreateProvider())`
+for XAML text and layout. The bundled resolver selects actual regular, bold, oblique
+and bold-oblique DejaVu Sans faces for that explicit family and for the browser's
+default fallback; other installed families retain Uno's managed resolution.
+Application-specific GPU canvases use their own cached font resources. Global
+registration is required on WebAssembly, where system fonts cannot be enumerated:
+configuring only the custom canvas provider does not supply XAML's default font.
+Passing only regular font bytes as the global default also loses requested fallback
+weight/slant. See Uno's [font-provider configuration](https://platform.uno/docs/articles/features/using-webgpu-rendering.html#apps-without-skiasharp)
+and [`IFontProvider` interface](https://github.com/unoplatform/uno/blob/7.0.32/src/Uno.UI.Composition.Drawing/IFontProvider.cs).
+
+## Real native desktop qualification
+
+The mandatory `desktop` CI job also runs the real X11 application with Mesa
+Lavapipe, an explicit CPU Vulkan adapter. Xvfb supplies the display server; the
+WebGPU renderer and native asynchronous mapping path are unchanged. The opt-in
+hook loads the existing Pavilion definition, captures empty/filled/orbited frames,
+checks real pixel differences and zero camera-induced geometry uploads, exercises
+shadow/material caches, font scaling and pending capture lifetimes, then closes
+the native window normally. It writes JSON and three PPM framebuffers to
+`artifacts/uno-desktop/`, alongside the build/runtime logs and adapter identity.
+
+For an interactive desktop with a working native WebGPU driver:
+
+```sh
+dotnet build src/NurbsScene.App -c Release -f net10.0-desktop -p:NurbsSceneDesktopOnly=true -p:NurbsSceneDesktopQualification=true
+NURBSSCENE_DESKTOP_QUALIFICATION_OUTPUT="$PWD/artifacts/uno-desktop/native-webgpu.json" dotnet run --project src/NurbsScene.App -c Release -f net10.0-desktop --no-build --no-restore -p:NurbsSceneDesktopOnly=true -p:NurbsSceneDesktopQualification=true
+```
+
+The hook requires both the build property and the output environment variable;
+ordinary builds retain their normal empty-document startup. For the identical
+headless Linux software configuration, follow the native runtime packages,
+Lavapipe ICD selection, Xvfb invocation and strict evidence verifier in
+[`uno.yml`](../.github/workflows/uno.yml). CI requires Uno's actual log to identify
+`backend=Vulkan type=Cpu` and rejects unexpected native errors and device loss.
+The source hook records each 60-second capture budget, 65-second outer deadline,
+completion phase and elapsed time. The process deadline is 420 seconds.
+
+The 40 native assertions retain the original image/model checks and add actual-frame
+shadow/material invalidation, canonical-font scale/style equivalence, and a separate
+160 × 128 WebGPU canvas for capture cancellation/disposal/recovery. That probe uses
+the public renderer API and Uno's actual borrowed device. Native map callbacks can
+complete concurrently with cancellation: each operation must begin while its task
+is pending and end in the documented cancellation exception or a complete, opaque,
+byte-correct framebuffer. JSON records the observed outcome. A successful completion
+race is never reported as observed cancellation. Recovery must produce identical
+complete pixels on the same device, and the probe must unload normally. No retry
+until a preferred outcome or timing delay is used.
+
+This run establishes native rendering/readback/lifetime correctness and normal
+shutdown. It does not provide physical-GPU timing or certify Windows/macOS drivers.
 
 ## Managed numerical, graph and document suites
 
@@ -34,6 +86,7 @@ dotnet run --project tests/dotnet/NurbsScene.PerformanceContracts -c Release
 dotnet run --project tests/dotnet/NurbsScene.QueryContracts -c Release
 dotnet run --project tests/dotnet/NurbsScene.ReviewContracts -c Release
 dotnet run --project tests/dotnet/NurbsScene.SectionContracts -c Release
+dotnet run --project tests/dotnet/NurbsScene.WebGpuContracts -c Release
 cmake -S native/kernel -B artifacts/native -DCMAKE_BUILD_TYPE=Release
 cmake --build artifacts/native --parallel
 LD_LIBRARY_PATH="$PWD/artifacts/native" NURBSSCENE_NATIVE_TESTS=1 dotnet run --project tests/dotnet/NurbsScene.SurfaceContracts -c Release
@@ -53,9 +106,100 @@ python -m playwright install chromium
 python tests/browser/test_uno.py
 ```
 
-The opt-in hook exercises real managed commands, undo/redo, graph changes, exact baking, workspace and typed-path round trips, four viewports and differential GL framebuffer readback. Seven additional checks cover curve-plane sections, overlap reporting, the new components, execution-plan/result reuse, definition serialization, and application-controller splitting/undo. No GPU mocks or skip-on-unavailable path exists. It is smoke qualification, not complete UI, hardware or performance coverage.
+The opt-in hook exercises real managed commands, undo/redo, graph changes, exact baking, workspace and typed-path round trips, four viewports and asynchronous differential WebGPU framebuffer readback. Seven additional checks cover curve-plane sections, overlap reporting, the new components, execution-plan/result reuse, definition serialization, and application-controller splitting/undo. No GPU mocks or skip-on-unavailable path exists. It is smoke qualification, not complete UI, hardware or performance coverage.
 
-The pinned Uno 6.7.135 browser GL adapter selects the framework's existing RGBA readback/channel-conversion path and rejects an unknown framework contract. Browser drawing does not require the optional debug-renderer extension. Inherited shared-context GL errors are recorded separately; context loss and NurbsScene submission errors still fail.
+Each isolated input campaign has a fixed 15-minute passive-observation lifetime,
+within its 20-minute Actions job. Ordinary action waits retain their 20-second
+deadline; the observer cannot renew its lifetime or dispatch application actions.
+The expanded Rhino campaign reached the previous 10-minute lifetime after 55
+successful checks, before its rendering-preference and reload coverage. Normal
+completion still restores the disposable session immediately, and expiry still
+fails the campaign. All ten campaigns and all 357 UI checks remain mandatory.
+
+The viewport derives from Uno 7's `WebGpuCanvasElement`, borrows Uno's WebGPU device and queue, and renders directly into the compositor target. It does not create an independent browser canvas or copy each displayed frame to CPU memory. Readback runs only for explicit capture/qualification requests. A 16 ms dispatcher timer enforces bounded capture lifetime. It requests rendering until the capture frame has been submitted on either target, then continues requesting compositor frames only on native targets, where Uno's device polling completes asynchronous mapping. The browser map progresses from its JavaScript promise without extra frames after submission. The timer stops on completion, failure or unload; its deadline identifies whether the request was awaiting viewport submission or GPU mapping. The old reflected GL readback adapter and pinned Uno 6 packages are removed.
+
+Interactive GPU canvases set a transparent XAML `Background` so the native
+visual has a hit-test region. Uno's
+[`WebGpuCanvasVisual`](https://github.com/unoplatform/uno/blob/7.0.32/src/AddIns/Uno.WinUI.Graphics3DWebGpu/WebGpuCanvasVisual.cs)
+inherits [`BorderVisual`](https://github.com/unoplatform/uno/blob/7.0.32/src/Uno.UI.Composition/Composition/BorderVisual.skia.cs);
+GPU texture pixels alone do not create its background geometry. The non-null brush permits pointer routing and focus across the canvas,
+while non-interactive overlays and icons keep `IsHitTestVisible=false`.
+
+On WebAssembly, readback calls Uno 7's public
+[`WebGpuJsInterop.MapReadBase64Async`](https://github.com/unoplatform/uno/blob/7.0.32/src/Uno.UI.Composition.WebGpu.Init/WebGpuJsInterop.cs)
+bridge, the same mechanism used by Uno's
+[`WebGpuDrawingFactory.SnapshotAsync`](https://github.com/unoplatform/uno/blob/7.0.32/src/Uno.UI.Composition.WebGpu/WebGpuDrawingFactory.cs).
+It maps the actual staging buffer from the JavaScript event loop, copies its padded
+bytes and unmaps before completing. The host injects this async operation into the
+renderer; native targets retain asynchronous WebGPU callbacks and owner-driven
+device polling. The renderer validates the returned length, removes row padding
+and retains ownership of its capture buffer and texture until completion or
+cancellation. This explicit capture path never runs during ordinary presentation.
+
+Ordinary `CaptureRgbaAsync()` requests retain a 10-second deadline. An explicit
+timeout must be finite, positive and at most 60 seconds. Browser and native software qualification
+request the 60-second budget with a 65-second outer wait to measure cold software
+GPU execution separately from the normal application deadline. This follows
+[observed mapping-phase timeouts](https://github.com/wieslawsoltes/NurbsScene/actions/runs/43113642478)
+with no device-validation or JavaScript errors; it lets the next qualification
+distinguish a slow initial map from one that never completes. Each empty, filled
+and rotated capture runs once, and a timeout still fails the campaign.
+
+`captureMeasurements` records each request's budget, completion phase, RGBA byte
+count and elapsed milliseconds. These durations include queue waiting, mapping,
+transfer and managed scheduling. They are not GPU timestamp-query measurements
+or hardware-latency targets. The artifact gate requires all three completed
+captures, matching byte counts, finite durations and the documented bounds.
+
+The real-device observer also records the first 64 native
+`GPUBuffer.mapAsync` requests, including mode, offset, size, request/settlement
+timestamps, status and duration; it reports any additional calls as dropped
+diagnostic records. It returns the original native promise, passes through the
+original receiver and arguments, and retains rejection details. Rejected or thrown
+map operations also enter the mandatory error gate. These passive
+observations distinguish a GPU map still pending from a completed JavaScript map
+whose managed continuation has not run. Capture deadlines determine acceptance;
+the observer adds evidence without submitting GPU work.
+
+The framebuffer qualification also records cumulative geometry upload bytes/count
+and per-frame draw, triangle and line counts before and after camera rotation. It
+requires an unchanged scene, origin and grid state, an additional rendered frame,
+changed pixels and no additional geometry upload. The artifact gate rejects missing
+or contradictory samples. `CpuSubmissionMilliseconds` measures CPU command encoding
+and queue submission only; it excludes GPU execution and readback. These observations
+prove resident-buffer reuse under camera motion, not a physical-GPU frame rate.
+
+The standalone production-shader gate is also mandatory:
+
+```sh
+python -m pip install playwright
+python -m playwright install chromium
+python tests/browser/test_webgpu_pipeline.py --software
+```
+
+It compiles and executes the WGSL files embedded by the real renderer, checks
+render-pass behavior and readback, and writes `evidence/webgpu-pipeline.json`.
+The software adapter verifies API/shader correctness; this smaller scene cannot
+replace the application's ten interaction campaigns or a physical-GPU benchmark.
+The `webgpu-pipeline` CI job must pass before the publication can qualify.
+
+The artifact gate requires `gpuApi: "WebGPU"`, actual differential framebuffer evidence and an installed observer that saw at least one real GPU device. A wrapper around the native `GPUAdapter.requestDevice` installs listeners on each returned device without replacing it, changing descriptors or suppressing the host's events. Uncaptured validation errors and unexpected device loss fail both the initial modeling report and the final campaign evidence. Only device loss with an explicit `destroyed` reason is ignored because it reports intentional host teardown. The shell persistence campaign also saves and validates `uno-rhino-pre-reload-gpu.json` before its page reload replaces the document-local observer. The aggregate requires that checkpoint so a clean reloaded device cannot hide earlier interaction errors. Final evidence is sampled after screenshots and retained in `uno-console.json`; a legacy WebGL report or missing observation cannot qualify this migration. Browser qualification preserves all ten mandatory input campaigns. Hosted CI uses Chromium's SwiftShader WebGPU adapter for shader/API/framebuffer correctness. That software adapter is not hardware performance evidence. The launch arguments are retained in `uno-console.json`. For an equivalent local correctness run:
+
+```sh
+NURBSSCENE_CHROMIUM_ARGS='["--enable-unsafe-webgpu","--use-angle=swiftshader","--enable-unsafe-swiftshader","--use-vulkan=swiftshader","--enable-features=Vulkan"]' python tests/browser/test_uno.py
+```
+
+The software configuration selects SwiftShader consistently for WebGPU, ANGLE and
+the Vulkan canvas compositor. Forcing only `--use-webgpu-adapter=swiftshader` can
+leave offscreen WebGPU rendering operational while invalidating the instance on
+canvas presentation, as recorded in [Chromium issue 575926500](https://issues.chromium.org/issues/575926500).
+The first Uno migration run reproduced that exact device-loss message. The
+configuration above changes the CI software driver selection and preserves the
+actual application, shader, pixel and device-error gates.
+
+Omit `NURBSSCENE_CHROMIUM_ARGS` to test the browser's normal hardware selection. The default is an empty argument list, and no missing-adapter skip is accepted. Serve the browser app over HTTPS or localhost. Native targets require a working WebGPU graphics driver; unsupported targets fail visibly because the application has no secondary raster backend. Uno documents WebGPU as experimental, so successful compilation alone does not certify a device/driver.
+
+Primary migration references: [Uno 7 migration](https://platform.uno/docs/articles/migrating-to-uno-7.html), [WebGPU backend](https://platform.uno/docs/articles/features/using-webgpu-rendering.html), [WebGpuCanvasElement](https://platform.uno/docs/articles/controls/WebGpuCanvasElement.html), [SDK package manifest](https://www.nuget.org/packages/Uno.Sdk/7.0.5), and [Chromium's WebGPU test adapter](https://dawn.googlesource.com/dawn.git/+/refs/heads/main/webgpu-cts/README.md).
 
 Ordinary builds omit the hook. Pages intentionally publishes the exact **qualification-enabled alpha artifact** tested by CI; its checks run only with the explicit `?qualification=1` query. This permits reproducible validation of the deployed alpha without substituting another renderer or application.
 
@@ -76,6 +220,8 @@ That script builds the native/WASM kernel, runs the native and Node suites, pack
 
 The `pages.yml` workflow runs only after the main branch's Uno qualification succeeds. It checks that the tested commit is still current main, downloads that exact run's qualified artifact, then uses GitHub Pages deployment with its scoped OIDC permissions. It never publishes the JavaScript harness as Uno. Repository Pages must use GitHub Actions as its build source.
 
+The source was reconstructed through Git objects after the local execution environment became unavailable during a browser publication. A successful desktop build of the earlier local checkout is useful API evidence, but does not qualify the reconstructed remote tree. The normal CI workflows must build and execute that exact tree before it can be qualified.
+
 Use per-commit CI artifacts for current evidence. Reports in `docs/history/alpha` describe the original partial alpha and its older environment.
 
 ## Section and graph performance evidence
@@ -91,9 +237,20 @@ GPU, cold-start or complete UI benchmark. See `SECTIONS-AND-RUNTIME.md`.
 ## Workspace UI regressions
 
 The real Uno browser suite also runs `test_workspace_ui.py`, using mouse and keyboard
-input against observed native-control and Skia-canvas bounds. It retains JSON logs
+input against observed native-control and graph-canvas bounds. It retains JSON logs
 and right/bottom/narrow screenshots. Presentation benchmarks and allocation contracts
 run separately in `presentation.yml`. See `CLASSIC-WORKSPACE.md` for scope and limits.
+
+A deferred native text-input focus handoff can leave the model canvas receiving
+keys after a command draft has started. The command console keeps that draft active
+during the handoff: Space appends text and Enter submits the pending draft once;
+an empty draft retains the repeat-command behavior. The Rhino workspace campaign
+types a command and immediately presses Enter without waiting for focus, then
+checks ordinary Undo. These two assertions raise its minimum from 56 to 58 and
+the ten-campaign UI minimum from 349 to 351.
+Browser resize checks acknowledge the requested native workspace width and height
+before asserting responsive layout. New observer samples alone can still describe
+the preceding layout while the WebGPU host processes a browser resize.
 
 Graph clipboard/menu/selection scenarios run inside the same actual Uno test via
 `test_graph_editing_ui.py`. `editing.yml` separately runs fragment/arrangement
@@ -151,3 +308,31 @@ DOTNET_TieredCompilation=0 dotnet run --project tests/panel-display-performance 
 allocation contracts and compares the identical benchmark with original PR11.
 `test_panel_display_ui.py` is the sixth mandatory native-input campaign in the
 actual Uno browser runner. See `PANEL-DISPLAY-AND-TEXT-REVIEW.md`.
+
+
+## Reusable package WebGPU qualification
+
+The npm graphics renderer is WebGPU-only. `auto` selects WebGPU; explicit `webgl2` selection and legacy WebGL2 constructors fail with migration guidance. Shader strings are generated from the Uno renderer's authoritative WGSL files and verified byte for byte by Node contracts. The strict GPU job builds the real NURBS WASM kernel and runs:
+
+```bash
+node packages/graphics/generate-shaders.mjs --check
+node --test tests/graphics-*.test.mjs
+bash tools/build-kernel.sh
+python tests/browser/test_gpu.py --software --output evidence/javascript-webgpu.json
+```
+
+The package campaign requires real WebGPU frames, differential NURBS surface pixels, camera changes, reverse-Z, shadows, transparency, clipping, rebasing, resize/readback, viewport bloom separation and explicit unsupported-device errors. Shader/API failures cannot fall back to GL. Hosted software rendering verifies correctness; target GPU performance remains a separate measurement. See [the package API guide](../packages/graphics/README.md) for resource ownership and the complete migration contract.
+
+## HDR environment and rendering preferences
+
+Both renderers use the same authored HDR environment payload. The GPU job reproduces
+the offline integration with `python tools/bake-studio-environment.py --check` using
+NumPy 2.3.5, verifies all generated asset/shader bytes, then executes the real shader
+and package campaigns. See [WEBGPU-ENVIRONMENT.md](WEBGPU-ENVIRONMENT.md) for the
+format, equations, primary references and standalone reproduction commands.
+
+The application exposes **Tools → Rendering…**. Validated Apply saves a separate
+version-one rendering preference record; draft Revert/Defaults and Cancel leave the
+live value intact. The Rhino campaign exercises native controls and persistence
+through its existing reload, raising its minimum to 64 and the combined ten-campaign
+UI minimum to 357. The mandatory pre-reload GPU checkpoint remains unchanged.

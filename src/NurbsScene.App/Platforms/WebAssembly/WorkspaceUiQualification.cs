@@ -4,6 +4,7 @@ using System.Text.Json;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using NurbsScene.Controls;
 using NurbsScene.Geometry;
@@ -21,7 +22,49 @@ public partial class App
     private static async Task ObserveWorkspaceUiAsync(WorkspaceView view)
     {
         var controller=view.Controller;var source=controller.Save();var preferences=view.Preferences;
+        var renderingSettings=view.Viewport.Canvas.RenderSettings;
+        var observationLifetime=TimeSpan.FromMinutes(15);
         var watch=Stopwatch.StartNew();var drawing=new GraphPresentation();long sample=0;
+        // A bounded, passive trace explains native input ordering without sending
+        // input, changing focus, retrying actions, or keeping handlers after qualification.
+        var inputTrace=new Queue<object>();
+        var modelCanvas=view.Viewport.Canvas;
+        var commandInput=(AutoSuggestBox)view.Console.InputElement;
+        TextBox? FindInput(DependencyObject element)
+        {
+            if(element is TextBox box)return box;
+            for(var i=0;i<VisualTreeHelper.GetChildrenCount(element);i++)
+                if(FindInput(VisualTreeHelper.GetChild(element,i)) is{} found)return found;
+            return null;
+        }
+        string Limited(string text,int maximum)=>text.Length<=maximum?text:text[^maximum..];
+        void ObserveInput(string phase,RoutedEventArgs? args=null,string? key=null,bool? handled=null)
+        {
+            var owner=view.XamlRoot is{} xamlRoot?FocusManager.GetFocusedElement(xamlRoot):null;
+            var edit=FindInput(commandInput);
+            inputTrace.Enqueue(new{milliseconds=watch.ElapsedMilliseconds,phase,key,handled,
+                source=args?.OriginalSource?.GetType().FullName,
+                focus=owner?.GetType().FullName,
+                focusId=owner is DependencyObject focusOwner?AutomationProperties.GetAutomationId(focusOwner):null,
+                canvasFocus=modelCanvas.FocusState.ToString(),
+                focusPending=view.Console.IsCanvasFocusPending,
+                text=Limited(view.Console.InputText,80),innerText=edit is null?null:Limited(edit.Text,80),
+                selectionStart=edit?.SelectionStart,selectionLength=edit?.SelectionLength,
+                history=Limited(view.Console.HistoryText,160)});
+            while(inputTrace.Count>96)inputTrace.Dequeue();
+        }
+        KeyEventHandler keyDown=(_,e)=>ObserveInput("KeyDown",e,e.Key.ToString(),e.Handled);
+        KeyEventHandler keyUp=(_,e)=>ObserveInput("KeyUp",e,e.Key.ToString(),e.Handled);
+        TypedEventHandler<UIElement,CharacterReceivedRoutedEventArgs> character=(_,e)=>ObserveInput("CharacterReceived",e,e.Character.ToString(),e.Handled);
+        PointerEventHandler pressed=(_,e)=>ObserveInput("CanvasPointerPressed",e,handled:e.Handled);
+        RoutedEventHandler focused=(_,e)=>ObserveInput("GotFocus",e);
+        RoutedEventHandler blurred=(_,e)=>ObserveInput("LostFocus",e);
+        TypedEventHandler<AutoSuggestBox,AutoSuggestBoxTextChangedEventArgs> textChanged=(_,e)=>ObserveInput("CommandTextChanged",key:e.Reason.ToString());
+        view.AddHandler(UIElement.KeyDownEvent,keyDown,true);
+        view.AddHandler(UIElement.KeyUpEvent,keyUp,true);
+        view.AddHandler(UIElement.CharacterReceivedEvent,character,true);
+        modelCanvas.AddHandler(UIElement.PointerPressedEvent,pressed,true);
+        view.GotFocus+=focused;view.LostFocus+=blurred;commandInput.TextChanged+=textChanged;
         try
         {
             view.GraphEditor.Canvas.ObservePointerEvents=true;
@@ -29,9 +72,11 @@ public partial class App
             view.Viewport.Canvas.RestoreFourViews();view.Viewport.Canvas.Fit();view.GraphEditor.Canvas.Fit();
             view.Console.ClearHistory();view.Console.WriteLine("NurbsScene — independent NURBS modeling and visual programming");
             await Task.Delay(250);
-            // The expanded suite contains three complete input campaigns. Keep a
-            // bounded observer lifetime without restoring the document mid-campaign.
-            while(watch.Elapsed<TimeSpan.FromMinutes(10))
+            // Each isolated campaign has a fixed hard lifetime, including the
+            // expanded native camera and rendering-preference workflows on the
+            // software GPU. Individual input waits still expire after 20 seconds;
+            // the finish flag restores promptly and never renews this budget.
+            while(watch.Elapsed<observationLifetime)
             {
                 if(Uno.Foundation.WebAssemblyRuntime.InvokeJS("globalThis.nurbsSceneUiFinish === true ? 'yes' : 'no'")=="yes")break;
                 var controls=new Dictionary<string,object>();double? sliderInspectorValue=null;
@@ -46,7 +91,7 @@ public partial class App
                     // Bounds include a TextBox's header. Observe the actual
                     // focused draft so input tests cannot silently type into a
                     // previous field after clicking a header or template border.
-                    var draft=element is TextBox textBox&&(AutomationProperties.GetAutomationId(element).StartsWith("Slider",StringComparison.Ordinal)||AutomationProperties.GetAutomationId(element).StartsWith("Typography",StringComparison.Ordinal)||AutomationProperties.GetAutomationId(element).StartsWith("ViewportProperty",StringComparison.Ordinal))
+                    var draft=element is TextBox textBox&&(AutomationProperties.GetAutomationId(element).StartsWith("Slider",StringComparison.Ordinal)||AutomationProperties.GetAutomationId(element).StartsWith("Typography",StringComparison.Ordinal)||AutomationProperties.GetAutomationId(element).StartsWith("ViewportProperty",StringComparison.Ordinal)||AutomationProperties.GetAutomationId(element).StartsWith("Rendering",StringComparison.Ordinal))
                         ? textBox.Text : null;
                     if(draft?.Length>256)draft=draft[..256];
                     return new{x=p.X,y=p.Y,width=element.ActualWidth,height=element.ActualHeight,enabled=element is not Control c||c.IsEnabled,
@@ -67,6 +112,7 @@ public partial class App
                 if(view.GraphEditor.PanelTypographyEditorIsOpen&&view.GraphEditor.PanelTypographyEditor is{} typographyDialog)Visit(typographyDialog);
                 if(view.GraphEditor.ValueEditorIsOpen&&view.GraphEditor.ValueEditor is{} valueDialog)Visit(valueDialog);
                 if(view.GraphEditor.NumberSliderEditorIsOpen&&view.GraphEditor.NumberSliderEditor is{} sliderDialog)Visit(sliderDialog);
+                if(view.RenderingSettingsEditorIsOpen&&view.RenderingSettingsEditor is{} renderingDialog)Visit(renderingDialog);
                 // Native menu/flyout presenters live in the popup root rather
                 // than under WorkspaceView. Observe only loaded controls.
                 foreach(var item in view.GraphEditor.ActionElements.Concat(view.ActionElements))if(item.IsLoaded)Visit(item);
@@ -113,6 +159,7 @@ public partial class App
                     selected=controller.Document.Selection.Count,documentRevision=controller.Document.Revision,
                     nodeCount=controller.Graph.Nodes.Count,wireCount=controller.Graph.Wires.Count,graphRevision=controller.Graph.Revision,
                     graphFocus=graph.FocusState.ToString(),focusedElement=focusedElement?.GetType().FullName,
+                    modelInputObservations=inputTrace.ToArray(),
                     pointerObservations=graph.PointerObservations,
                     graphSelected=graph.Selection.ToArray(),graphUndo=controller.GraphSession.CanUndo,graphRedo=controller.GraphSession.CanRedo,
                     graphErrors=controller.Graph.LastResult?.ErrorCount??0,graphLayoutBuilds=graph.LayoutBuilds,graphPathBuilds=graph.PathBuilds,
@@ -122,6 +169,9 @@ public partial class App
                     toolbar=view.Toolbar.Category,category=view.GraphEditor.Shelf.Category,inspector=view.Inspector.ActiveTab,
                     startupPreferences=preferences.Encode(),preferences=view.Preferences.Encode(),sidebarVisible=view.Preferences.SidebarVisible,inspectorWidth=view.Preferences.InspectorWidth,historyExpanded=view.Console.HistoryExpanded,commandInput=view.Console.InputText,commandHistoryCount=view.Console.HistoryCount,commandHistory=view.Console.HistoryText,
                     modelContextMenuOpen=view.ModelContextMenuIsOpen,viewportPropertyDraft=view.ViewportPropertyDraft,viewportPropertyValidation=view.ViewportPropertyValidation,
+                    renderingSettings=RenderSettingsPreferences.Serialize(cad.RenderSettings),startupRenderingSettings=RenderSettingsPreferences.Serialize(renderingSettings),
+                    renderingDialogOpen=view.RenderingSettingsEditorIsOpen,renderingValidation=view.RenderingSettingsValidation,renderFrames=cad.Frames,
+                    geometryUploadBytes=cad.GeometryUploadBytes,geometryUploadCount=cad.GeometryUploadCount,
                     cameras=cad.Cameras.ToDictionary(p=>p.Key,p=>new{target=p.Value.Target.ToArray(),distance=p.Value.Distance,scale=p.Value.Scale,azimuth=p.Value.Azimuth,elevation=p.Value.Elevation,fov=p.Value.FieldOfView}),
                     dock=view.Preferences.Dock,definitionVisible=view.Preferences.DefinitionVisible,inspectorVisible=view.Preferences.InspectorVisible,
                     activeViewport=cad.ActiveViewport, maximized=cad.Maximized,gridSnap=view.Aids.GridSnap,ortho=view.Aids.Ortho,endSnap=view.Aids.EndSnap,
@@ -132,12 +182,21 @@ public partial class App
             view.GraphEditor.Canvas.ObservePointerEvents=false;
             controller.Load(source);controller.Scene.ShowGrid=true;controller.Scene.ShowIsocurves=true;
             view.SetPreferences(preferences,false);view.Aids.GridSnap=false;view.Aids.Ortho=false;view.Aids.EndSnap=false;
+            view.Viewport.Canvas.RenderSettings=renderingSettings;
             view.Viewport.Canvas.RestoreFourViews();view.Viewport.Canvas.Fit();view.GraphEditor.Canvas.Fit();
-            if(watch.Elapsed>=TimeSpan.FromMinutes(10))
+            if(watch.Elapsed>=observationLifetime)
                 PublishUi(new{status="failed",error="The qualification observation lifetime expired before the test finished."});
             else PublishUi(new{status="restored"});
         }
         catch(Exception error){PublishUi(new{status="failed",error=error.ToString()});}
+        finally
+        {
+            view.RemoveHandler(UIElement.KeyDownEvent,keyDown);
+            view.RemoveHandler(UIElement.KeyUpEvent,keyUp);
+            view.RemoveHandler(UIElement.CharacterReceivedEvent,character);
+            modelCanvas.RemoveHandler(UIElement.PointerPressedEvent,pressed);
+            view.GotFocus-=focused;view.LostFocus-=blurred;commandInput.TextChanged-=textChanged;
+        }
     }
     private static void PublishUi(object snapshot)
     {
