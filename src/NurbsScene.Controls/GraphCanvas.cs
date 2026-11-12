@@ -35,6 +35,7 @@ public sealed partial class GraphCanvas : WebGpuVectorCanvasElement,IDisposable
     public long WireCachePasses {get;private set;}
     public float Zoom=>_zoom;
     public event Action? ViewChanged;
+    public void CancelInteraction(){CancelGesture();ReleasePointerCaptures();}
     public void SetZoom(float zoom)
     {
         if(!float.IsFinite(zoom))throw new ArgumentException("Finite zoom required.");
@@ -165,12 +166,12 @@ public sealed partial class GraphCanvas : WebGpuVectorCanvasElement,IDisposable
     }
     protected override void Draw(VectorCanvas canvas,Size area)
     {
-        canvas.Save();canvas.ClipRect(new(0,0,(float)area.Width,(float)area.Height));Fill(canvas,new(0,0,(float)area.Width,(float)area.Height),new(214,211,203));
+        canvas.Save();canvas.ClipRect(new(0,0,(float)area.Width,(float)area.Height));Fill(canvas,new(0,0,(float)area.Width,(float)area.Height),CanvasPaper);
         // Draw in screen coordinates using bounded integer indices. Adding a
         // 25-unit step to a float around 1e9 does not advance that float at all.
-        if(CanvasGridLayout.TryCreate(area.Width,area.Height,_zoom,_panX,_panY,out var grid))
+        if(GridVisible&&CanvasGridLayout.TryCreate(area.Width,area.Height,_zoom,_panX,_panY,out var grid))
         {
-            _paint.Style=VectorPaintStyle.Stroke;_paint.StrokeWidth=.6f;_paint.Color=new(194,192,185);
+            _paint.Style=VectorPaintStyle.Stroke;_paint.StrokeWidth=.5f;_paint.Color=new(215,212,203);
             for(var i=0;i<grid.Columns;i++){var x=(float)(grid.OffsetX+i*grid.Spacing);canvas.DrawLine(x,0,x,(float)area.Height,_paint);}
             for(var i=0;i<grid.Rows;i++){var y=(float)(grid.OffsetY+i*grid.Spacing);canvas.DrawLine(0,y,(float)area.Width,y,_paint);}
         }
@@ -185,8 +186,14 @@ public sealed partial class GraphCanvas : WebGpuVectorCanvasElement,IDisposable
                 var w=drawing.Wires[i];if(!WireCanvasBounds(w).Intersects(view))continue;
                 var wire=w.Wire;var selected=_selection.Contains(wire.From.Node)||_selection.Contains(wire.To.Node);
                 var tree=graph.LastResult?.Nodes.GetValueOrDefault(wire.From.Node)?.Outputs.GetValueOrDefault(wire.From.Port);
-                _paint.Style=VectorPaintStyle.Stroke;_paint.StrokeWidth=tree?.ItemCount>1?2.8f:1.3f;_paint.Color=selected?new(120,171,47):new(93,91,86);
-                _paint.PathEffect=tree?.Branches.Length>1?_treeDash:null;DrawWirePath(canvas,w,_paths[i]);_paint.PathEffect=null;
+                var list=FancyWires&&tree?.ItemCount>1;var branches=FancyWires&&tree?.Branches.Length>1;
+                _paint.Style=VectorPaintStyle.Stroke;_paint.StrokeWidth=list?3.2f:1.25f;_paint.Color=selected?new(101,153,39):new(91,91,82);
+                _paint.PathEffect=branches?_treeDash:null;DrawWirePath(canvas,w,_paths[i]);_paint.PathEffect=null;
+                if(list&&!branches)
+                {
+                    _paint.StrokeWidth=1.25f;_paint.Color=selected?new(193,218,153):CanvasPaper;
+                    DrawWirePath(canvas,w,_paths[i]);
+                }
                 if(_zoom>.35f&&wire.Transform!="none")
                 {
                     var tag=wire.Transform switch{"flatten"=>"F","graft"=>"G","simplify"=>"S",_=>"?"};
@@ -199,10 +206,8 @@ public sealed partial class GraphCanvas : WebGpuVectorCanvasElement,IDisposable
             {
                 var b=CanvasBounds(n);if(!b.Intersects(view))continue;
                 var node=n.Node;var rect=new VectorRect((float)b.X,(float)b.Y,(float)(b.X+b.Width),(float)(b.Y+b.Height));
-                var selected=_selection.Contains(node.Id);var result=graph.LastResult?.Nodes.GetValueOrDefault(node.Id);var error=result?.Status is "error" or "blocked";
-                var body=!node.Enabled?new VectorColor(184,184,182):error?new(241,163,59):selected?new(188,222,105):(node.Component is "Text" or "Panel")?new(249,245,163):new(220,220,226);
-                Fill(canvas,new(rect.Left+2,rect.Top+3,rect.Right+2,rect.Bottom+3),new(0,0,0,32),7);
-                Fill(canvas,rect,body,n.Slider?12:6);Stroke(canvas,rect,selected?new(64,95,19):new(83,83,88),selected?2:1,n.Slider?12:6);
+                var selected=_selection.Contains(node.Id);var result=graph.LastResult?.Nodes.GetValueOrDefault(node.Id);
+                DrawCapsule(canvas,n,rect,result,selected);
                 if(_zoom>.35f||PanelLayout.CanResize(node))
                 {
                     canvas.Save();canvas.ClipRect(new(rect.Left+5,rect.Top+2,rect.Right-5,rect.Bottom-2));
@@ -212,15 +217,10 @@ public sealed partial class GraphCanvas : WebGpuVectorCanvasElement,IDisposable
                     }
                     else if(node.Component=="Boolean")DrawBooleanToggle(canvas,node,rect);
                     else if(node.Component is "Text" or "Panel")DrawDataPanel(canvas,node,rect,result);
-                    else
-                    {
-                        canvas.Save();canvas.Translate(rect.MidX-10,rect.MidY-14);canvas.Scale(.85f);IconArtwork.Draw(canvas,n.IconKey);canvas.Restore();
-                        for(var side=0;side<2;side++){var ports=side==1?n.Definition.Outputs:n.Definition.Inputs;for(var i=0;i<ports.Length;i++){var p=n.Port(side==1,i);var label=ports[i].Name;_font.Size=10;var x=side==1?(float)p.X-_font.MeasureText(label)-9:(float)p.X+9;Text(canvas,label,x,(float)p.Y+3,new(55,55,61),10);}}
-                        var name=node.Name??node.Component;_font.Size=9;Text(canvas,name,rect.MidX-_font.MeasureText(name)/2,rect.Bottom-5,new(59,59,68),9);
-                    }
+                    else DrawComponentBody(canvas,n,rect,selected);
                     canvas.Restore();
                     if(PanelLayout.CanResize(node))DrawResizeHandles(canvas,rect,selected);
-                    for(var side=0;side<2;side++){var ports=side==1?n.Definition.Outputs:n.Definition.Inputs;for(var i=0;i<ports.Length;i++){var p=CanvasPort(n,side==1,i);_paint.Style=VectorPaintStyle.Fill;_paint.Color=new(220,220,225);canvas.DrawCircle((float)p.X,(float)p.Y,3,_paint);_paint.Style=VectorPaintStyle.Stroke;_paint.Color=new(65,65,70);_paint.StrokeWidth=1;canvas.DrawCircle((float)p.X,(float)p.Y,3,_paint);}}
+                    for(var side=0;side<2;side++){var ports=side==1?n.Definition.Outputs:n.Definition.Inputs;for(var i=0;i<ports.Length;i++){var p=CanvasPort(n,side==1,i);_paint.Style=VectorPaintStyle.Fill;_paint.Color=selected?new(203,228,156):new(240,240,235);canvas.DrawCircle((float)p.X,(float)p.Y,3,_paint);_paint.Style=VectorPaintStyle.Stroke;_paint.Color=selected?new(67,103,29):new(79,81,73);_paint.StrokeWidth=1;canvas.DrawCircle((float)p.X,(float)p.Y,3,_paint);}}
                 }
             }
             if(_wire is{} pending){var anchor=PortPoint(pending);Wire(canvas,pending.Output?anchor:_worldLast,pending.Output?_worldLast:anchor,new(110,155,35),2.2f);}
