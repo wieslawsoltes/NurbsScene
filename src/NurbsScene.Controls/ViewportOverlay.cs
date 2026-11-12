@@ -14,8 +14,13 @@ public sealed class ViewportOverlay(CadViewport viewport) : WebGpuVectorCanvasEl
         using var paint=new VectorPaint{IsAntialias=true,StrokeWidth=1.4f};using var font=new VectorFont(VectorTypeface.Default,10);
         foreach(var view in ViewportLayout.Create(Math.Max(0,(int)area.Width),Math.Max(0,(int)area.Height),viewport.Cameras,viewport.Maximized))
         {
+            if(view.Width<2||view.Height<2)continue;
+            paint.Style=VectorPaintStyle.Stroke;paint.StrokeWidth=1;
+            paint.Color=view.Name==viewport.ActiveViewport?new(47,101,164):new(156,161,167);
+            canvas.DrawRect(new(view.X+.5f,view.Y+.5f,view.X+view.Width-.5f,view.Y+view.Height-.5f),paint);
             if(view.Width<60||view.Height<60)continue;
             canvas.Save();canvas.ClipRect(new(view.X,view.Y,view.X+view.Width,view.Y+view.Height));
+            paint.StrokeWidth=1.4f;
             var (_,_,right,up)=view.Camera.Basis();var x=view.X+27f;var y=view.Y+view.Height-28f;
             void Axis(Vec3 vector,string label,VectorColor color){var dx=(float)Vec3.Dot(vector,right)*19;var dy=-(float)Vec3.Dot(vector,up)*19;paint.Color=color;paint.Style=VectorPaintStyle.Stroke;canvas.DrawLine(x,y,x+dx,y+dy,paint);paint.Style=VectorPaintStyle.Fill;canvas.DrawText(label,x+dx+2,y+dy+3,font,paint);}
             Axis(Vec3.UnitX,"X",new(171,48,41));Axis(Vec3.UnitY,"Y",new(44,133,53));Axis(Vec3.UnitZ,"Z",new(44,78,166));

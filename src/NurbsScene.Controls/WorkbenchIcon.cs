@@ -75,6 +75,11 @@ public static class IconArtwork
             case "Color":case "Palette":Oval(2,2,20,20,VectorColors.White);Oval(5,4,5,5,new(198,68,52));Oval(13,4,5,5,gold);Oval(4,12,5,5,green);Oval(12,13,6,6,blue);break;
             case "Settings":Oval(5,5,14,14,new(207,213,220));Oval(9,9,6,6,VectorColors.White);for(var i=0;i<8;i++){var a=i*MathF.PI/4;Line(12+8*MathF.Cos(a),12+8*MathF.Sin(a),12+11*MathF.Cos(a),12+11*MathF.Sin(a));}break;
             case "Grip":for(var x=8;x<=16;x+=4)for(var y=7;y<=17;y+=5)Rect(x,y,1,1,new(149,154,163));break;
+            case "Resize":Line(4,21,21,4);Line(10,21,21,10);Line(16,21,21,16);break;
+            case "HistoryExpand":case "HistoryCollapse":
+                Line(3,4,21,4);Line(3,8,21,8);Line(3,12,14,12);
+                if(key=="HistoryExpand"){Line(8,17,13,22,blue);Line(13,22,18,17,blue);}
+                else{Line(8,22,13,17,blue);Line(13,17,18,22,blue);}break;
             case "New":Poly(VectorColors.White,5,2,15,2,20,7,20,22,5,22);Line(15,2,15,7);Line(15,7,20,7);break;
             case "Open":Poly(gold,2,7,2,20,20,20,22,9,10,9,8,6);Line(3,11,20,11);break;
             case "Save":Rect(3,2,18,20,blue);Rect(6,3,11,6,VectorColors.White);Rect(6,14,12,8,VectorColors.White);Line(15,4,15,8);break;

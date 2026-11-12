@@ -367,6 +367,8 @@ public sealed class ViewportControl : Grid
     public CadViewport Canvas {get;}=new();
     private readonly Microsoft.UI.Xaml.Controls.Canvas _headers=new();
     private readonly Dictionary<string,Button> _titles=[];
+    private readonly Dictionary<string,Button> _options=[];
+    private readonly Dictionary<string,Microsoft.UI.Xaml.Shapes.Path> _arrows=[];
     private readonly Dictionary<string,StackPanel> _titleGroups=[];
     private readonly ViewportOverlay _overlay;
     private readonly TextBlock _error=new(){TextWrapping=TextWrapping.Wrap,MaxWidth=540,HorizontalAlignment=HorizontalAlignment.Center,VerticalAlignment=VerticalAlignment.Center,Margin=new(24),Visibility=Visibility.Collapsed};
@@ -377,30 +379,57 @@ public sealed class ViewportControl : Grid
         Canvas.DiagnosticsChanged+=message=>{_error.Text=message;_error.Visibility=Canvas.LastError is null?Visibility.Collapsed:Visibility.Visible;};
         foreach(var name in new[]{"Top","Perspective","Front","Right"})
         {
-            var title=ClassicChrome.Button(name,()=>Canvas.Activate(name),"Viewport_"+name);title.Height=22;title.BorderThickness=new(0);title.Padding=new(5,0,5,0);
+            var title=ClassicChrome.Button(name,()=>Canvas.Activate(name),"Viewport_"+name);title.Height=22;title.BorderThickness=new(0);title.Padding=new(6,0,4,0);
+            ToolTipService.SetToolTip(title,name+" · Click to activate; double-click to maximize or restore");
             title.DoubleTapped+=(_,e)=>{Canvas.Maximize(name);e.Handled=true;};_titles[name]=title;
-            var drop=ClassicChrome.IconButton("Viewport options","Dropdown",()=>{},"ViewportOptions_"+name);drop.Width=17;drop.Height=22;
+            var arrow=HeaderArrow();_arrows[name]=arrow;
+            var drop=ClassicChrome.Button(name+" viewport options",()=>{},"ViewportOptions_"+name);drop.Content=arrow;drop.Width=19;drop.Height=22;drop.Padding=new(5,6,5,6);drop.BorderThickness=new(0);
+            ToolTipService.SetToolTip(drop,name+" viewport options");_options[name]=drop;
             var menu=new MenuFlyout();
-            void Item(string text,Action action){var item=new MenuFlyoutItem{Text=text};item.Click+=(_,_)=>action();menu.Items.Add(item);}
+            void Item(string text,Action action){var item=new MenuFlyoutItem{Text=text,FontSize=11,MinHeight=25,Padding=new(8,2,8,2)};item.Click+=(_,_)=>action();menu.Items.Add(item);}
             Item("Maximize / restore",()=>Canvas.Maximize(name));Item("Zoom extents",()=>{
                 var view=ViewportLayout.Create(Math.Max(1,(int)ActualWidth),Math.Max(1,(int)ActualHeight),Canvas.Cameras,Canvas.Maximized).Single(v=>v.Name==name);
                 if(view.Width>0&&view.Height>0)ViewportNavigation.Fit(view.Camera,Canvas.Scene.Bounds,view.Width,view.Height);
                 Canvas.NotifyViewChanged();
             });
+            menu.Items.Add(new MenuFlyoutSeparator());
+            menu.Items.Add(new MenuFlyoutItem{Text="Display mode · all viewports",FontSize=10,MinHeight=24,Padding=new(8,2,8,2),IsEnabled=false});
             foreach(var mode in Enum.GetValues<DisplayMode>())Item(mode.ToString(),()=>{Canvas.Scene.Mode=mode;Canvas.NotifyViewChanged();});
-            drop.Flyout=menu;title.ContextFlyout=menu;var group=new StackPanel{Orientation=Orientation.Horizontal,Background=ClassicChrome.Background};group.Children.Add(title);group.Children.Add(drop);_titleGroups[name]=group;_headers.Children.Add(group);
+            drop.Flyout=menu;title.ContextFlyout=menu;var group=new StackPanel{Orientation=Orientation.Horizontal,Background=ClassicChrome.Background,BorderBrush=ClassicChrome.Border,BorderThickness=new(1)};group.Children.Add(title);group.Children.Add(drop);_titleGroups[name]=group;_headers.Children.Add(group);
         }
         Canvas.LayoutChanged+=Headers;Canvas.ViewChanged+=()=>_overlay.Invalidate();Canvas.CursorMoved+=_=>_overlay.Invalidate();SizeChanged+=(_,_)=>Headers();Headers();
+    }
+    private static Microsoft.UI.Xaml.Shapes.Path HeaderArrow()
+    {
+        var shape=new PathGeometry();var figure=new PathFigure{StartPoint=new(0,1),IsClosed=true};
+        figure.Segments.Add(new LineSegment{Point=new(8,1)});figure.Segments.Add(new LineSegment{Point=new(4,5)});shape.Figures.Add(figure);
+        return new(){Data=shape,Width=8,Height=6,Fill=ClassicChrome.Ink,IsHitTestVisible=false};
+    }
+    private static void HeaderColors(Button button,bool active)
+    {
+        button.Background=active?ClassicChrome.Accent:ClassicChrome.PanelBackground;
+        button.Foreground=active?ClassicChrome.Surface:ClassicChrome.Ink;
+        // Explicit pointer states preserve the white-on-blue title contrast.
+        // Controls and their gesture state remain retained across activation.
+        button.Resources["ButtonBackgroundPointerOver"]=active?ClassicChrome.Accent:ClassicChrome.Hover;
+        button.Resources["ButtonBackgroundPressed"]=active?ClassicChrome.Accent:ClassicChrome.Selected;
+        button.Resources["ButtonForegroundPointerOver"]=button.Foreground;
+        button.Resources["ButtonForegroundPressed"]=button.Foreground;
     }
     private void Headers()
     {
         var layout=ViewportLayout.Create(Math.Max(0,(int)ActualWidth),Math.Max(0,(int)ActualHeight),Canvas.Cameras,Canvas.Maximized);
-        var visible=layout.Where(v=>v.Width>=40&&v.Height>=25).ToDictionary(v=>v.Name);
+        var visible=layout.Where(v=>v.Width>=40&&v.Height>=28).ToDictionary(v=>v.Name);
         foreach(var (name,group) in _titleGroups)
         {
             group.Visibility=visible.ContainsKey(name)?Visibility.Visible:Visibility.Collapsed;
             if(!visible.TryGetValue(name,out var v))continue;
-            _titles[name].Background=Canvas.ActiveViewport==name?ClassicChrome.Selected:ClassicChrome.Background;
+            var active=Canvas.ActiveViewport==name;
+            HeaderColors(_titles[name],active);HeaderColors(_options[name],active);
+            _arrows[name].Fill=active?ClassicChrome.Surface:ClassicChrome.Ink;
+            group.Background=active?ClassicChrome.Accent:ClassicChrome.PanelBackground;
+            group.BorderBrush=active?ClassicChrome.Accent:ClassicChrome.Border;
+            _titles[name].MaxWidth=Math.Max(10,v.Width-30);
             Microsoft.UI.Xaml.Controls.Canvas.SetLeft(group,v.X+3);Microsoft.UI.Xaml.Controls.Canvas.SetTop(group,v.Y+3);
         }
         _overlay.Invalidate();

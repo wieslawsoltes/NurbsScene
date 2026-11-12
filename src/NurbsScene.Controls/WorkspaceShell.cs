@@ -117,7 +117,14 @@ public sealed partial class WorkspaceView
             case "save":_ =SafeAsync(SaveAsync);break;
             case "4view":case "fourviews":Viewport.Canvas.RestoreFourViews();break;
             case "maxviewport":Viewport.Canvas.Maximize(Viewport.Canvas.ActiveViewport);break;
+            case "viewtop":Viewport.Canvas.Activate("Top");break;
+            case "viewfront":Viewport.Canvas.Activate("Front");break;
+            case "viewright":Viewport.Canvas.Activate("Right");break;
+            case "viewperspective":Viewport.Canvas.Activate("Perspective");break;
             case "grasshopper":case "definition":SetPreferences(Preferences with{DefinitionVisible=!Preferences.DefinitionVisible});break;
+            case "floatingdefinition":HandleDefinitionDock("Float");break;
+            case "folddefinition":ToggleDefinitionFold();break;
+            case "rendering":_ =SafeAsync(RenderingSettingsAsync);break;
             case "commandhistory":SetPreferences(Preferences with{HistoryExpanded=!Preferences.HistoryExpanded});break;
             case "layers":case "properties":case "objects":SetPreferences(Preferences with{InspectorVisible=true,InspectorTab=char.ToUpperInvariant(name[0])+name[1..]});break;
             case "toggleleftsidebar":SetPreferences(Preferences with{SidebarVisible=!Preferences.SidebarVisible});break;
@@ -190,6 +197,7 @@ public sealed partial class WorkspaceView
         // status-layer tooltip. Inspector camera drafts have their own coalescer.
         if(_modeStatus is not null&&_modeStatus.Content?.ToString()!=Controller.Scene.Mode.ToString())
             _modeStatus.Content=Controller.Scene.Mode.ToString();
+        foreach(var (name,button) in _viewportTabs)ClassicChrome.SelectTab(button,name==Viewport.Canvas.ActiveViewport);
     }
     private void RefreshStatus()
     {
