@@ -61,6 +61,20 @@ public static class IconArtwork
             case "Graft":Line(12,2,12,8,green);Line(4,8,20,8,green);Line(4,8,4,15,green);Line(12,8,12,15,green);Line(20,8,20,15,green);Rect(2,16,5,5,pale);Rect(10,16,5,5,pale);Rect(18,16,5,5,pale);break;
             case "Simplify":Rect(2,3,4,17,pale);Line(2,3,6,20,new(181,61,45));Arrow(9,12,21,12,green);break;
             case "Dropdown":Poly(ink,6,9,18,9,12,15);break;
+            case "Check":Line(4,12,9,18,green);Line(9,18,21,4,green);break;
+            case "Search":case "Zoom":Oval(3,3,13,13,VectorColors.White);Line(14,14,22,22,blue);break;
+            case "Float":Rect(2,6,17,16,VectorColors.White);Rect(8,2,14,13,pale);Line(8,6,22,6,blue);break;
+            case "Fold":Rect(3,6,18,13,VectorColors.White);Line(3,10,21,10,blue);Poly(ink,8,15,12,11,16,15);break;
+            case "Recompute":Oval(4,4,16,16);Arrow(4,6,3,12,green);Arrow(20,18,21,12,green);Line(8,4,17,4,blue);Line(7,20,16,20,blue);break;
+            case "Help":Oval(2,2,20,20,blue);using(var font=new VectorFont(VectorTypeface.Default,18)){p.Style=VectorPaintStyle.Fill;p.Color=VectorColors.White;c.DrawText("?",7,18,font,p);}break;
+            case "Objects":Rect(2,4,9,8,pale);Oval(12,11,10,10,gold);Poly(new(173,207,138),12,3,21,3,17,10);break;
+            case "Visibility":case "PreviewOn":case "PreviewOff":
+                using(var eye=new VectorPath()){eye.MoveTo(1,12);eye.CubicTo(6,3,18,3,23,12);eye.CubicTo(18,21,6,21,1,12);eye.Close();p.Style=VectorPaintStyle.Fill;p.Color=VectorColors.White;c.DrawPath(eye,p);p.Style=VectorPaintStyle.Stroke;p.Color=ink;c.DrawPath(eye,p);}
+                Oval(8,8,8,8,blue);if(key=="PreviewOff")Line(3,21,21,3,new(181,61,45));break;
+            case "Lock":Oval(6,2,12,14,VectorColors.White);Rect(3,10,18,12,gold);Oval(10,13,4,4,ink);Line(12,16,12,19);break;
+            case "Color":case "Palette":Oval(2,2,20,20,VectorColors.White);Oval(5,4,5,5,new(198,68,52));Oval(13,4,5,5,gold);Oval(4,12,5,5,green);Oval(12,13,6,6,blue);break;
+            case "Settings":Oval(5,5,14,14,new(207,213,220));Oval(9,9,6,6,VectorColors.White);for(var i=0;i<8;i++){var a=i*MathF.PI/4;Line(12+8*MathF.Cos(a),12+8*MathF.Sin(a),12+11*MathF.Cos(a),12+11*MathF.Sin(a));}break;
+            case "Grip":for(var x=8;x<=16;x+=4)for(var y=7;y<=17;y+=5)Rect(x,y,1,1,new(149,154,163));break;
             case "New":Poly(VectorColors.White,5,2,15,2,20,7,20,22,5,22);Line(15,2,15,7);Line(15,7,20,7);break;
             case "Open":Poly(gold,2,7,2,20,20,20,22,9,10,9,8,6);Line(3,11,20,11);break;
             case "Save":Rect(3,2,18,20,blue);Rect(6,3,11,6,VectorColors.White);Rect(6,14,12,8,VectorColors.White);Line(15,4,15,8);break;
