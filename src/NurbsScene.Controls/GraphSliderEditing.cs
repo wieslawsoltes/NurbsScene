@@ -4,6 +4,7 @@ using Microsoft.UI.Xaml.Input;
 using NurbsScene.Parametric;
 using NurbsScene.Presentation;
 using NurbsScene.Controls.Drawing;
+using Windows.Foundation;
 using Windows.System;
 
 namespace NurbsScene.Controls;
@@ -18,8 +19,8 @@ public sealed partial class GraphEditorControl
 
     private void QueueNumberSliderEdit(Graph graph,string id)
     {
-        // A double-tap can arrive before the second pointer release. Dispatch
-        // after input completion, but never retarget an undo/load replacement.
+        // The canvas requests editing after its gesture completes. Keep modal
+        // work out of routed-event delivery and never retarget a replaced graph.
         DispatcherQueue.TryEnqueue(()=>{
             if(!_sliderEditorDisposed&&ReferenceEquals(Session?.Graph,graph))_ =EditNumberSliderAsync(id);
         });
@@ -49,11 +50,32 @@ public sealed partial class GraphEditorControl
 public sealed partial class GraphCanvas
 {
     public event Action<string>? SliderEditRequested;
+    private sealed record DoubleTapActivation(Graph Graph,string? NodeId,Point World,VirtualKeyModifiers Modifiers);
+    private DoubleTapActivation? _pendingDoubleTap;
     private void OnCanvasDoubleTapped(object sender,DoubleTappedRoutedEventArgs e)
     {
-        _worldLast=World(e.GetPosition(this));var node=NodeAt(_worldLast);
-        if(node is null)SearchRequested?.Invoke();
-        else if(node.Component is "Number" or "Integer")
+        if(_session is null||_canvasDisposed)return;
+        var point=e.GetPosition(this);
+        _worldLast=World(point);
+        var activation=new DoubleTapActivation(_session.Graph,NodeAt(_worldLast)?.Id,_worldLast,_lastPointerModifiers);
+        // Uno can recognize a double tap on the second press. Opening a dialog
+        // then would steal capture from a rapid select-and-drag. Retain the
+        // activation until the owning pointer releases without becoming a drag.
+        if(_activePointerId is not null)
+        {
+            if(_pointerButton==1&&!_moved)
+            {_pendingDoubleTap=activation;Observe("DoubleTapDeferred",point);}
+        }
+        else if(!_moved)ActivateDoubleTap(activation); // Hosts that recognize the completed tap on release.
+        e.Handled=true;
+    }
+    private void ActivateDoubleTap(DoubleTapActivation activation)
+    {
+        if(_canvasDisposed||_session is null||!ReferenceEquals(_session.Graph,activation.Graph))return;
+        if(activation.NodeId is null){SearchRequested?.Invoke();return;}
+        if(!_session.Graph.TryGetNode(activation.NodeId,out var node))return;
+        _worldLast=activation.World;
+        if(node.Component is "Number" or "Integer")
         {
             // The label opens settings. The rail remains a direct scrub target,
             // including repeated clicks; opening settings must not change values.
@@ -61,11 +83,10 @@ public sealed partial class GraphCanvas
         }
         else if(ResizeHit(node,_worldLast)==PanelResizeEdges.None)
         {
-            if((node.Component is "Panel" or "Text") && (_lastPointerModifiers & VirtualKeyModifiers.Control)!=0)
+            if((node.Component is "Panel" or "Text") && (activation.Modifiers & VirtualKeyModifiers.Control)!=0)
             {CancelGesture();ReleasePointerCaptures();SelectNode(node.Id);PanelTypographyRequested?.Invoke(node.Id);}
             else HandleValueDoubleTap(node);
         }
-        e.Handled=true;
     }
     private void DrawNumberSlider(VectorCanvas canvas,GraphNode node,VectorRect rect)
     {
