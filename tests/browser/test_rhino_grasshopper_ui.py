@@ -16,6 +16,19 @@ EVIDENCE = ROOT / "evidence"
 
 async def verify_rhino_grasshopper_ui(page):
     checks = []
+    gestures = []
+
+    def gesture_snapshot(data):
+        return {"sample": data["sample"],
+                "controls": {identity: data["controls"].get(identity) for identity in
+                             ("GraphFloatFrame", "GraphTitleDragHandle", "GraphFloatResize")},
+                "state": {key: data["state"].get(key) for key in
+                          ("preferences", "definitionFloating", "definitionFolded", "historyExpanded", "focusedElement")},
+                "pointerInput": data["state"].get("workspacePointerObservations", [])[-24:],
+                "keyAndFocusInput": data["state"]["modelInputObservations"][-12:]}
+
+    def save_gestures():
+        (EVIDENCE / "uno-rhino-grasshopper-gestures.json").write_text(json.dumps({"gestures": gestures}, indent=2))
 
     def check(condition, label):
         if not condition:
@@ -63,17 +76,29 @@ async def verify_rhino_grasshopper_ui(page):
         data = await wait_for_ui(page, "!!value.controls[" + json.dumps(identity) + "]")
         box = data["controls"][identity]
         point = (box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+        record = {"control": identity, "input": {"button": "left", "start": point,
+                  "end": (point[0] + dx, point[1] + dy), "steps": 8,
+                  "cancel": cancel, "toggleHistory": toggle_history},
+                  "before": gesture_snapshot(data), "during": None, "after": None}
+        gestures.append(record)
+        del gestures[:-16]
+        save_gestures()
         await page.mouse.move(*point)
         await page.mouse.down()
         await page.mouse.move(point[0] + dx, point[1] + dy, steps=8)
         during = await settle(page)
+        record["during"] = gesture_snapshot(during)
+        save_gestures()
         if toggle_history:
             await page.keyboard.press("F2")
             await settle(page)
         if cancel:
             await page.keyboard.press("Escape")
         await page.mouse.up()
-        return during, await settle(page)
+        after = await settle(page)
+        record["after"] = gesture_snapshot(after)
+        save_gestures()
+        return during, after
 
     def layer(data, identity):
         return next(row for row in data["state"]["layerRows"] if row["id"] == identity)
@@ -137,7 +162,9 @@ async def verify_rhino_grasshopper_ui(page):
         revision = data["state"]["documentRevision"]
         await click("LayerColor_" + identity)
         await click("InspectorColorApply")
-        data = await wait_for_ui(page, "value.state.layerColorEditorOpen === false")
+        # Dialog unloading can precede the ShowAsync continuation which commits
+        # the transaction. Observe that lifetime, not the desired color/revision.
+        data = await wait_for_ui(page, "value.state.layerColorEditorPending === false")
         check(data["state"]["documentRevision"] == revision and layer(data, identity)["color"] == original["color"],
               "Applying an unchanged color preserves authoritative float channels and document history")
         await click("LayerColor_" + identity)
@@ -149,7 +176,7 @@ async def verify_rhino_grasshopper_ui(page):
         await page.screenshot(path=str(EVIDENCE / "uno-rhino-layer-color-validation.png"))
         await edit("InspectorColorHex", "#3977B8")
         await click("InspectorColorApply")
-        data = await wait_for_ui(page, "value.state.layerColorEditorOpen === false")
+        data = await wait_for_ui(page, "value.state.layerColorEditorPending === false")
         expected_color = [57 / 255, 119 / 255, 184 / 255, original["color"][3]]
         check(all(abs(a - b) < 1e-6 for a, b in zip(layer(data, identity)["color"], expected_color))
               and data["state"]["documentRevision"] > revision,
@@ -161,7 +188,7 @@ async def verify_rhino_grasshopper_ui(page):
         await click("LayerColor_" + identity)
         await edit("InspectorColorHex", "#123456")
         await click("InspectorColorCancel")
-        data = await wait_for_ui(page, "value.state.layerColorEditorOpen === false")
+        data = await wait_for_ui(page, "value.state.layerColorEditorPending === false")
         check(data["state"]["documentRevision"] == revision and layer(data, identity)["color"] == original["color"],
               "Cancel discards the color draft without changing document state")
         await page.screenshot(path=str(EVIDENCE / "uno-rhino-layers.png"))

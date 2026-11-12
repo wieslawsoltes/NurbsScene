@@ -121,7 +121,9 @@ public sealed partial class GraphEditorControl
     {
         var bar=new Grid{Background=ClassicChrome.Brush(232,234,227)};bar.ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star)});bar.ColumnDefinitions.Add(new(){Width=GridLength.Auto});
         _status.Margin=new(7,0,7,0);_status.TextTrimming=TextTrimming.CharacterEllipsis;bar.Children.Add(_status);
-        _solutionState.Margin=new(8,0,7,0);bar.Children.Add(_solutionState);SetColumn(_solutionState,1);
+        // Reserve the floating host's lower-right resize grip without covering
+        // the solution text; the same status geometry is retained when docked.
+        _solutionState.Margin=new(8,0,24,0);bar.Children.Add(_solutionState);SetColumn(_solutionState,1);
         AutomationProperties.SetAutomationId(_status,"GraphStatus");AutomationProperties.SetAutomationId(_solutionState,"GraphSolutionStatus");
         return new Border{BorderBrush=ClassicChrome.Brush(187,190,181),BorderThickness=new(0,1,0,0),Child=bar};
     }

@@ -37,8 +37,9 @@ public sealed partial class WorkspaceView
         // Use a neutral focusable grip so this gesture is its only owner.
         _floatingResize=new ContentControl{Width=17,Height=17,Padding=new(0),IsTabStop=true,
             HorizontalAlignment=HorizontalAlignment.Right,VerticalAlignment=VerticalAlignment.Bottom,
-            HorizontalContentAlignment=HorizontalAlignment.Center,VerticalContentAlignment=VerticalAlignment.Center,
-            Background=ClassicChrome.PanelBackground,Content=new WorkbenchIcon("Resize"){Width=14,Height=14}};
+            HorizontalContentAlignment=HorizontalAlignment.Stretch,VerticalContentAlignment=VerticalAlignment.Stretch,
+            Content=new Border{Background=ClassicChrome.PanelBackground,
+                Child=new WorkbenchIcon("Resize"){Width=14,Height=14,HorizontalAlignment=HorizontalAlignment.Center,VerticalAlignment=VerticalAlignment.Center}}};
         AutomationProperties.SetAutomationId(_floatingResize,"GraphFloatResize");
         AutomationProperties.SetName(_floatingResize,"Resize definition window");
         AutomationProperties.SetHelpText(_floatingResize,"Drag or use the arrow keys to resize. Escape cancels a drag.");

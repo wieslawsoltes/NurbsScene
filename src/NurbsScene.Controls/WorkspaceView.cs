@@ -36,6 +36,7 @@ public sealed partial class WorkspaceView : UserControl,IDisposable
     private ScrollViewer? _leftSidebar;
     private ViewportPropertiesPanel? _viewportProperties;
     private readonly Dictionary<string,Button> _viewportTabs=[];
+    private string? _activeViewportTab;
     private bool _disposed,_graphVisible=true,_ownsController,_fitAfterLayout;
     private readonly DispatcherTimer _layoutFit=new(){Interval=TimeSpan.FromMilliseconds(50)};
     private long _savedDocument=-1,_savedGraph=-1;
@@ -150,7 +151,7 @@ public sealed partial class WorkspaceView : UserControl,IDisposable
     {
         if(_disposed)return;Viewport.Canvas.Invalidate();_title.Text=$"{Controller.Document.Name}{(IsDirty?" *":"")} — NurbsScene";GraphEditor.DocumentName=Controller.Document.Name;Console.SetPrompt(Controller.PendingCommand);
         _status.Text=$"{Controller.Document.Selection.Count} selected";RefreshStatus();_viewportProperties?.Refresh();Toolbar.SetUndo(Controller.Document.CanUndo,Controller.Document.CanRedo);
-        foreach(var (name,button) in _viewportTabs)ClassicChrome.SelectTab(button,name==Viewport.Canvas.ActiveViewport);
+        UpdateViewportTabs();
     }
     private void Run(string command)
     {

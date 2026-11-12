@@ -197,7 +197,7 @@ public sealed partial class WorkspaceView
         // status-layer tooltip. Inspector camera drafts have their own coalescer.
         if(_modeStatus is not null&&_modeStatus.Content?.ToString()!=Controller.Scene.Mode.ToString())
             _modeStatus.Content=Controller.Scene.Mode.ToString();
-        foreach(var (name,button) in _viewportTabs)ClassicChrome.SelectTab(button,name==Viewport.Canvas.ActiveViewport);
+        UpdateViewportTabs();
     }
     private void RefreshStatus()
     {

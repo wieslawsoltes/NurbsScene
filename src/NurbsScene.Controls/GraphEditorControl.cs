@@ -79,7 +79,7 @@ public sealed partial class GraphEditorControl : Grid,IDisposable
     }
     private void DetachGraph(){if(_graph is not null){_graph.Changed-=UpdateStatus;_graph.Solved-=OnSolved;}_graph=null;}
     private void AttachGraph(Graph graph){_graph=graph;graph.Changed+=UpdateStatus;graph.Solved+=OnSolved;}
-    private void OnReplaced(){_recomputeCancellation?.Cancel();DetachGraph();if(Session is{} session)AttachGraph(session.Graph);RefreshInspector();UpdateStatus();}
+    private void OnReplaced(){_recomputeCancellation?.Cancel();DetachGraph();if(Session is{} session){AttachGraph(session.Graph);Shelf.SetRegistry(session.Graph.Registry);}RefreshInspector();UpdateStatus();}
     private void OnSolved(GraphResult result){UpdateStatus();RefreshResult();}
     private void UpdateStatus()
     {

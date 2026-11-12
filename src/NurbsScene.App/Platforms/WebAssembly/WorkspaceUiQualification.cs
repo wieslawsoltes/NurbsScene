@@ -28,6 +28,7 @@ public partial class App
         // A bounded, passive trace explains native input ordering without sending
         // input, changing focus, retrying actions, or keeping handlers after qualification.
         var inputTrace=new Queue<object>();
+        var pointerTrace=new Queue<object>();
         var modelCanvas=view.Viewport.Canvas;
         var commandInput=(AutoSuggestBox)view.Console.InputElement;
         TextBox? FindInput(DependencyObject element)
@@ -57,6 +58,21 @@ public partial class App
         KeyEventHandler keyUp=(_,e)=>ObserveInput("KeyUp",e,e.Key.ToString(),e.Handled);
         TypedEventHandler<UIElement,CharacterReceivedRoutedEventArgs> character=(_,e)=>ObserveInput("CharacterReceived",e,e.Character.ToString(),e.Handled);
         PointerEventHandler pressed=(_,e)=>ObserveInput("CanvasPointerPressed",e,handled:e.Handled);
+        void ObservePointer(string phase,PointerRoutedEventArgs args)
+        {
+            var point=args.GetCurrentPoint(view);var source=args.OriginalSource as DependencyObject;string? sourceId=null;
+            for(var element=source;element is not null;element=VisualTreeHelper.GetParent(element))
+                if(AutomationProperties.GetAutomationId(element) is{Length:>0} identity){sourceId=identity;break;}
+            var owner=view.XamlRoot is{} xamlRoot?FocusManager.GetFocusedElement(xamlRoot):null;
+            pointerTrace.Enqueue(new{milliseconds=watch.ElapsedMilliseconds,phase,pointer=args.Pointer.PointerId,
+                source=args.OriginalSource?.GetType().FullName,sourceId,x=point.Position.X,y=point.Position.Y,
+                left=point.Properties.IsLeftButtonPressed,right=point.Properties.IsRightButtonPressed,middle=point.Properties.IsMiddleButtonPressed,
+                handled=args.Handled,focusId=owner is DependencyObject focused?AutomationProperties.GetAutomationId(focused):null});
+            while(pointerTrace.Count>64)pointerTrace.Dequeue();
+        }
+        PointerEventHandler workspacePressed=(_,e)=>ObservePointer("Pressed",e);
+        PointerEventHandler workspaceMoved=(_,e)=>ObservePointer("Moved",e);
+        PointerEventHandler workspaceReleased=(_,e)=>ObservePointer("Released",e);
         RoutedEventHandler focused=(_,e)=>ObserveInput("GotFocus",e);
         RoutedEventHandler blurred=(_,e)=>ObserveInput("LostFocus",e);
         TypedEventHandler<AutoSuggestBox,AutoSuggestBoxTextChangedEventArgs> textChanged=(_,e)=>ObserveInput("CommandTextChanged",key:e.Reason.ToString());
@@ -64,6 +80,9 @@ public partial class App
         view.AddHandler(UIElement.KeyUpEvent,keyUp,true);
         view.AddHandler(UIElement.CharacterReceivedEvent,character,true);
         modelCanvas.AddHandler(UIElement.PointerPressedEvent,pressed,true);
+        view.AddHandler(UIElement.PointerPressedEvent,workspacePressed,true);
+        view.AddHandler(UIElement.PointerMovedEvent,workspaceMoved,true);
+        view.AddHandler(UIElement.PointerReleasedEvent,workspaceReleased,true);
         view.GotFocus+=focused;view.LostFocus+=blurred;commandInput.TextChanged+=textChanged;
         try
         {
@@ -109,6 +128,12 @@ public partial class App
                     }
                     for(var i=0;i<VisualTreeHelper.GetChildrenCount(value);i++)Visit(VisualTreeHelper.GetChild(value,i));
                 }
+                bool HasVisibleAncestors(DependencyObject value)
+                {
+                    for(DependencyObject? element=value;element is not null;element=VisualTreeHelper.GetParent(element))
+                        if(element is UIElement visual&&visual.Visibility!=Visibility.Visible)return false;
+                    return true;
+                }
                 Visit(view);
                 if(view.GraphEditor.PanelTypographyEditorIsOpen&&view.GraphEditor.PanelTypographyEditor is{} typographyDialog)Visit(typographyDialog);
                 if(view.GraphEditor.ValueEditorIsOpen&&view.GraphEditor.ValueEditor is{} valueDialog)Visit(valueDialog);
@@ -117,8 +142,9 @@ public partial class App
                 if(view.Inspector.ColorEditorIsOpen&&view.Inspector.ColorEditor is{} layerColorDialog)Visit(layerColorDialog);
                 if(view.GraphEditor.EditorHelpIsOpen&&view.GraphEditor.EditorHelp is{} editorHelp)Visit(editorHelp);
                 // Native menu/flyout presenters live in the popup root rather
-                // than under WorkspaceView. Observe only loaded controls.
-                foreach(var item in view.GraphEditor.ActionElements.Concat(view.ActionElements))if(item.IsLoaded)Visit(item);
+                // than under WorkspaceView. Retained menus can remain loaded
+                // below a collapsed ancestor; loaded alone is not visibility.
+                foreach(var item in view.GraphEditor.ActionElements.Concat(view.ActionElements))if(item.IsLoaded&&HasVisibleAncestors(item))Visit(item);
                 if(view.GraphEditor.SearchIsOpen&&view.GraphEditor.SearchElement is{} search&&search.IsLoaded)Visit(search);
                 var cad=view.Viewport.Canvas;var graph=view.GraphEditor.Canvas;
                 controls["CadCanvas"]=Box(cad);controls["GraphCanvas"]=Box(graph);
@@ -159,12 +185,13 @@ public partial class App
                     objects=controller.Document.Objects.Count,layers=controller.Document.Layers.Count,activeLayer=controller.Document.ActiveLayer,
                     layerRows=controller.Document.Layers.Select(l=>new{id=l.Id,name=l.Name,visible=l.Visible,locked=l.Locked,color=new[]{l.Color.R,l.Color.G,l.Color.B,l.Color.A}}).ToArray(),
                     layerFilter=view.Inspector.FilterText,layerVisibleIds=view.Inspector.VisibleLayerIds,layerSelectedId=view.Inspector.SelectedLayerId,
-                    layerColorEditorOpen=view.Inspector.ColorEditorIsOpen,layerColorValidation=view.Inspector.ColorEditorValidation,
+                    layerColorEditorOpen=view.Inspector.ColorEditorIsOpen,layerColorEditorPending=view.Inspector.ColorEditor is not null,layerColorValidation=view.Inspector.ColorEditorValidation,
                     selectedLayers=controller.Document.Objects.Where(o=>controller.Document.Selection.Contains(o.Id)).Select(o=>o.LayerId).Distinct().ToArray(),
                     selected=controller.Document.Selection.Count,documentRevision=controller.Document.Revision,documentUndo=controller.Document.CanUndo,documentRedo=controller.Document.CanRedo,
                     nodeCount=controller.Graph.Nodes.Count,wireCount=controller.Graph.Wires.Count,graphRevision=controller.Graph.Revision,
                     graphFocus=graph.FocusState.ToString(),focusedElement=focusedElement?.GetType().FullName,
                     modelInputObservations=inputTrace.ToArray(),
+                    workspacePointerObservations=pointerTrace.ToArray(),
                     pointerObservations=graph.PointerObservations,
                     graphSelected=graph.Selection.ToArray(),graphUndo=controller.GraphSession.CanUndo,graphRedo=controller.GraphSession.CanRedo,
                     graphErrors=controller.Graph.LastResult?.ErrorCount??0,graphLayoutBuilds=graph.LayoutBuilds,graphPathBuilds=graph.PathBuilds,
@@ -204,6 +231,9 @@ public partial class App
             view.RemoveHandler(UIElement.KeyUpEvent,keyUp);
             view.RemoveHandler(UIElement.CharacterReceivedEvent,character);
             modelCanvas.RemoveHandler(UIElement.PointerPressedEvent,pressed);
+            view.RemoveHandler(UIElement.PointerPressedEvent,workspacePressed);
+            view.RemoveHandler(UIElement.PointerMovedEvent,workspaceMoved);
+            view.RemoveHandler(UIElement.PointerReleasedEvent,workspaceReleased);
             view.GotFocus-=focused;view.LostFocus-=blurred;commandInput.TextChanged-=textChanged;
         }
     }

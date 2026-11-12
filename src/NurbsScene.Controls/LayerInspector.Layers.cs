@@ -15,6 +15,7 @@ public sealed partial class LayerInspector
 {
     private void BuildLayersPanel()
     {
+        ConfigureLayerToggleResources();
         foreach (var height in new[] { new GridLength(30), new GridLength(30), new GridLength(23), new GridLength(1, GridUnitType.Star), GridLength.Auto })
             _layerPanel.RowDefinitions.Add(new() { Height = height });
         var toolbar = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 1, Margin = new(3, 1, 3, 0) };
@@ -96,6 +97,31 @@ public sealed partial class LayerInspector
         };
         footer.Children.Add(naming); _layerCount.Foreground = ClassicChrome.MutedInk; footer.Children.Add(_layerCount);
         _layerPanel.Children.Add(footer); SetRow(footer, 4);
+    }
+    private void ConfigureLayerToggleResources()
+    {
+        // Uno.WinUI 7.0.32's native ToggleButton template consumes these state
+        // resources. Keep its keyboard/focus/capture behavior and let the bulb
+        // and padlock glyphs communicate state, without accent-colored cells.
+        // Scope the palette to the layer list; other workspace toggles retain
+        // their own theme. Transparent resting cells also retain row selection.
+        var resources = _layers.Resources;
+        var transparent = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+        foreach (var state in new[] { "", "Checked" })
+        {
+            resources["ToggleButtonBackground" + state] = transparent;
+            resources["ToggleButtonBackground" + state + "PointerOver"] = ClassicChrome.PanelBackground;
+            resources["ToggleButtonBackground" + state + "Pressed"] = ClassicChrome.Background;
+            resources["ToggleButtonBackground" + state + "Disabled"] = transparent;
+            resources["ToggleButtonForeground" + state] = ClassicChrome.Ink;
+            resources["ToggleButtonForeground" + state + "PointerOver"] = ClassicChrome.Ink;
+            resources["ToggleButtonForeground" + state + "Pressed"] = ClassicChrome.Ink;
+            resources["ToggleButtonForeground" + state + "Disabled"] = ClassicChrome.MutedInk;
+            resources["ToggleButtonBorderBrush" + state] = transparent;
+            resources["ToggleButtonBorderBrush" + state + "PointerOver"] = ClassicChrome.Border;
+            resources["ToggleButtonBorderBrush" + state + "Pressed"] = ClassicChrome.Border;
+            resources["ToggleButtonBorderBrush" + state + "Disabled"] = transparent;
+        }
     }
     private static Style DenseItemStyle(double height)
     {

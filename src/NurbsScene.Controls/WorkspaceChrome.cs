@@ -23,6 +23,7 @@ public sealed partial class WorkspaceView
         _sidebarHeading.TextTrimming=TextTrimming.CharacterEllipsis;heading.Children.Add(_sidebarHeading);
         var hide=ClassicChrome.IconButton("Hide modeling sidebar","Close",()=>Run("ToggleLeftSidebar"),"HideModelSidebar");
         hide.Width=18;hide.Height=20;hide.Padding=new(4);hide.Background=ClassicChrome.Background;
+        hide.Content=new WorkbenchIcon("Close"){Width=10,Height=10};
         heading.Children.Add(hide);Grid.SetColumn(hide,1);content.Children.Add(heading);content.Children.Add(_sidebarTools);
         content.Children.Add(ClassicChrome.Separator(false));content.Children.Add(ClassicChrome.SectionHeader("Osnap"));
         endSnap.HorizontalAlignment=HorizontalAlignment.Stretch;endSnap.HorizontalContentAlignment=HorizontalAlignment.Left;
@@ -66,5 +67,12 @@ public sealed partial class WorkspaceView
     {
         button.Height=24;button.BorderThickness=new(0,0,1,0);button.Padding=new(8,1,8,1);
         button.Background=ClassicChrome.PanelBackground;button.BorderBrush=ClassicChrome.Border;
+    }
+    private void UpdateViewportTabs()
+    {
+        var active=Viewport.Canvas.ActiveViewport;
+        if(_activeViewportTab==active)return;
+        _activeViewportTab=active;
+        foreach(var (name,button) in _viewportTabs)ClassicChrome.SelectTab(button,name==active);
     }
 }
