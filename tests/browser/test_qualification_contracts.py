@@ -55,6 +55,8 @@ class QualificationContracts(unittest.TestCase):
             GATE.write_json(folder / "uno-ui.json", report)
             GATE.write_json(folder / ("uno-browser-" + name + ".json"), modeling)
             GATE.write_json(folder / "uno-publication.json", self.manifest)
+            if name == "rhino-workspace":
+                GATE.write_json(folder / "uno-rhino-pre-reload-gpu.json", copy.deepcopy(observation))
             GATE.write_json(folder / "uno-console.json", {"errors": [], "console": [],
                 "gpuObservations": [{"campaign": name, "state": copy.deepcopy(observation)}]})
 
@@ -180,6 +182,16 @@ class QualificationContracts(unittest.TestCase):
 
     def test_late_device_loss_rejects_the_final_campaign(self):
         self.edit("uno-ui.json", lambda r: r["campaigns"][0]["gpuObservation"]["errors"].append({"kind": "device-lost", "reason": "unknown"}))
+        self.rejected()
+
+    def test_missing_rhino_pre_reload_device_observation_rejects(self):
+        (self.evidence / "rhino-workspace" / "uno-rhino-pre-reload-gpu.json").unlink()
+        self.rejected()
+
+    def test_pre_reload_device_error_cannot_be_hidden_by_clean_reloaded_device(self):
+        self.edit("uno-rhino-pre-reload-gpu.json",
+                  lambda r: r["errors"].append({"kind": "uncaptured-error", "message": "first document validation failure"}),
+                  name="rhino-workspace")
         self.rejected()
 
     def test_missing_final_device_observation_rejects(self):

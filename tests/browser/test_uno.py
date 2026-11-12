@@ -10,7 +10,7 @@ import json
 import os
 from pathlib import Path
 from playwright.async_api import async_playwright
-from ui_observation import wait_ready, wait_for_restored
+from ui_observation import require_gpu_observation, wait_ready, wait_for_restored
 from test_workspace_ui import verify_workspace_ui
 from test_graph_inputs_ui import verify_graph_inputs_ui
 from test_canvas_values_ui import verify_canvas_values_ui
@@ -26,13 +26,6 @@ from test_rhino_workspace import verify_rhino_workspace
 ROOT = Path(__file__).resolve().parents[2]
 EVIDENCE = ROOT / "evidence"
 GPU_OBSERVER = (ROOT / "tests/browser/webgpu_observation.js").read_text()
-
-def require_gpu_observation(observation):
-    if (not isinstance(observation, dict) or observation.get("version") != 1
-            or observation.get("installed") is not True
-            or type(observation.get("deviceCount")) is not int or observation["deviceCount"] < 1
-            or observation.get("errors") != []):
-        raise AssertionError("Actual WebGPU device observation failed: " + json.dumps(observation))
 
 async def verify_panels(page):
     checks = await verify_canvas_values_ui(page)

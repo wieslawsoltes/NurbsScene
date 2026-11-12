@@ -32,6 +32,13 @@ def observation_predicate(expression: str = "true", *, restored: bool = False) -
     }'''
 
 
+def require_gpu_observation(observation):
+    if (not isinstance(observation, dict) or observation.get("version") != 1
+            or observation.get("installed") is not True
+            or type(observation.get("deviceCount")) is not int or observation["deviceCount"] < 1
+            or observation.get("errors") != []):
+        raise AssertionError("Actual WebGPU device observation failed: " + json.dumps(observation))
+
 def require_snapshot(value: Any, expected: str = "ready") -> dict:
     if not isinstance(value, dict) or value.get("status") != expected:
         raise AssertionError(f"Expected Uno UI state {expected!r}; observed {value!r}")

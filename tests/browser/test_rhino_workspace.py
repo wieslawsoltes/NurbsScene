@@ -7,7 +7,7 @@ DOM replacement, forced focus, skipped action or retry-to-pass is used.
 import json
 import math
 from pathlib import Path
-from ui_observation import read_ui, settle, text_editor_point, wait_for_ui, wait_ready
+from ui_observation import read_ui, require_gpu_observation, settle, text_editor_point, wait_for_ui, wait_ready
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -314,6 +314,11 @@ async def verify_rhino_workspace(page):
         await page.keyboard.press('Escape'); await settle(page)
         await command('Layers')
         expected=(await state())['preferences']
+        # Navigation creates a fresh device observer. Preserve and validate this
+        # document's actual GPU errors before persistence testing replaces it.
+        before_reload_gpu = await page.evaluate('globalThis.nurbsSceneGpuObservation')
+        (ROOT/'evidence/uno-rhino-pre-reload-gpu.json').write_text(json.dumps(before_reload_gpu,indent=2))
+        require_gpu_observation(before_reload_gpu)
         # Read-only startup evidence is captured before the fixture changes layout.
         await page.reload(wait_until='domcontentloaded')
         await page.wait_for_function('globalThis.nurbsSceneQualification && globalThis.nurbsSceneQualification.status !== "running"',timeout=180000)

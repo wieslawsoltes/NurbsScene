@@ -173,6 +173,8 @@ def collect(evidence, site, commit, tree, output, registry_path=REGISTRY):
         require_camera_reuse(modeling.get("renderingPerformance"), name)
         require_gpu_observation(modeling.get("gpuObservation"), name + " modeling")
         require_gpu_observation(record.get("gpuObservation"), name + " final")
+        if name == "rhino-workspace":
+            require_gpu_observation(read_json(path.parent / "uno-rhino-pre-reload-gpu.json"), name + " before reload")
         check_strings(modeling.get("checks"), registry["minimumModelingChecks"], name + " modeling/framebuffer assertions")
         if report.get("modelingChecksPerCampaign") != [len(modeling["checks"])]:
             raise ValueError("Inconsistent modeling assertion count: " + name)
