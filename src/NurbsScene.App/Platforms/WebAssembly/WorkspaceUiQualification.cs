@@ -23,6 +23,7 @@ public partial class App
     {
         var controller=view.Controller;var source=controller.Save();var preferences=view.Preferences;
         var renderingSettings=view.Viewport.Canvas.RenderSettings;
+        var observationLifetime=TimeSpan.FromMinutes(15);
         var watch=Stopwatch.StartNew();var drawing=new GraphPresentation();long sample=0;
         // A bounded, passive trace explains native input ordering without sending
         // input, changing focus, retrying actions, or keeping handlers after qualification.
@@ -71,9 +72,11 @@ public partial class App
             view.Viewport.Canvas.RestoreFourViews();view.Viewport.Canvas.Fit();view.GraphEditor.Canvas.Fit();
             view.Console.ClearHistory();view.Console.WriteLine("NurbsScene — independent NURBS modeling and visual programming");
             await Task.Delay(250);
-            // The expanded suite contains three complete input campaigns. Keep a
-            // bounded observer lifetime without restoring the document mid-campaign.
-            while(watch.Elapsed<TimeSpan.FromMinutes(10))
+            // Each isolated campaign has a fixed hard lifetime, including the
+            // expanded native camera and rendering-preference workflows on the
+            // software GPU. Individual input waits still expire after 20 seconds;
+            // the finish flag restores promptly and never renews this budget.
+            while(watch.Elapsed<observationLifetime)
             {
                 if(Uno.Foundation.WebAssemblyRuntime.InvokeJS("globalThis.nurbsSceneUiFinish === true ? 'yes' : 'no'")=="yes")break;
                 var controls=new Dictionary<string,object>();double? sliderInspectorValue=null;
@@ -181,7 +184,7 @@ public partial class App
             view.SetPreferences(preferences,false);view.Aids.GridSnap=false;view.Aids.Ortho=false;view.Aids.EndSnap=false;
             view.Viewport.Canvas.RenderSettings=renderingSettings;
             view.Viewport.Canvas.RestoreFourViews();view.Viewport.Canvas.Fit();view.GraphEditor.Canvas.Fit();
-            if(watch.Elapsed>=TimeSpan.FromMinutes(10))
+            if(watch.Elapsed>=observationLifetime)
                 PublishUi(new{status="failed",error="The qualification observation lifetime expired before the test finished."});
             else PublishUi(new{status="restored"});
         }

@@ -108,6 +108,14 @@ python tests/browser/test_uno.py
 
 The opt-in hook exercises real managed commands, undo/redo, graph changes, exact baking, workspace and typed-path round trips, four viewports and asynchronous differential WebGPU framebuffer readback. Seven additional checks cover curve-plane sections, overlap reporting, the new components, execution-plan/result reuse, definition serialization, and application-controller splitting/undo. No GPU mocks or skip-on-unavailable path exists. It is smoke qualification, not complete UI, hardware or performance coverage.
 
+Each isolated input campaign has a fixed 15-minute passive-observation lifetime,
+within its 20-minute Actions job. Ordinary action waits retain their 20-second
+deadline; the observer cannot renew its lifetime or dispatch application actions.
+The expanded Rhino campaign reached the previous 10-minute lifetime after 55
+successful checks, before its rendering-preference and reload coverage. Normal
+completion still restores the disposable session immediately, and expiry still
+fails the campaign. All ten campaigns and all 357 UI checks remain mandatory.
+
 The viewport derives from Uno 7's `WebGpuCanvasElement`, borrows Uno's WebGPU device and queue, and renders directly into the compositor target. It does not create an independent browser canvas or copy each displayed frame to CPU memory. Readback runs only for explicit capture/qualification requests. A 16 ms dispatcher timer enforces bounded capture lifetime. It requests rendering until the capture frame has been submitted on either target, then continues requesting compositor frames only on native targets, where Uno's device polling completes asynchronous mapping. The browser map progresses from its JavaScript promise without extra frames after submission. The timer stops on completion, failure or unload; its deadline identifies whether the request was awaiting viewport submission or GPU mapping. The old reflected GL readback adapter and pinned Uno 6 packages are removed.
 
 Interactive GPU canvases set a transparent XAML `Background` so the native
