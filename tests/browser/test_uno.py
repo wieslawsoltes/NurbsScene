@@ -22,6 +22,7 @@ from test_typography_ui import verify_typography_ui
 from test_pointer_ui import verify_pointer_ui
 from test_panel_scrolling_ui import verify_panel_scrolling_ui
 from test_rhino_workspace import verify_rhino_workspace
+from test_rhino_grasshopper_ui import verify_rhino_grasshopper_ui
 
 ROOT = Path(__file__).resolve().parents[2]
 EVIDENCE = ROOT / "evidence"
@@ -43,7 +44,8 @@ async def main(url, campaign=None):
                  ("typography", verify_typography_ui),
                  ("pointer-selection", verify_pointer_ui),
                  ("panel-scrolling", verify_panel_scrolling_ui),
-                 ("rhino-workspace", verify_rhino_workspace))
+                 ("rhino-workspace", verify_rhino_workspace),
+                 ("rhino-grasshopper-ui", verify_rhino_grasshopper_ui))
     registered = [entry["name"] for entry in json.loads((ROOT / "tests/browser/uno-campaigns.json").read_text())["campaigns"]]
     if registered != [name for name, _ in campaigns]:
         raise ValueError("Native runner and mandatory campaign registry disagree")
