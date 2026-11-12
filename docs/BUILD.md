@@ -114,7 +114,12 @@ deadline; the observer cannot renew its lifetime or dispatch application actions
 The expanded Rhino campaign reached the previous 10-minute lifetime after 55
 successful checks, before its rendering-preference and reload coverage. Normal
 completion still restores the disposable session immediately, and expiry still
-fails the campaign. All ten campaigns and all 357 UI checks remain mandatory.
+fails the campaign. All eleven campaigns and their combined minimum of 407 native
+UI checks are mandatory. The original ten campaigns retain their 357 checks; the
+new `rhino-grasshopper-ui` campaign adds 50. The [campaign registry](../tests/browser/uno-campaigns.json)
+is the source of the required per-campaign minima. The interface implementation
+passed this complete gate on source `157b92229ab2094c648245aa59038fd34c25a3ad`; see
+[the exact acceptance record and captures](RHINO-GRASSHOPPER-UI.md).
 
 The viewport derives from Uno 7's `WebGpuCanvasElement`, borrows Uno's WebGPU device and queue, and renders directly into the compositor target. It does not create an independent browser canvas or copy each displayed frame to CPU memory. Readback runs only for explicit capture/qualification requests. A 16 ms dispatcher timer enforces bounded capture lifetime. It requests rendering until the capture frame has been submitted on either target, then continues requesting compositor frames only on native targets, where Uno's device polling completes asynchronous mapping. The browser map progresses from its JavaScript promise without extra frames after submission. The timer stops on completion, failure or unload; its deadline identifies whether the request was awaiting viewport submission or GPU mapping. The old reflected GL readback adapter and pinned Uno 6 packages are removed.
 
@@ -180,10 +185,34 @@ python tests/browser/test_webgpu_pipeline.py --software
 It compiles and executes the WGSL files embedded by the real renderer, checks
 render-pass behavior and readback, and writes `evidence/webgpu-pipeline.json`.
 The software adapter verifies API/shader correctness; this smaller scene cannot
-replace the application's ten interaction campaigns or a physical-GPU benchmark.
+replace the application's eleven interaction campaigns or a physical-GPU benchmark.
 The `webgpu-pipeline` CI job must pass before the publication can qualify.
 
-The artifact gate requires `gpuApi: "WebGPU"`, actual differential framebuffer evidence and an installed observer that saw at least one real GPU device. A wrapper around the native `GPUAdapter.requestDevice` installs listeners on each returned device without replacing it, changing descriptors or suppressing the host's events. Uncaptured validation errors and unexpected device loss fail both the initial modeling report and the final campaign evidence. Only device loss with an explicit `destroyed` reason is ignored because it reports intentional host teardown. The shell persistence campaign also saves and validates `uno-rhino-pre-reload-gpu.json` before its page reload replaces the document-local observer. The aggregate requires that checkpoint so a clean reloaded device cannot hide earlier interaction errors. Final evidence is sampled after screenshots and retained in `uno-console.json`; a legacy WebGL report or missing observation cannot qualify this migration. Browser qualification preserves all ten mandatory input campaigns. Hosted CI uses Chromium's SwiftShader WebGPU adapter for shader/API/framebuffer correctness. That software adapter is not hardware performance evidence. The launch arguments are retained in `uno-console.json`. For an equivalent local correctness run:
+The artifact gate requires `gpuApi: "WebGPU"`, actual differential framebuffer
+evidence and an installed observer that saw at least one real GPU device. A wrapper
+around the native `GPUAdapter.requestDevice` installs listeners on each returned
+device without replacing it, changing descriptors or suppressing the host's events.
+Uncaptured validation errors and unexpected device loss fail both the initial
+modeling report and the final campaign evidence. Only device loss with an explicit
+`destroyed` reason is ignored because it reports intentional host teardown.
+
+Both persistence campaigns save and validate their original device observation
+before reload replaces the document-local observer:
+
+| Campaign | Mandatory pre-reload GPU checkpoint |
+|---|---|
+| `rhino-workspace` | `uno-rhino-pre-reload-gpu.json` |
+| `rhino-grasshopper-ui` | `uno-rhino-grasshopper-pre-reload-gpu.json` |
+
+The [aggregate evidence gate](../tools/uno-qualification.py) requires both
+checkpoints, so a clean reloaded device cannot hide earlier interaction errors.
+Final evidence is sampled after screenshots and retained in `uno-console.json`;
+a legacy WebGL report or missing observation cannot qualify this migration.
+Browser qualification preserves all ten original input campaigns and adds the
+eleventh interface campaign. Hosted CI uses Chromium's SwiftShader WebGPU adapter
+for shader/API/framebuffer correctness. That software adapter is not hardware
+performance evidence. The launch arguments are retained in `uno-console.json`.
+For an equivalent local correctness run:
 
 ```sh
 NURBSSCENE_CHROMIUM_ARGS='["--enable-unsafe-webgpu","--use-angle=swiftshader","--enable-unsafe-swiftshader","--use-vulkan=swiftshader","--enable-features=Vulkan"]' python tests/browser/test_uno.py
@@ -241,13 +270,34 @@ input against observed native-control and graph-canvas bounds. It retains JSON l
 and right/bottom/narrow screenshots. Presentation benchmarks and allocation contracts
 run separately in `presentation.yml`. See `CLASSIC-WORKSPACE.md` for scope and limits.
 
+The eleventh campaign, [`test_rhino_grasshopper_ui.py`](../tests/browser/test_rhino_grasshopper_ui.py),
+adds 50 required native-input checks without changing the original ten campaigns
+or their 357-check minimum. It exercises category-driven modeling tools, actual
+layer creation/filtering/rename/visibility/lock/color controls, grouped component
+palettes, editor menus and appearance toggles, and floating definition movement,
+resizing, folding, docking and persistence. Pointer and keyboard input drive the
+real Uno controls; the application observer supplies passive state and bounds.
+The drag-cancellation scenario also changes command-history visibility while a
+drag is active, then verifies that reload restores the committed floating geometry.
+
+This campaign retains its own progress/observed-state reports, floating and final
+workspace screenshots, reload modeling/framebuffer report, and the mandatory
+pre-reload GPU checkpoint listed above. All eleven campaigns must pass against
+the same staged publication before its artifact qualifies. All eleven passed in
+[Uno run 43219452340](https://github.com/wieslawsoltes/NurbsScene/actions/runs/43219452340),
+with 407 UI checks and 33 modeling/framebuffer checks per campaign. Exact source
+identity, artifact hashes and actual captures are recorded in
+[RHINO-GRASSHOPPER-UI.md](RHINO-GRASSHOPPER-UI.md). Every subsequent source revision
+still requires its own complete gate.
+
 A deferred native text-input focus handoff can leave the model canvas receiving
 keys after a command draft has started. The command console keeps that draft active
 during the handoff: Space appends text and Enter submits the pending draft once;
 an empty draft retains the repeat-command behavior. The Rhino workspace campaign
 types a command and immediately presses Enter without waiting for focus, then
-checks ordinary Undo. These two assertions raise its minimum from 56 to 58 and
-the ten-campaign UI minimum from 349 to 351.
+checks ordinary Undo. At that milestone, these two assertions raised its minimum
+from 56 to 58 and the then ten-campaign UI minimum from 349 to 351. These are
+historical counts; the current campaign registry requires 407 checks across eleven campaigns.
 Browser resize checks acknowledge the requested native workspace width and height
 before asserting responsive layout. New observer samples alone can still describe
 the preceding layout while the WebGPU host processes a browser resize.
@@ -333,6 +383,9 @@ format, equations, primary references and standalone reproduction commands.
 
 The application exposes **Tools → Rendering…**. Validated Apply saves a separate
 version-one rendering preference record; draft Revert/Defaults and Cancel leave the
-live value intact. The Rhino campaign exercises native controls and persistence
-through its existing reload, raising its minimum to 64 and the combined ten-campaign
-UI minimum to 357. The mandatory pre-reload GPU checkpoint remains unchanged.
+live value intact. At the rendering-preferences milestone, the Rhino workspace
+campaign added native controls and persistence checks through its existing reload,
+raising its minimum to 64 and the combined ten-campaign UI minimum to 357. That
+campaign and its `uno-rhino-pre-reload-gpu.json` checkpoint remain unchanged. The
+current eleven-campaign gate adds the 50-check interface campaign and requires its
+separate `uno-rhino-grasshopper-pre-reload-gpu.json` checkpoint as well.

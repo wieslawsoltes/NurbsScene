@@ -1,0 +1,170 @@
+{
+  "schema": 1,
+  "application": "NurbsScene / Uno Platform 7",
+  "pullRequest": "https://github.com/wieslawsoltes/NurbsScene/pull/19",
+  "sourceHead": "157b92229ab2094c648245aa59038fd34c25a3ad",
+  "testedMergeCommit": "a44ca0f79600c1c71e969f0cc48ebc2aed7e1ab8",
+  "testedTree": "52e76bc49d6fc905d11d0d79cb2d70cbba9a74c5",
+  "workflow": {
+    "id": 43219452340,
+    "url": "https://github.com/wieslawsoltes/NurbsScene/actions/runs/43219452340",
+    "status": "passed",
+    "allRepositoryWorkflowsPassed": 23,
+    "unoJobsPassed": 15
+  },
+  "artifact": {
+    "id": 13945548020,
+    "name": "uno-browser-evidence-43219452340",
+    "url": "https://github.com/wieslawsoltes/NurbsScene/actions/runs/43219452340/artifacts/13945548020",
+    "zipBytes": 24633014,
+    "zipSha256": "957d88fdae02411ab585aad48cf7cf1aba3a62bb85846559cb91733d0e69c289"
+  },
+  "publication": {
+    "files": 849,
+    "manifestSha256": "d3e0ac8ef7f266d0abca0a5f2194cc496d1394bb6673e5355c74f7131fc7665e"
+  },
+  "qualification": {
+    "status": "passed",
+    "uiChecks": 407,
+    "aggregateSha256": "9548ceaaa65bbf7446142b0d66ce59065a6f4d8eaefb903162ca8b0933d982ef",
+    "campaigns": [
+      {
+        "name": "workspace",
+        "uiChecks": 45,
+        "modelingChecks": 33,
+        "status": "passed",
+        "gpuErrors": []
+      },
+      {
+        "name": "inputs-sliders",
+        "uiChecks": 31,
+        "modelingChecks": 33,
+        "status": "passed",
+        "gpuErrors": []
+      },
+      {
+        "name": "panels",
+        "uiChecks": 35,
+        "modelingChecks": 33,
+        "status": "passed",
+        "gpuErrors": []
+      },
+      {
+        "name": "panel-edges",
+        "uiChecks": 43,
+        "modelingChecks": 33,
+        "status": "passed",
+        "gpuErrors": []
+      },
+      {
+        "name": "ellipse-loft",
+        "uiChecks": 29,
+        "modelingChecks": 33,
+        "status": "passed",
+        "gpuErrors": []
+      },
+      {
+        "name": "panel-display",
+        "uiChecks": 14,
+        "modelingChecks": 33,
+        "status": "passed",
+        "gpuErrors": []
+      },
+      {
+        "name": "typography",
+        "uiChecks": 35,
+        "modelingChecks": 33,
+        "status": "passed",
+        "gpuErrors": []
+      },
+      {
+        "name": "pointer-selection",
+        "uiChecks": 39,
+        "modelingChecks": 33,
+        "status": "passed",
+        "gpuErrors": []
+      },
+      {
+        "name": "panel-scrolling",
+        "uiChecks": 22,
+        "modelingChecks": 33,
+        "status": "passed",
+        "gpuErrors": []
+      },
+      {
+        "name": "rhino-workspace",
+        "uiChecks": 64,
+        "modelingChecks": 33,
+        "status": "passed",
+        "gpuErrors": []
+      },
+      {
+        "name": "rhino-grasshopper-ui",
+        "uiChecks": 50,
+        "modelingChecks": 33,
+        "status": "passed",
+        "gpuErrors": []
+      }
+    ]
+  },
+  "gpuCheckpoints": [
+    {
+      "artifactPath": "campaigns/rhino-workspace/uno-rhino-pre-reload-gpu.json",
+      "sha256": "fa4046162a5a3ebcda13b8d96b4db2f2b4aa325484c5052ed4939f98338608c2",
+      "installed": true,
+      "deviceCount": 1,
+      "errors": [],
+      "bufferMapRequests": 3,
+      "bufferMapDropped": 0,
+      "bufferMapStatuses": [
+        "fulfilled",
+        "fulfilled",
+        "fulfilled"
+      ]
+    },
+    {
+      "artifactPath": "campaigns/rhino-grasshopper-ui/uno-rhino-grasshopper-pre-reload-gpu.json",
+      "sha256": "7b75c2a6891544986e7b6b1d3dac12c185c724dd868b5ccee17c4914aedda783",
+      "installed": true,
+      "deviceCount": 1,
+      "errors": [],
+      "bufferMapRequests": 3,
+      "bufferMapDropped": 0,
+      "bufferMapStatuses": [
+        "fulfilled",
+        "fulfilled",
+        "fulfilled"
+      ]
+    }
+  ],
+  "captures": [
+    {
+      "path": "docs/images/rhino-grasshopper/rhino-modeling.png",
+      "description": "Four-view modeling workspace with viewport Properties",
+      "artifactPath": "campaigns/rhino-workspace/uno-rhino-modeling.png",
+      "bytes": 446070,
+      "width": 1600,
+      "height": 1100,
+      "sha256": "84ae29cd5a81c89d5c3b93de153300803b5c24ce8956019320882d48766a25bf"
+    },
+    {
+      "path": "docs/images/rhino-grasshopper/grasshopper-floating.png",
+      "description": "Expanded floating definition after native movement and resizing",
+      "artifactPath": "campaigns/rhino-grasshopper-ui/uno-grasshopper-floating.png",
+      "bytes": 224788,
+      "width": 1600,
+      "height": 1100,
+      "sha256": "cac6a9374658bd06c85c1cada8c0141f3ed51aaada75abe462278c44e00b253a"
+    },
+    {
+      "path": "docs/images/rhino-grasshopper/rhino-layer-color.png",
+      "description": "Native layer-color validation preserving the live document",
+      "artifactPath": "campaigns/rhino-grasshopper-ui/uno-rhino-layer-color-validation.png",
+      "bytes": 264888,
+      "width": 1600,
+      "height": 1100,
+      "sha256": "dec37b613863c7e92231069a0e8c487b47eb35e414a109ac357566a3de7d6d93"
+    }
+  ],
+  "qualificationScope": "Actual native Uno pointer/keyboard interaction and WebGPU framebuffer correctness on hosted Chromium SwiftShader, with native desktop Vulkan qualification in the same workflow. No physical-GPU throughput claim. Captures are unmodified PNG bytes from the accepted aggregate artifact; their later documentation commit does not change application or test source."
+}

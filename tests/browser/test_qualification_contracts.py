@@ -57,6 +57,8 @@ class QualificationContracts(unittest.TestCase):
             GATE.write_json(folder / "uno-publication.json", self.manifest)
             if name == "rhino-workspace":
                 GATE.write_json(folder / "uno-rhino-pre-reload-gpu.json", copy.deepcopy(observation))
+            if name == "rhino-grasshopper-ui":
+                GATE.write_json(folder / "uno-rhino-grasshopper-pre-reload-gpu.json", copy.deepcopy(observation))
             GATE.write_json(folder / "uno-console.json", {"errors": [], "console": [],
                 "gpuObservations": [{"campaign": name, "state": copy.deepcopy(observation)}]})
 
@@ -74,18 +76,22 @@ class QualificationContracts(unittest.TestCase):
             self.collect()
         self.assertFalse(self.output.exists(), "A partial acceptance aggregate must not be published")
 
-    def test_all_ten_campaigns_aggregate_without_losing_assertions(self):
+    def test_all_eleven_campaigns_aggregate_without_losing_assertions(self):
         result = self.collect()
-        self.assertEqual(len(result["checks"]), 357)
+        self.assertEqual(len(result["checks"]), 407)
         self.assertEqual([r["campaign"] for r in result["campaigns"]], self.names)
-        self.assertEqual(result["modelingChecksPerCampaign"], [33] * 10)
-        self.assertEqual(len(list((self.output / "campaigns").glob("*/uno-ui.json"))), 10)
+        self.assertEqual(result["modelingChecksPerCampaign"], [33] * 11)
+        self.assertEqual(len(list((self.output / "campaigns").glob("*/uno-ui.json"))), 11)
         self.assertEqual(GATE.read_json(self.output / "uno-publication.json"), self.manifest)
 
     def test_original_campaign_registry_remains_mandatory(self):
-        self.assertEqual(self.names, ["workspace", "inputs-sliders", "panels", "panel-edges", "ellipse-loft", "panel-display", "typography", "pointer-selection", "panel-scrolling", "rhino-workspace"])
+        originals = [("workspace", 45), ("inputs-sliders", 31), ("panels", 35), ("panel-edges", 43),
+                     ("ellipse-loft", 29), ("panel-display", 14), ("typography", 35),
+                     ("pointer-selection", 39), ("panel-scrolling", 22), ("rhino-workspace", 64)]
+        self.assertEqual([(entry["name"], entry["minimumUiChecks"]) for entry in self.registry["campaigns"][:10]], originals)
+        self.assertEqual(sum(count for _, count in originals), 357)
+        self.assertEqual(self.registry["campaigns"][10:], [{"name": "rhino-grasshopper-ui", "minimumUiChecks": 50}])
         self.assertEqual(self.registry["minimumModelingChecks"], 33)
-        self.assertEqual(next(entry["minimumUiChecks"] for entry in self.registry["campaigns"] if entry["name"] == "rhino-workspace"), 64)
 
     def test_hidden_site_files_are_part_of_exact_content_verification(self):
         self.assertIn(".nojekyll", self.manifest["files"])
@@ -192,6 +198,16 @@ class QualificationContracts(unittest.TestCase):
         self.edit("uno-rhino-pre-reload-gpu.json",
                   lambda r: r["errors"].append({"kind": "uncaptured-error", "message": "first document validation failure"}),
                   name="rhino-workspace")
+        self.rejected()
+
+    def test_missing_floating_workspace_pre_reload_device_observation_rejects(self):
+        (self.evidence / "rhino-grasshopper-ui" / "uno-rhino-grasshopper-pre-reload-gpu.json").unlink()
+        self.rejected()
+
+    def test_floating_workspace_device_error_cannot_be_hidden_by_reload(self):
+        self.edit("uno-rhino-grasshopper-pre-reload-gpu.json",
+                  lambda r: r["errors"].append({"kind": "device-lost", "reason": "unknown"}),
+                  name="rhino-grasshopper-ui")
         self.rejected()
 
     def test_missing_final_device_observation_rejects(self):

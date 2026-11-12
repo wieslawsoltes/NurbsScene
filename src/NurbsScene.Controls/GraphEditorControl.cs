@@ -20,13 +20,14 @@ public sealed partial class GraphEditorControl : Grid,IDisposable
         get=>Canvas.Session;
         set
         {
+            _recomputeCancellation?.Cancel();
             if(Canvas.Session is{} old)old.Replaced-=OnReplaced;
             DetachGraph();Canvas.Session=value;
             if(value is not null){value.Replaced+=OnReplaced;Shelf.SetRegistry(value.Graph.Registry);AttachGraph(value.Graph);}
             RefreshInspector();UpdateStatus();
         }
     }
-    private readonly AutoSuggestBox _search=new(){PlaceholderText="Search components…",Width=180,FontSize=11,MinHeight=25,Height=27};
+    private readonly AutoSuggestBox _search=new(){PlaceholderText="Search components…",Width=160,FontSize=11,MinHeight=25,Height=27};
     private readonly StackPanel _inspector=new(){Spacing=6,Padding=new(8)};
     private readonly TextBlock _status=ClassicChrome.Label("Ready",10);
     private readonly TextBlock _zoom=ClassicChrome.Label("100%",10);
@@ -47,28 +48,20 @@ public sealed partial class GraphEditorControl : Grid,IDisposable
     public GraphEditorControl()
     {
         Background=ClassicChrome.Background;BorderBrush=ClassicChrome.Border;BorderThickness=new(1);
-        foreach(var height in new[]{new GridLength(24),new GridLength(25),GridLength.Auto,new GridLength(31),new GridLength(1,GridUnitType.Star),new GridLength(22)})RowDefinitions.Add(new(){Height=height});
-        var title=new Grid{Background=ClassicChrome.Brush(241,241,241)};title.ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star)});title.ColumnDefinitions.Add(new(){Width=GridLength.Auto});
-        var heading=ClassicChrome.Label("Definition — NurbsScene",11);heading.Margin=new(7,0,0,0);title.Children.Add(heading);
-        var docking=new StackPanel{Orientation=Orientation.Horizontal};docking.Children.Add(ClassicChrome.IconButton("Dock right","Dock",()=>DockRequested?.Invoke("Right"),"GraphDockRight"));docking.Children.Add(ClassicChrome.IconButton("Dock below viewports","FourViews",()=>DockRequested?.Invoke("Bottom"),"GraphDockBottom"));docking.Children.Add(ClassicChrome.IconButton("Hide definition","Close",()=>DockRequested?.Invoke("Hide"),"GraphHide"));title.Children.Add(docking);SetColumn(docking,1);Children.Add(title);
+        foreach(var height in new[]{new GridLength(26),new GridLength(26),GridLength.Auto,new GridLength(31),new GridLength(1,GridUnitType.Star),new GridLength(23)})RowDefinitions.Add(new(){Height=height});
+        Children.Add(CreateDefinitionHeader());
         Children.Add(Shelf);SetRow(Shelf,2);
-        var tools=new StackPanel{Orientation=Orientation.Horizontal,Spacing=2,Padding=new(4,1,4,1)};
         UndoButton=ClassicChrome.IconButton("Undo definition edit","Undo",()=>Session?.Undo(),"GraphUndo");RedoButton=ClassicChrome.IconButton("Redo definition edit","Redo",()=>Session?.Redo(),"GraphRedo");
-        tools.Children.Add(UndoButton);tools.Children.Add(RedoButton);
-        tools.Children.Add(ClassicChrome.IconButton("Fit definition","Fit",()=>Canvas.Fit(),"GraphFit"));
-        tools.Children.Add(ClassicChrome.IconButton("Zoom out","ZoomOut",()=>Canvas.SetZoom(Canvas.Zoom/1.2f)));tools.Children.Add(_zoom);tools.Children.Add(ClassicChrome.IconButton("Zoom in","ZoomIn",()=>Canvas.SetZoom(Canvas.Zoom*1.2f)));
-        tools.Children.Add(ClassicChrome.IconButton("Bake selected geometry","Bake",()=>BakeRequested?.Invoke(Canvas.Selection),"GraphBake"));
-        tools.Children.Add(ClassicChrome.IconButton("Delete selected components","Delete",()=>Canvas.DeleteSelected(),"GraphDelete"));
-        tools.Children.Add(ClassicChrome.IconButton("Component properties","Properties",()=>{_inspectorVisible=!_inspectorVisible;SizeInspector();},"GraphProperties"));tools.Children.Add(_search);
-        var toolScroll=ClassicChrome.Horizontal(tools);Children.Add(toolScroll);SetRow(toolScroll,3);
-        var body=new Grid();body.ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star)});body.ColumnDefinitions.Add(_inspectorColumn);body.Children.Add(Canvas);
-        _inspectorScroll.Content=_inspector;SetColumn(_inspectorScroll,1);body.Children.Add(_inspectorScroll);SetRow(body,4);Children.Add(body);SetRow(_status,5);_status.Margin=new(7,0,7,0);Children.Add(_status);
+        _toolbarStrip=ClassicChrome.Horizontal(CreateCanvasToolbar());Children.Add(_toolbarStrip);SetRow(_toolbarStrip,3);
+        _editorBody.ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star)});_editorBody.ColumnDefinitions.Add(_inspectorColumn);_editorBody.Children.Add(Canvas);
+        _inspectorScroll.Background=ClassicChrome.Surface;_inspectorScroll.Content=_inspector;SetColumn(_inspectorScroll,1);_editorBody.Children.Add(_inspectorScroll);SetRow(_editorBody,4);Children.Add(_editorBody);
+        _statusFrame=CreateDefinitionStatus();SetRow(_statusFrame,5);Children.Add(_statusFrame);
         AutomationProperties.SetAutomationId(_search,"ComponentSearch");AutomationProperties.SetName(_search,"Search components");AutomationProperties.SetAutomationId(Canvas,"ParametricCanvas");AutomationProperties.SetAutomationId(_resultPanel,"GraphResultPreview");AutomationProperties.SetAutomationId(_inspectorScroll,"GraphInspector");
         _search.TextChanged+=(_,_)=>{if(Session is null)return;var query=_search.Text;_search.ItemsSource=_toolbarSearchIndex.Search(Session.Graph.Registry,query);};
         _search.QuerySubmitted+=(_,e)=>{var query=e.ChosenSuggestion?.ToString()??e.QueryText;CreateFromQuery(query,Canvas.InsertionPoint);};
         Shelf.ComponentRequested+=AddComponent;
         Canvas.SliderEditRequested+=id=>{if(Session is{} session)QueueNumberSliderEdit(session.Graph,id);};
-        Canvas.SelectionChanged+=()=>{RefreshInspector();UpdateStatus();};Canvas.SearchRequested+=ShowCanvasSearch;Canvas.Message+=Report;Canvas.ViewChanged+=UpdateStatus;
+        Canvas.SelectionChanged+=()=>{RefreshInspector();UpdateStatus();};Canvas.SearchRequested+=ShowCanvasSearch;Canvas.Message+=Report;Canvas.ViewChanged+=UpdateStatus;Canvas.AppearanceChanged+=UpdateAppearanceChecks;
         SizeChanged+=(_,_)=>SizeInspector();
         InitializeActions();InitializeValueEditing();
     }
@@ -80,17 +73,25 @@ public sealed partial class GraphEditorControl : Grid,IDisposable
     private void SizeInspector()
     {
         var visible=_inspectorVisible&&ActualWidth>=420;
-        _inspectorColumn.Width=new GridLength(visible?190:0);
+        _inspectorColumn.Width=new GridLength(visible?Math.Clamp(ActualWidth*.38,200,260):0);
         _inspectorScroll.Visibility=visible?Visibility.Visible:Visibility.Collapsed;
+        if(_documentMenuButton is not null)_documentMenuButton.Visibility=ActualWidth>=620?Visibility.Visible:Visibility.Collapsed;
     }
     private void DetachGraph(){if(_graph is not null){_graph.Changed-=UpdateStatus;_graph.Solved-=OnSolved;}_graph=null;}
     private void AttachGraph(Graph graph){_graph=graph;graph.Changed+=UpdateStatus;graph.Solved+=OnSolved;}
-    private void OnReplaced(){DetachGraph();if(Session is{} session)AttachGraph(session.Graph);RefreshInspector();UpdateStatus();}
+    private void OnReplaced(){_recomputeCancellation?.Cancel();DetachGraph();if(Session is{} session){AttachGraph(session.Graph);Shelf.SetRegistry(session.Graph.Registry);}RefreshInspector();UpdateStatus();}
     private void OnSolved(GraphResult result){UpdateStatus();RefreshResult();}
     private void UpdateStatus()
     {
-        if(Session is null)return;var g=Session.Graph;var r=g.LastResult;
-        _status.Text=$"{g.NodeCount} components  |  {g.WireCount} wires  |  {r?.ErrorCount??0} errors  |  {r?.Milliseconds??0:F2} ms  |  {r?.Cached??0} cached";
+        if(Session is null)
+        {
+            _status.Text="No definition";_solutionState.Text="Not solved";UndoButton.IsEnabled=RedoButton.IsEnabled=false;
+            UpdateActionAvailability();return;
+        }
+        var g=Session.Graph;var r=g.LastResult;
+        _status.Text=$"{g.NodeCount} components  ·  {g.WireCount} wires  ·  {r?.Milliseconds??0:F2} ms  ·  {r?.Cached??0} cached";
+        _solutionState.Text=_solving?"Solving…":r is null?"Not solved":r.ErrorCount>0?$"{r.ErrorCount} errors":"Solution complete";
+        _solutionState.Foreground=r?.ErrorCount>0?ClassicChrome.Brush(166,54,39):ClassicChrome.Brush(74,102,43);
         _zoom.Text=$"{Canvas.Zoom*100:F0}%";UndoButton.IsEnabled=Session.CanUndo;RedoButton.IsEnabled=Session.CanRedo;UpdateActionAvailability();
     }
     private void Report(string text){_status.Text=text;Message?.Invoke(text);}
@@ -206,5 +207,5 @@ public sealed partial class GraphEditorControl : Grid,IDisposable
             if(preview.OmittedBranches>0)ResultLine($"… {preview.OmittedBranches} more branches");
         }
     }
-    public new void Dispose(){DisposeValueEditor();DisposeSliderEditor();if(Session is{} session)session.Replaced-=OnReplaced;DetachGraph();CloseActionPopups();Canvas.Dispose();base.Dispose();}
+    public new void Dispose(){DisposeChrome();DisposeValueEditor();DisposeSliderEditor();if(Session is{} session)session.Replaced-=OnReplaced;DetachGraph();CloseActionPopups();Canvas.Dispose();base.Dispose();}
 }

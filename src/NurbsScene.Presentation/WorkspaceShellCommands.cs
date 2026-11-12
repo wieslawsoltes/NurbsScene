@@ -6,7 +6,8 @@ public static class WorkspaceShellCommands
     public static IReadOnlyList<string> Names {get;}=Array.AsReadOnly(new[]{
         "New","Open","Save","4View","MaxViewport","Grasshopper","CommandHistory",
         "Layers","Properties","Objects","ToggleLeftSidebar","ToggleRightSidebar",
-        "ModelingLayout","DefinitionLayout","ResetLayout","ZoomSelected","Grid","Snap","Ortho","EndSnap"});
+        "ModelingLayout","DefinitionLayout","ResetLayout","ZoomSelected","Grid","Snap","Ortho","EndSnap",
+        "FloatingDefinition","FoldDefinition","ViewTop","ViewFront","ViewRight","ViewPerspective","Rendering"});
     public static IEnumerable<string> Search(string text)
     {
         ArgumentNullException.ThrowIfNull(text);

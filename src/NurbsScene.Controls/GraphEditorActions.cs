@@ -26,19 +26,22 @@ public sealed partial class GraphEditorControl
     private int _pasteCount;
     private bool _clipboardBusy;
     public INurbsEvaluator ClipboardEvaluator {get;set;}=new ManagedNurbsEvaluator();
-    public IEnumerable<FrameworkElement> ActionElements=>_menuElements.Concat(_contextElements);
+    public IEnumerable<FrameworkElement> ActionElements=>_menuElements.Concat(_contextElements).Concat(_fileMenuElements).Concat(Shelf.ActionElements);
     public FrameworkElement? SearchElement=>_searchPanel;
     public bool SearchIsOpen {get;private set;}
     public bool ContextMenuIsOpen {get;private set;}
 
     private void InitializeActions()
     {
-        var bar=new MenuBar{MinHeight=24,FontSize=11};
+        var bar=new MenuBar{MinHeight=26,Height=26,Padding=new(0),FontSize=11};
         MenuBarItem Menu(string name)
         {
             var item=new MenuBarItem{Title=name};AutomationProperties.SetAutomationId(item,"GraphMenu_"+name);
             _menuElements.Add(item);bar.Items.Add(item);return item;
         }
+        var file=Menu("File");
+        foreach(var(id,text)in new[]{("OpenWorkspace","Open workspace…"),("SaveWorkspace","Save workspace"),("SaveWorkspaceAs","Save workspace as…")})
+            file.Items.Add(ActionItem(id,text,_menuElements));
         var edit=Menu("Edit");
         foreach(var (id,text) in new[]{("Undo","Undo  Ctrl+Z"),("Redo","Redo  Ctrl+Y"),("Cut","Cut  Ctrl+X"),("Copy","Copy  Ctrl+C"),("Paste","Paste  Ctrl+V"),("Duplicate","Duplicate  Ctrl+D"),("Delete","Delete"),("SelectAll","Select all  Ctrl+A"),("Invert","Invert selection")})
             edit.Items.Add(ActionItem(id,text,_menuElements));
@@ -46,9 +49,21 @@ public sealed partial class GraphEditorControl
         foreach(var mode in Enum.GetValues<GraphArrangementMode>())arrange.Items.Add(ArrangeItem(mode,_menuElements));
         var view=Menu("View");view.Items.Add(ActionItem("Fit","Zoom extents",_menuElements));view.Items.Add(ActionItem("Search","Search components…",_menuElements));view.Items.Add(ActionItem("Properties","Component properties",_menuElements));
         foreach(var level in new[]{50,100,200}){var value=level;var item=new MenuFlyoutItem{FontSize=11,MinHeight=24,Padding=new(8,2,8,2),Text=$"Zoom {value}%"};item.Click+=(_,_)=>Canvas.SetZoom(value/100f);view.Items.Add(item);}
+        view.Items.Add(new MenuFlyoutSeparator());
+        view.Items.Add(AppearanceItem("GraphView_Palette","Component palettes",()=>ComponentPaletteVisible,value=>ComponentPaletteVisible=value));
+        view.Items.Add(AppearanceItem("GraphView_Toolbar","Canvas toolbar",()=>CanvasToolbarVisible,value=>CanvasToolbarVisible=value));
+        var display=Menu("Display");
+        display.Items.Add(AppearanceItem("GraphDisplay_Grid","Canvas grid",()=>Canvas.GridVisible,value=>Canvas.GridVisible=value));
+        display.Items.Add(AppearanceItem("GraphDisplay_Icons","Component icons",()=>Canvas.ComponentIconsVisible,value=>Canvas.ComponentIconsVisible=value));
+        display.Items.Add(AppearanceItem("GraphDisplay_Names","Component names",()=>Canvas.ComponentNamesVisible,value=>Canvas.ComponentNamesVisible=value));
+        display.Items.Add(AppearanceItem("GraphDisplay_FancyWires","Fancy wires",()=>Canvas.FancyWires,value=>Canvas.FancyWires=value));
         var solution=Menu("Solution");
+        solution.Items.Add(ActionItem("Recompute","Recompute definition",_menuElements));solution.Items.Add(new MenuFlyoutSeparator());
         foreach(var(id,text)in new[]{("Enable","Enable selected"),("Disable","Disable selected"),("PreviewOn","Preview on"),("PreviewOff","Preview off"),("Bake","Bake selected")})solution.Items.Add(ActionItem(id,text,_menuElements));
-        Children.Add(bar);SetRow(bar,1);
+        var help=Menu("Help");help.Items.Add(ActionItem("Help","Definition editor help…",_menuElements));
+        _menuHost.ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star)});_menuHost.ColumnDefinitions.Add(new(){Width=GridLength.Auto});
+        _menuHost.Children.Add(ClassicChrome.Horizontal(bar));var files=CreateDocumentMenuButton();_menuHost.Children.Add(files);SetColumn(files,1);
+        Children.Add(_menuHost);SetRow(_menuHost,1);
         Canvas.ContextMenuRequested+=ShowContextMenu;
         // Register on the editor ancestor: a scoped accelerator searches the
         // scope owner's descendants. Keep the focused-canvas guard so native
@@ -107,6 +122,14 @@ public sealed partial class GraphEditorControl
     }
     private async Task RunActionAsync(string id)
     {
+        if(_chromeDisposed)return;
+        switch(id)
+        {
+            case "OpenWorkspace":WorkspaceActionRequested?.Invoke("Open");return;
+            case "SaveWorkspace":WorkspaceActionRequested?.Invoke("Save");return;
+            case "SaveWorkspaceAs":WorkspaceActionRequested?.Invoke("SaveAs");return;
+            case "Help":await ShowEditorHelpAsync();return;
+        }
         if(Session is null||_clipboardBusy||Canvas.IsInteracting)return;
         try
         {
@@ -120,6 +143,7 @@ public sealed partial class GraphEditorControl
                 case "SelectAll":Canvas.SelectNodes(Session.Graph.Nodes.Select(n=>n.Id));break;
                 case "Invert":Canvas.SelectNodes(Session.Graph.Nodes.Where(n=>!Canvas.IsSelected(n.Id)).Select(n=>n.Id));break;
                 case "Fit":Canvas.Fit();break;
+                case "Recompute":await RecomputeAsync();return;
                 case "Search":ShowCanvasSearch();return;
                 case "Properties":_inspectorVisible=true;SizeInspector();RefreshInspector();return;
                 case "Enable":ChangeFlags(Session.Graph,Canvas.Selection,enabled:true);break;
@@ -172,11 +196,13 @@ public sealed partial class GraphEditorControl
             var id=AutomationProperties.GetAutomationId(item);
             item.IsEnabled=id switch{
                 "GraphAction_Undo"=>Session?.CanUndo==true,"GraphAction_Redo"=>Session?.CanRedo==true,
+                "GraphAction_Recompute"=>Session is not null&&!_solving,
                 "GraphAction_SelectAll" or "GraphAction_Invert"=>Session?.Graph.NodeCount>0,
                 "GraphAction_Copy" or "GraphAction_Cut" or "GraphAction_Duplicate" or "GraphAction_Delete" or "GraphAction_Bake" or "GraphAction_Properties" or "GraphAction_Enable" or "GraphAction_Disable" or "GraphAction_PreviewOn" or "GraphAction_PreviewOff"=>count>0,
                 "GraphArrange_DistributeHorizontal" or "GraphArrange_DistributeVertical"=>count>2,
                 _=>!id.StartsWith("GraphArrange_",StringComparison.Ordinal)||count>1};
         }
+        if(_recomputeButton is not null)_recomputeButton.IsEnabled=Session is not null&&!_solving;
     }
-    private void CloseActionPopups(){_contextMenu?.Hide();_canvasSearch?.Hide();}
+    private void CloseActionPopups(){_contextMenu?.Hide();_canvasSearch?.Hide();_documentMenu?.Hide();Shelf.CloseGroupMenu();}
 }

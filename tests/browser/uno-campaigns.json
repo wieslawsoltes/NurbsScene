@@ -41,6 +41,10 @@
     {
       "name": "rhino-workspace",
       "minimumUiChecks": 64
+    },
+    {
+      "name": "rhino-grasshopper-ui",
+      "minimumUiChecks": 50
     }
   ]
 }

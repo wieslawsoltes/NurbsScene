@@ -12,12 +12,13 @@ namespace NurbsScene.Controls;
 /// <summary>Native command input and selectable, scrollable command history.</summary>
 public sealed class CommandConsole : Grid
 {
-    private readonly AutoSuggestBox _input=new(){PlaceholderText="Enter a command",FontSize=12,MinHeight=25,Padding=new(0),BorderThickness=new(0)};
-    private readonly TextBox _log=new(){IsReadOnly=true,AcceptsReturn=true,TextWrapping=TextWrapping.NoWrap,FontSize=11,BorderThickness=new(0),Padding=new(5,0,5,0),MinHeight=30,Background=ClassicChrome.Brush(255,255,255)};
+    private readonly AutoSuggestBox _input=new(){PlaceholderText="Enter a command",FontSize=12,MinHeight=25,Height=27,Padding=new(0),BorderThickness=new(0),CornerRadius=new(0),Background=ClassicChrome.Surface,Foreground=ClassicChrome.Ink};
+    private readonly TextBox _log=new(){IsReadOnly=true,AcceptsReturn=true,TextWrapping=TextWrapping.NoWrap,FontSize=11,BorderThickness=new(0),CornerRadius=new(0),Padding=new(7,1,7,0),MinHeight=30,Background=ClassicChrome.Surface,Foreground=ClassicChrome.Ink};
     private readonly CommandRecall _history=new();
     private readonly Queue<string> _lines=new();
     private readonly TextBlock _prompt=ClassicChrome.Label("Command:",12);
     private readonly Button _expand;
+    private readonly WorkbenchIcon _expandIcon=new("HistoryExpand"){Width=20,Height=20},_collapseIcon=new("HistoryCollapse"){Width=20,Height=20};
     private bool _setting;
     private string? _repeatCommand;
     public event Action<string>? CommandSubmitted;
@@ -33,27 +34,30 @@ public sealed class CommandConsole : Grid
     public string HistoryText=>_log.Text;
     public CommandConsole()
     {
-        Background=ClassicChrome.Brush(255,255,255);
+        Background=ClassicChrome.Surface;BorderBrush=ClassicChrome.Border;BorderThickness=new(0,1,0,1);
         RowDefinitions.Add(new(){Height=new GridLength(38)});RowDefinitions.Add(new(){Height=new GridLength(27)});
         ScrollViewer.SetVerticalScrollBarVisibility(_log,ScrollBarVisibility.Auto);
         ScrollViewer.SetHorizontalScrollBarVisibility(_log,ScrollBarVisibility.Auto);
         Children.Add(_log);
-        var row=new Grid();row.ColumnDefinitions.Add(new(){Width=GridLength.Auto});row.ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star)});row.ColumnDefinitions.Add(new(){Width=GridLength.Auto});
-        _prompt.Margin=new(5,0,4,0);row.Children.Add(_prompt);row.Children.Add(_input);SetColumn(_input,1);
-        _expand=ClassicChrome.Button("History ▾",()=>HistoryExpandedRequested?.Invoke(!HistoryExpanded),"ToggleCommandHistory");
-        ToolTipService.SetToolTip(_expand,"Command history (F2)");row.Children.Add(_expand);SetColumn(_expand,2);
+        var row=new Grid{Background=ClassicChrome.Surface};row.ColumnDefinitions.Add(new(){Width=GridLength.Auto});row.ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star)});row.ColumnDefinitions.Add(new(){Width=GridLength.Auto});
+        _prompt.Margin=new(7,0,3,0);_prompt.FontWeight=Microsoft.UI.Text.FontWeights.SemiBold;_prompt.MaxWidth=230;_prompt.TextTrimming=TextTrimming.CharacterEllipsis;
+        row.Children.Add(_prompt);row.Children.Add(_input);SetColumn(_input,1);
+        _expand=ClassicChrome.Button("Expand command history",()=>HistoryExpandedRequested?.Invoke(!HistoryExpanded),"ToggleCommandHistory");
+        _expand.Width=29;_expand.Height=27;_expand.Padding=new(4,2,4,2);_expand.BorderThickness=new(1,0,0,0);_expand.Background=ClassicChrome.Surface;_expand.Content=_expandIcon;
+        ToolTipService.SetToolTip(_expand,"Expand command history (F2)");row.Children.Add(_expand);SetColumn(_expand,2);
         Children.Add(row);SetRow(row,1);
-        AutomationProperties.SetAutomationId(_input,"CommandInput");AutomationProperties.SetName(_input,"Command");AutomationProperties.SetAutomationId(_log,"CommandHistory");
+        AutomationProperties.SetAutomationId(_input,"CommandInput");AutomationProperties.SetName(_input,"Command");AutomationProperties.SetAutomationId(_log,"CommandHistory");AutomationProperties.SetName(_log,"Command history");
+        AutomationProperties.SetAutomationId(_prompt,"CommandPrompt");
         // A read-only WinUI/Uno TextBox does not consistently take focus when
         // its empty scrollable area is pressed. Observe handled child presses as
         // well, so selection/copy works across the complete history surface.
         _log.IsTabStop=true;_log.AllowFocusOnInteraction=true;
         _log.AddHandler(UIElement.PointerPressedEvent,new PointerEventHandler((_,_)=>_log.Focus(FocusState.Pointer)),true);
         var menu=new MenuFlyout();
-        var copy=new MenuFlyoutItem{Text="Copy history"};copy.Click+=(_,_)=>{
+        var copy=new MenuFlyoutItem{Text="Copy history",FontSize=11,MinHeight=25,Padding=new(8,2,8,2)};copy.Click+=(_,_)=>{
             try{var data=new DataPackage();data.SetText(_log.Text);Clipboard.SetContent(data);}catch(Exception error){WriteLine("Clipboard: "+error.Message);}
         };
-        var clear=new MenuFlyoutItem{Text="Clear history"};clear.Click+=(_,_)=>ClearHistory();
+        var clear=new MenuFlyoutItem{Text="Clear history",FontSize=11,MinHeight=25,Padding=new(8,2,8,2)};clear.Click+=(_,_)=>ClearHistory();
         menu.Items.Add(copy);menu.Items.Add(clear);_log.ContextFlyout=menu;
         _input.TextChanged+=(_,_)=>{
             if(_setting)return;var text=_input.Text.Trim();
@@ -75,8 +79,9 @@ public sealed class CommandConsole : Grid
     public void SetHistoryExpanded(bool value)
     {
         HistoryExpanded=value;RowDefinitions[0].Height=new GridLength(value?220:38);
-        _expand.Content=value?"History ▴":"History ▾";
+        _expand.Content=value?_collapseIcon:_expandIcon;
         AutomationProperties.SetName(_expand,value?"Collapse command history":"Expand command history");
+        ToolTipService.SetToolTip(_expand,value?"Collapse command history (F2)":"Expand command history (F2)");
     }
     private void SetText(string text){_setting=true;try{_input.Text=text;_input.ItemsSource=Array.Empty<string>();}finally{_setting=false;}}
     private void Submit(string input)
@@ -93,7 +98,11 @@ public sealed class CommandConsole : Grid
     }
     public void Repeat()=>Submit("");
     public void Remember(string command,bool repeatable=true){if(string.Equals(command,"Cancel",StringComparison.OrdinalIgnoreCase))return;_history.Submit(command);if(repeatable)_repeatCommand=command;}
-    public void SetPrompt(string pending)=>_prompt.Text=string.IsNullOrEmpty(pending)?"Command:":pending+":";
+    public void SetPrompt(string pending)
+    {
+        _prompt.Text=string.IsNullOrEmpty(pending)?"Command:":pending+":";
+        ToolTipService.SetToolTip(_prompt,_prompt.Text);
+    }
     public void ClearHistory(){_lines.Clear();_log.Text="";}
     public void WriteLine(string text)
     {

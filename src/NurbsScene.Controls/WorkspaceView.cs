@@ -36,14 +36,14 @@ public sealed partial class WorkspaceView : UserControl,IDisposable
     private ScrollViewer? _leftSidebar;
     private ViewportPropertiesPanel? _viewportProperties;
     private readonly Dictionary<string,Button> _viewportTabs=[];
+    private string? _activeViewportTab;
     private bool _disposed,_graphVisible=true,_ownsController,_fitAfterLayout;
-    private bool? _effectiveRight;
     private readonly DispatcherTimer _layoutFit=new(){Interval=TimeSpan.FromMilliseconds(50)};
     private long _savedDocument=-1,_savedGraph=-1;
     private const string PreferenceKey="NurbsScene.Workspace.Layout.v1";
     public WorkspaceView(WorkspaceController? controller=null)
     {
-        _ownsController=controller is null;Controller=controller??new();RequestedTheme=ElementTheme.Light;
+        _ownsController=controller is null;Controller=controller??new();RequestedTheme=ElementTheme.Light;ClassicChrome.Install(Resources);
         try{if(ApplicationData.Current.LocalSettings.Values.TryGetValue(PreferenceKey,out var stored)&&WorkspacePreferences.TryParse(stored as string,out var parsed))Preferences=parsed;}catch(Exception error){Console.WriteLine("Layout preferences: "+error.Message);}
         LoadRenderingPreferences();
         var root=new Grid{Background=ClassicChrome.Background};
@@ -52,33 +52,31 @@ public sealed partial class WorkspaceView : UserControl,IDisposable
         _title.Margin=new(8,0,0,0);_title.TextTrimming=TextTrimming.CharacterEllipsis;titleRow.Children.Add(_title);
         var branding=ClassicChrome.Label("NURBS + VISUAL PROGRAMMING",9);branding.Margin=new(0,0,8,0);branding.Foreground=ClassicChrome.Brush(112,112,112);titleRow.Children.Add(branding);Grid.SetColumn(branding,1);root.Children.Add(titleRow);
         var menus=CreateMenus();root.Children.Add(menus);Grid.SetRow(menus,1);root.Children.Add(Console);Grid.SetRow(Console,2);root.Children.Add(Toolbar);Grid.SetRow(Toolbar,3);Toolbar.Invoked+=InvokeTool;
-        _body.ColumnDefinitions.Add(new(){Width=new GridLength(57)});_body.ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star)});_body.ColumnDefinitions.Add(new(){Width=new GridLength(4)});_body.ColumnDefinitions.Add(_inspectorColumn);
-        var palette=new Grid{Margin=new(1,2,1,2)};palette.ColumnDefinitions.Add(new(){Width=new GridLength(27)});palette.ColumnDefinitions.Add(new(){Width=new GridLength(27)});
-        var toolIds=new[]{"SelectAll","SelectNone","Line","Circle","Interpolate","InsertKnot","Extrude","Revolve","Loft","Saddle","Move","Copy","Scale","Rotate","Mirror","Project","Area","Centroid","SplitCurve","Delete"};
-        for(var i=0;i<(toolIds.Length+1)/2;i++)palette.RowDefinitions.Add(new(){Height=new GridLength(29)});
-        for(var i=0;i<toolIds.Length;i++){var tool=WorkspaceCommands.Tools.Single(t=>t.Id==toolIds[i]);var button=ClassicChrome.IconButton(tool.Label,tool.Icon,()=>InvokeTool(tool),"Side_"+tool.Id);Grid.SetColumn(button,i%2);Grid.SetRow(button,i/2);palette.Children.Add(button);}
-        _leftSidebar=new ScrollViewer{Content=palette,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,HorizontalScrollBarVisibility=ScrollBarVisibility.Disabled};_body.Children.Add(_leftSidebar);
+        _body.ColumnDefinitions.Add(new(){Width=new GridLength(SidebarWidth)});_body.ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star)});_body.ColumnDefinitions.Add(new(){Width=new GridLength(4)});_body.ColumnDefinitions.Add(_inspectorColumn);
+        EndButton=ClassicChrome.Button("End",()=>{Aids.EndSnap=!Aids.EndSnap;UpdateAids();},"EndSnap");
+        _leftSidebar=CreateModelSidebar(EndButton);_body.Children.Add(_leftSidebar);
         for(var i=0;i<3;i++){_workspace.RowDefinitions.Add(new(){Height=new GridLength(i==0?1:0,GridUnitType.Star)});_workspace.ColumnDefinitions.Add(new(){Width=new GridLength(i==0?1:0,GridUnitType.Star)});}
-        _modelPanel.RowDefinitions.Add(new(){Height=new GridLength(1,GridUnitType.Star)});_modelPanel.RowDefinitions.Add(new(){Height=new GridLength(25)});_modelPanel.RowDefinitions.Add(new(){Height=new GridLength(26)});_modelPanel.Children.Add(Viewport);
-        var tabs=new StackPanel{Orientation=Orientation.Horizontal,Spacing=1};tabs.Children.Add(ClassicChrome.IconButton("Four viewports","FourViews",()=>Viewport.Canvas.RestoreFourViews(),"FourViewButton"));
-        foreach(var name in new[]{"Perspective","Top","Front","Right"}){var b=ClassicChrome.Button(name,()=>Viewport.Canvas.Activate(name),"ViewTab_"+name);b.DoubleTapped+=(_,e)=>{Viewport.Canvas.Maximize(name);e.Handled=true;};_viewportTabs[name]=b;tabs.Children.Add(b);}
+        _modelPanel.RowDefinitions.Add(new(){Height=new GridLength(1,GridUnitType.Star)});_modelPanel.RowDefinitions.Add(new(){Height=new GridLength(25)});_modelPanel.Children.Add(Viewport);
+        var tabs=new StackPanel{Orientation=Orientation.Horizontal,Spacing=0,Background=ClassicChrome.Background};
+        var fourViews=ClassicChrome.IconButton("Four viewports","FourViews",()=>Viewport.Canvas.RestoreFourViews(),"FourViewButton");fourViews.Height=24;tabs.Children.Add(fourViews);
+        foreach(var name in new[]{"Perspective","Top","Front","Right"}){var b=ClassicChrome.TabButton(name,()=>Viewport.Canvas.Activate(name),"ViewTab_"+name);b.DoubleTapped+=(_,e)=>{Viewport.Canvas.Maximize(name);e.Handled=true;};_viewportTabs[name]=b;tabs.Children.Add(b);}
         var tabScroll=ClassicChrome.Horizontal(tabs);_modelPanel.Children.Add(tabScroll);Grid.SetRow(tabScroll,1);
-        var snaps=new StackPanel{Orientation=Orientation.Horizontal,Spacing=4,Padding=new(5,0,0,0)};snaps.Children.Add(ClassicChrome.Label("Object snap",10));
-        EndButton=ClassicChrome.Button("End",()=>{Aids.EndSnap=!Aids.EndSnap;UpdateAids();},"EndSnap");snaps.Children.Add(EndButton);snaps.Children.Add(ClassicChrome.Button("Grid size…",()=>_ =SafeAsync(GridOptionsAsync),"GridOptions"));
-        var help=ClassicChrome.Label("F8 Ortho  ·  F9 Grid Snap",9);help.Margin=new(4,0,0,0);snaps.Children.Add(help);var snapScroll=ClassicChrome.Horizontal(snaps);_modelPanel.Children.Add(snapScroll);Grid.SetRow(snapScroll,2);
         _workspace.Children.Add(_modelPanel);_workspace.Children.Add(_graphGrip);_workspace.Children.Add(GraphEditor);_body.Children.Add(_workspace);Grid.SetColumn(_workspace,1);
         _body.Children.Add(_sideGrip);Grid.SetColumn(_sideGrip,2);_body.Children.Add(Inspector);Grid.SetColumn(Inspector,3);ConfigureSplitters();
-        root.Children.Add(_body);Grid.SetRow(_body,4);
-        var statusRow=new StackPanel{Orientation=Orientation.Horizontal,Spacing=4};_coordinates.Width=275;_coordinates.TextTrimming=TextTrimming.CharacterEllipsis;_coordinates.Margin=new(7,0,0,0);statusRow.Children.Add(_coordinates);
+        var bodyLayer=new Grid();bodyLayer.Children.Add(_body);bodyLayer.Children.Add(_floatingHost);root.Children.Add(bodyLayer);Grid.SetRow(bodyLayer,4);
+        var statusRow=new StackPanel{Orientation=Orientation.Horizontal,Spacing=0,Background=ClassicChrome.PanelBackground};_coordinates.Width=260;_coordinates.TextTrimming=TextTrimming.CharacterEllipsis;_coordinates.Margin=new(7,0,6,0);statusRow.Children.Add(_coordinates);statusRow.Children.Add(ClassicChrome.Separator());
         SnapButton=ClassicChrome.Button("Grid Snap",()=>{Aids.GridSnap=!Aids.GridSnap;UpdateAids();},"GridSnap");OrthoButton=ClassicChrome.Button("Ortho",()=>{Aids.Ortho=!Aids.Ortho;UpdateAids();},"Ortho");statusRow.Children.Add(SnapButton);statusRow.Children.Add(OrthoButton);
         statusRow.Children.Add(ClassicChrome.Button("Tools",()=>Run("ToggleLeftSidebar"),"ToggleSidebar"));statusRow.Children.Add(ClassicChrome.Button("Panels",()=>Run("ToggleRightSidebar"),"ToggleInspector"));
-        AddStatusControls(statusRow);statusRow.Children.Add(_status);
-        var statusScroll=ClassicChrome.Horizontal(statusRow);root.Children.Add(statusScroll);Grid.SetRow(statusScroll,5);Content=root;
+        AddStatusControls(statusRow);_status.Margin=new(9,0,5,0);statusRow.Children.Add(_status);
+        foreach(var button in statusRow.Children.OfType<Button>())StyleStatusButton(button);
+        var statusFrame=new Border{Child=ClassicChrome.Horizontal(statusRow),Background=ClassicChrome.PanelBackground,BorderBrush=ClassicChrome.Border,BorderThickness=new(0,1,0,0)};root.Children.Add(statusFrame);Grid.SetRow(statusFrame,5);Content=root;
+        InitializeFloatingDefinition();
         AutomationProperties.SetAutomationId(this,"NurbsSceneWorkspace");AutomationProperties.SetAutomationId(_status,"WorkspaceStatus");
         Viewport.Canvas.Scene=Controller.Scene;Viewport.Canvas.Aids=Aids;Viewport.Canvas.ConstructionAnchor=()=>Controller.CommandAnchor;GraphEditor.Session=Controller.GraphSession;GraphEditor.ClipboardEvaluator=Controller.Kernel.Evaluator;Inspector.Document=Controller.Document;
         Controller.Changed+=Refresh;Controller.Message+=Console.WriteLine;Controller.FitRequested+=Viewport.Canvas.Fit;Controller.WorkspaceReplaced+=Replaced;
         Console.CommandSubmitted+=Run;GraphEditor.Message+=Console.WriteLine;Inspector.Message+=Console.WriteLine;
-        GraphEditor.DockRequested+=dock=>{if(dock=="Hide")SetPreferences(Preferences with{DefinitionVisible=false});else SetPreferences(Preferences with{Dock=dock,DefinitionVisible=true});};
+        GraphEditor.DockRequested+=HandleDefinitionDock;
+        GraphEditor.WorkspaceActionRequested+=action=>{if(action=="Open")_ =SafeAsync(OpenAsync);else if(action is "Save" or "SaveAs")_ =SafeAsync(SaveAsync);};
         GraphEditor.BakeRequested+=ids=>{try{Controller.Bake(ids);}catch(Exception error){Console.WriteLine(error.Message);}};
         Viewport.Canvas.ObjectSelectionRequested+=PickObject;
         Viewport.Canvas.ConstructionPointPicked+=p=>{try{Controller.AcceptPoint(p);}catch(Exception error){Console.WriteLine(error.Message);Controller.CancelCommand();}};
@@ -86,39 +84,57 @@ public sealed partial class WorkspaceView : UserControl,IDisposable
         Viewport.Canvas.DiagnosticsChanged+=text=>{Console.WriteLine(text);Refresh();};Viewport.Canvas.LayoutChanged+=Refresh;
         _layoutFit.Tick+=(_,_)=>{
             _layoutFit.Stop();
-            if(!_disposed&&_fitAfterLayout&&GraphEditor.Canvas.ActualWidth>120&&GraphEditor.Canvas.ActualHeight>80)
+            if(!_disposed&&_fitAfterLayout&&Preferences.DefinitionVisible&&!DefinitionFolded&&GraphEditor.Canvas.IsLoaded
+                &&GraphEditor.Canvas.ActualWidth>120&&GraphEditor.Canvas.ActualHeight>80)
             {_fitAfterLayout=false;GraphEditor.Canvas.Fit();}
         };
         GraphEditor.Canvas.SizeChanged+=(_,_)=>QueueLayoutFit();
-        SizeChanged+=(_,_)=>ApplyLayout();Loaded+=(_,_)=>{ApplyLayout();GraphEditor.Canvas.Fit();Viewport.Canvas.Fit();};
+        GraphEditor.Canvas.Loaded+=(_,_)=>QueueLayoutFit();
+        SizeChanged+=(_,_)=>ApplyLayout();Loaded+=(_,_)=>{if(_disposed)return;ApplyLayout();QueueLayoutFit();Viewport.Canvas.Fit();};
         var save=new KeyboardAccelerator{Key=VirtualKey.S,Modifiers=VirtualKeyModifiers.Control};save.Invoked+=(sender,e)=>{_ =SafeAsync(SaveAsync);e.Handled=true;};KeyboardAccelerators.Add(save);
         foreach(var key in new[]{VirtualKey.F2,VirtualKey.F7,VirtualKey.F8,VirtualKey.F9}){var accelerator=new KeyboardAccelerator{Key=key};accelerator.Invoked+=(_,e)=>{if(key==VirtualKey.F2)Run("CommandHistory");else if(key==VirtualKey.F7){Controller.Scene.ShowGrid=!Controller.Scene.ShowGrid;Refresh();}else if(key==VirtualKey.F8){Aids.Ortho=!Aids.Ortho;UpdateAids();}else{Aids.GridSnap=!Aids.GridSnap;UpdateAids();}e.Handled=true;};KeyboardAccelerators.Add(accelerator);}
         ConfigureShell();_savedDocument=Controller.Document.Revision;_savedGraph=Controller.Graph.Revision;ApplyLayout();Refresh();UpdateAids();Console.WriteLine("NurbsScene — independent CAD alpha. Type a command to begin. F2 shows command history. Grasshopper opens the definition editor.");
     }
     public void SetPreferences(WorkspacePreferences preferences,bool persist=true)
     {
-        ArgumentNullException.ThrowIfNull(preferences);var encoded=preferences.Encode();
+        ArgumentNullException.ThrowIfNull(preferences);preferences.Encode();
+        if(_floatingPointer is not null&&(preferences.Dock!=Preferences.Dock||!preferences.DefinitionVisible||preferences.FloatingFolded!=Preferences.FloatingFolded))
+        {
+            var draft=Preferences.Placement;var before=_floatingBefore;CancelFloatingGesture();
+            if(preferences.Placement==draft)preferences=preferences.WithPlacement(before);
+        }
+        // Unrelated settings may be persisted during a pointer drag (F2, panel
+        // visibility, etc.). Storage must retain the pre-gesture rectangle until
+        // that gesture commits; Escape must never resurrect a canceled draft.
+        var encoded=(_floatingPointer is null?preferences:preferences.WithPlacement(_floatingBefore)).Encode();
         if(preferences.DefinitionVisible&&!Preferences.DefinitionVisible)_fitAfterLayout=true;Preferences=preferences;ApplyLayout();
         if(persist)try{ApplicationData.Current.LocalSettings.Values[PreferenceKey]=encoded;}catch(Exception error){Console.WriteLine("Could not save layout: "+error.Message);}
     }
     private void ApplyLayout()
     {
-        _graphVisible=Preferences.DefinitionVisible;GraphEditor.Visibility=_graphVisible?Visibility.Visible:Visibility.Collapsed;_graphGrip.Visibility=GraphEditor.Visibility;
+        if(_disposed)return;
+        _graphVisible=Preferences.DefinitionVisible;var floating=DefinitionFloating;
+        AttachDefinitionContainer(floating);GraphEditor.Visibility=_graphVisible?Visibility.Visible:Visibility.Collapsed;
+        _floatingHost.Visibility=floating&&_graphVisible?Visibility.Visible:Visibility.Collapsed;
+        _graphGrip.Visibility=!floating&&_graphVisible?Visibility.Visible:Visibility.Collapsed;
         var showInspector=Preferences.InspectorVisible&&ActualWidth>=720;
         _inspectorColumn.Width=showInspector?new GridLength(Math.Min(Preferences.InspectorWidth,Math.Max(200,ActualWidth*.4))):new GridLength(0);
         Inspector.Visibility=showInspector?Visibility.Visible:Visibility.Collapsed;_sideGrip.Visibility=Inspector.Visibility;
         _body.ColumnDefinitions[2].Width=new GridLength(showInspector?5:0);
-        _body.ColumnDefinitions[0].Width=new GridLength(Preferences.SidebarVisible?57:0);if(_leftSidebar is not null)_leftSidebar.Visibility=Preferences.SidebarVisible?Visibility.Visible:Visibility.Collapsed;
+        _body.ColumnDefinitions[0].Width=new GridLength(Preferences.SidebarVisible?SidebarWidth:0);if(_leftSidebar is not null)_leftSidebar.Visibility=Preferences.SidebarVisible?Visibility.Visible:Visibility.Collapsed;
         Console.SetHistoryExpanded(Preferences.HistoryExpanded);Inspector.ShowTab(Preferences.InspectorTab);
         var right=Preferences.Dock=="Right"&&ActualWidth>=1100;
-        if(_effectiveRight!=right){_effectiveRight=right;_fitAfterLayout=true;}
+        var dock=floating?"Float":right?"Right":"Bottom";
+        if(_effectiveDefinitionDock!=dock){_effectiveDefinitionDock=dock;_fitAfterLayout=true;}
         for(var i=0;i<3;i++){_workspace.ColumnDefinitions[i].Width=new GridLength(i==0?1:0,GridUnitType.Star);_workspace.RowDefinitions[i].Height=new GridLength(i==0?1:0,GridUnitType.Star);}
-        Grid.SetRow(_graphGrip,right?0:1);Grid.SetColumn(_graphGrip,right?1:0);Grid.SetRow(GraphEditor,right?0:2);Grid.SetColumn(GraphEditor,right?2:0);
-        if(_graphVisible)
+        Grid.SetRow(_graphGrip,right?0:1);Grid.SetColumn(_graphGrip,right?1:0);
+        Grid.SetRow(GraphEditor,!floating&&!right?2:0);Grid.SetColumn(GraphEditor,!floating&&right?2:0);
+        if(_graphVisible&&!floating)
         {
             if(right){_workspace.ColumnDefinitions[0].Width=new GridLength(Preferences.Split,GridUnitType.Star);_workspace.ColumnDefinitions[1].Width=new GridLength(5);_workspace.ColumnDefinitions[2].Width=new GridLength(1-Preferences.Split,GridUnitType.Star);}
             else{_workspace.RowDefinitions[0].Height=new GridLength(Preferences.Split,GridUnitType.Star);_workspace.RowDefinitions[1].Height=new GridLength(5);_workspace.RowDefinitions[2].Height=new GridLength(1-Preferences.Split,GridUnitType.Star);}
         }
+        if(floating)ApplyFloatingBounds();else GraphEditor.SetFolded(false);
         QueueLayoutFit();
     }
     private void QueueLayoutFit()
@@ -128,14 +144,14 @@ public sealed partial class WorkspaceView : UserControl,IDisposable
         if(_disposed||!_fitAfterLayout)return;
         _layoutFit.Stop();_layoutFit.Start();
     }
-    private void UpdateAids(){SnapButton.Background=Aids.GridSnap?ClassicChrome.Selected:ClassicChrome.Background;OrthoButton.Background=Aids.Ortho?ClassicChrome.Selected:ClassicChrome.Background;EndButton.Background=Aids.EndSnap?ClassicChrome.Selected:ClassicChrome.Background;}
+    private void UpdateAids(){SnapButton.Background=Aids.GridSnap?ClassicChrome.Selected:ClassicChrome.PanelBackground;OrthoButton.Background=Aids.Ortho?ClassicChrome.Selected:ClassicChrome.PanelBackground;EndButton.Background=Aids.EndSnap?ClassicChrome.Selected:ClassicChrome.PanelBackground;}
     private bool IsDirty=>Controller.Document.Revision!=_savedDocument||Controller.Graph.Revision!=_savedGraph;
     private void Replaced(){Inspector.Document=Controller.Document;Refresh();}
     private void Refresh()
     {
-        if(_disposed)return;Viewport.Canvas.Invalidate();_title.Text=$"{Controller.Document.Name}{(IsDirty?" *":"")} — NurbsScene";Console.SetPrompt(Controller.PendingCommand);
+        if(_disposed)return;Viewport.Canvas.Invalidate();_title.Text=$"{Controller.Document.Name}{(IsDirty?" *":"")} — NurbsScene";GraphEditor.DocumentName=Controller.Document.Name;Console.SetPrompt(Controller.PendingCommand);
         _status.Text=$"{Controller.Document.Selection.Count} selected";RefreshStatus();_viewportProperties?.Refresh();Toolbar.SetUndo(Controller.Document.CanUndo,Controller.Document.CanRedo);
-        foreach(var (name,button) in _viewportTabs)button.Background=name==Viewport.Canvas.ActiveViewport?ClassicChrome.Brush(255,255,255):ClassicChrome.Background;
+        UpdateViewportTabs();
     }
     private void Run(string command)
     {
@@ -163,10 +179,10 @@ public sealed partial class WorkspaceView : UserControl,IDisposable
         foreach(var category in WorkspaceCommands.Categories.Where(c=>c!="Standard"))
         {
             var menu=Menu(category);foreach(var tool in WorkspaceCommands.Category(category))Item(menu,tool.Label,()=>InvokeTool(tool));
-            if(category=="View"){Item(menu,"Zoom selected",()=>Run("ZoomSelected"));Item(menu,"Command history (F2)",()=>Run("CommandHistory"));}
+            if(category=="View")Item(menu,"Command history (F2)",()=>Run("CommandHistory"));
         }
         var tools=Menu("Tools");Item(tools,"Rendering…",()=>_ =SafeAsync(RenderingSettingsAsync));Item(tools,"Construction grid…",()=>_ =SafeAsync(GridOptionsAsync));Item(tools,"Solve definition",()=>_ =SafeAsync(async()=>{await Controller.SolveAsync();}));Item(tools,"Bake selected components",()=>{try{Controller.Bake(GraphEditor.Canvas.Selection);}catch(Exception e){Console.WriteLine(e.Message);}});
-        var panels=Menu("Panels");foreach(var name in new[]{"Layers","Properties","Objects"})Item(panels,name,()=>Run(name));Item(panels,"Definition: dock right",()=>SetPreferences(Preferences with{Dock="Right",DefinitionVisible=true}));Item(panels,"Definition: dock bottom",()=>SetPreferences(Preferences with{Dock="Bottom",DefinitionVisible=true}));Item(panels,"Toggle left sidebar",()=>Run("ToggleLeftSidebar"));Item(panels,"Toggle right sidebar",()=>Run("ToggleRightSidebar"));
+        var panels=Menu("Panels");foreach(var name in new[]{"Layers","Properties","Objects"})Item(panels,name,()=>Run(name));Item(panels,"Definition: dock right",()=>HandleDefinitionDock("Right"));Item(panels,"Definition: dock bottom",()=>HandleDefinitionDock("Bottom"));Item(panels,"Definition: float",()=>HandleDefinitionDock("Float"));Item(panels,"Definition: fold or unfold",ToggleDefinitionFold);Item(panels,"Toggle left sidebar",()=>Run("ToggleLeftSidebar"));Item(panels,"Toggle right sidebar",()=>Run("ToggleRightSidebar"));
         var window=Menu("Window");Item(window,"Modeling layout",()=>Run("ModelingLayout"));Item(window,"Modeling + definition layout",()=>Run("DefinitionLayout"));Item(window,"Reset layout",()=>Run("ResetLayout"));
         var help=Menu("Help");Item(help,"About NurbsScene",()=>_ =SafeAsync(async()=>{await new ContentDialog{XamlRoot=XamlRoot,Title="NurbsScene — independent CAD alpha",Content=new TextBlock{Text="Exact positive-weight NURBS, modular modeling libraries and typed visual programming on Uno Platform 7 with WebGPU rendering.\n\nThe compact interface follows Rhino/Grasshopper conventions but is not identical. B-rep/solid operations, arbitrary trims, SubD, proprietary formats/plugins, complete command coverage remain unfinished.\n\nOnly implemented commands are shown. Construction aids currently provide world-aligned grid, 90-degree ortho and curve-end snapping.\n\nNo proprietary application icons, code or binaries are included.",TextWrapping=TextWrapping.Wrap},CloseButtonText="Close"}.ShowAsync();}));return bar;
     }
@@ -189,5 +205,5 @@ public sealed partial class WorkspaceView : UserControl,IDisposable
     {
         var objects=Controller.Document.Selection.Count>0?Controller.Document.Objects.Where(o=>Controller.Document.Selection.Contains(o.Id)).ToArray():Controller.Document.Objects.ToArray();var picker=new FileSavePicker{SuggestedFileName=Controller.Document.Name};picker.FileTypeChoices.Add(stl?"Display mesh STL":"Display mesh OBJ",new List<string>{stl?".stl":".obj"});var file=await picker.PickSaveFileAsync();if(file is null)return;if(stl)await FileIO.WriteBytesAsync(file,WorkspaceFormat.ExportStl(objects));else await FileIO.WriteTextAsync(file,WorkspaceFormat.ExportObj(objects));Console.WriteLine("Exported display triangulation. This is not exact CAD interchange or a watertight-solid certificate.");
     }
-    public new void Dispose(){if(_disposed)return;_disposed=true;_renderingSettingsDialog?.Hide();_layoutFit.Stop();Controller.Changed-=Refresh;Controller.Message-=Console.WriteLine;Controller.FitRequested-=Viewport.Canvas.Fit;Controller.WorkspaceReplaced-=Replaced;Viewport.Canvas.CancelNavigation();_graphGrip.Cancel();_sideGrip.Cancel();_viewportProperties?.Dispose();Inspector.Detach();GraphEditor.Dispose();if(_ownsController)Controller.Dispose();base.Dispose();}
+    public new void Dispose(){if(_disposed)return;CancelFloatingGesture();_disposed=true;_renderingSettingsDialog?.Hide();_layoutFit.Stop();Controller.Changed-=Refresh;Controller.Message-=Console.WriteLine;Controller.FitRequested-=Viewport.Canvas.Fit;Controller.WorkspaceReplaced-=Replaced;Viewport.Canvas.CancelNavigation();_graphGrip.Cancel();_sideGrip.Cancel();_viewportProperties?.Dispose();Inspector.Detach();GraphEditor.Dispose();if(_ownsController)Controller.Dispose();base.Dispose();}
 }
