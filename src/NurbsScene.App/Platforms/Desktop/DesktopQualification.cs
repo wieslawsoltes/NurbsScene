@@ -45,7 +45,7 @@ public partial class App
             ["schema"] = 1,
             ["application"] = "Uno Platform",
             ["status"] = "running",
-            ["scope"] = "Native desktop rendering, asynchronous GPU readback, in-flight cancellation/disposal and recovery correctness; no hardware performance claim.",
+            ["scope"] = "Native desktop rendering, retained caches, font scaling, asynchronous GPU readback, in-flight cancellation/disposal and recovery correctness; no hardware performance claim.",
             ["runtime"] = RuntimeInformation.FrameworkDescription,
             ["platform"] = RuntimeInformation.OSDescription,
             ["architecture"] = RuntimeInformation.ProcessArchitecture.ToString(),
@@ -184,12 +184,16 @@ public partial class App
             report["renderCaches"] = await QualifyNativeRenderCachesAsync(canvas, Check, Wait);
             var lifetime = await QualifyNativeCaptureLifetimeAsync(view);
             report["captureLifetime"] = lifetime;
-            Check(lifetime.CancelWasPending && lifetime.CancelException == nameof(OperationCanceledException),
-                "CancelCapture cancels an actually pending native map through the public renderer API");
+            Check(lifetime.CancelWasPending && (lifetime.CancelException == nameof(OperationCanceledException)
+                || (lifetime.CancelException.Length == 0 && lifetime.CancelCompletedBytes == lifetime.AfterCancelBytes
+                    && lifetime.CancelCompletedPixelsMatch && lifetime.CancelCompletedSha256 == lifetime.RecoverySha256)),
+                "CancelCapture safely settles an in-flight native capture, including a concurrent successful completion");
             Check(lifetime.AfterCancelBytes == lifetime.Width * lifetime.Height * 4,
                 "The same native renderer captures a complete framebuffer after cancellation");
-            Check(lifetime.DisposeWasPending && lifetime.DisposeException == nameof(ObjectDisposedException),
-                "Disposing a renderer cancels its actually pending native map");
+            Check(lifetime.DisposeWasPending && (lifetime.DisposeException == nameof(ObjectDisposedException)
+                || (lifetime.DisposeException.Length == 0 && lifetime.DisposeCompletedBytes == lifetime.AfterCancelBytes
+                    && lifetime.DisposeCompletedPixelsMatch && lifetime.DisposeCompletedSha256 == lifetime.RecoverySha256)),
+                "Disposing a renderer safely settles an in-flight native capture, including a concurrent successful completion");
             Check(lifetime.AfterDisposeBytes == lifetime.AfterCancelBytes && lifetime.RendererInstances == 2,
                 "A replacement renderer captures successfully on the same borrowed Uno device after disposal");
             Check(lifetime.IdenticalRecoveryPixels,
@@ -474,14 +478,22 @@ public partial class App
     }
 
     private sealed record NativeCaptureLifetimeReport(bool CancelWasPending, string CancelException,
-        bool DisposeWasPending, string DisposeException, int Width, int Height,
+        int CancelCompletedBytes, bool CancelCompletedPixelsMatch, string CancelCompletedSha256,
+        bool DisposeWasPending, string DisposeException, int DisposeCompletedBytes, bool DisposeCompletedPixelsMatch,
+        string DisposeCompletedSha256, int Width, int Height,
         int AfterCancelBytes, int AfterDisposeBytes, bool IdenticalRecoveryPixels,
         int OriginalTriangles, int ReplacementTriangles, int RendererInstances,
-        string RecoverySha256, double ElapsedMilliseconds, bool CanvasUnloaded = false);
+        string RecoverySha256, double ElapsedMilliseconds, bool CanvasUnloaded = false)
+    {
+        public string CancelOutcome => CancelException.Length == 0 ? "completed-before-cancellation" : "canceled-by-request";
+        public string DisposeOutcome => DisposeException.Length == 0 ? "completed-before-cancellation" : "canceled-by-disposal";
+    }
 
     // A real, qualification-only canvas supplies the public borrowed context.
-    // Cancellation happens in RenderOverride before returning to the owner poll,
-    // with pending state asserted instead of a sleep or renderer testing hook.
+    // Cancellation runs in RenderOverride with pending state asserted instead of
+    // a sleep or renderer testing hook. Native spontaneous callbacks can finish
+    // between observing a pending task and either cancellation call, so validate
+    // both legal terminal outcomes and report which branch was actually observed.
     private sealed class NativeCaptureLifetimeCanvas(DisplayScene scene) : WebGpuCanvasElement
     {
         private readonly TaskCompletionSource<NativeCaptureLifetimeReport> _completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -490,10 +502,10 @@ public partial class App
         private readonly Camera _camera = new("Perspective");
         private WebGpuRenderer? _renderer;
         private Task<byte[]>? _recovery;
-        private byte[]? _afterCancel;
-        private int _stage, _width, _height, _originalTriangles, _replacementTriangles;
-        private bool _cancelWasPending, _disposeWasPending;
-        private string _cancelException = "", _disposeException = "";
+        private byte[]? _afterCancel, _cancelCompleted;
+        private int _stage, _width, _height, _originalTriangles, _replacementTriangles, _disposeCompletedBytes;
+        private bool _cancelWasPending, _cancelCompletedPixelsMatch, _disposeWasPending, _disposeCompletedPixelsMatch;
+        private string _cancelException = "", _cancelCompletedSha256 = "", _disposeException = "", _disposeCompletedSha256 = "";
         public Task<NativeCaptureLifetimeReport> Completion => _completion.Task;
         public Task Destroyed => _destroyed.Task;
 
@@ -520,20 +532,37 @@ public partial class App
                     if (!_cancelWasPending) throw new InvalidOperationException("Cancellation qualification requires an actually pending native map.");
                     renderer.CancelCapture();
                     renderer.CancelCapture(); // Public cancellation must also be idempotent.
-                    _cancelException = RequireFailure<OperationCanceledException>(pending);
+                    _cancelCompleted = ReadTerminal<OperationCanceledException>(pending, out _cancelException);
                     _recovery = renderer.CaptureRgbaAsync();
                     _stage = 1;
                 }
                 else if (_stage == 1 && _recovery!.IsCompleted)
                 {
                     _afterCancel = ReadRecovery(_recovery);
+                    if (_cancelCompleted is { } completedCancel)
+                    {
+                        _cancelCompletedPixelsMatch = completedCancel.AsSpan().SequenceEqual(_afterCancel);
+                        _cancelCompletedSha256 = Convert.ToHexString(SHA256.HashData(completedCancel));
+                        if (!_cancelCompletedPixelsMatch)
+                            throw new InvalidOperationException("A capture completed concurrently with cancellation returned different pixels.");
+                    }
                     var pending = renderer.CaptureRgbaAsync();
                     _disposeWasPending = !pending.IsCompleted;
                     if (!_disposeWasPending) throw new InvalidOperationException("Disposal qualification requires an actually pending native map.");
                     renderer.Dispose();
                     renderer.Dispose(); // Releasing one renderer must not release Uno's device.
                     _renderer = null;
-                    _disposeException = RequireFailure<ObjectDisposedException>(pending);
+                    var completed = ReadTerminal<ObjectDisposedException>(pending, out _disposeException);
+                    if (completed is not null)
+                    {
+                        // The native callback may win before Dispose acquires the
+                        // request lock. Its successfully completed pixels remain valid.
+                        _disposeCompletedBytes = completed.Length;
+                        _disposeCompletedPixelsMatch = _afterCancel.AsSpan().SequenceEqual(completed);
+                        _disposeCompletedSha256 = Convert.ToHexString(SHA256.HashData(completed));
+                        if (!_disposeCompletedPixelsMatch)
+                            throw new InvalidOperationException("A capture completed concurrently with disposal returned different pixels.");
+                    }
                     _renderer = new(context.Api, context.Device, context.Queue, context.TargetFormat);
                     RenderScene(context, _renderer);
                     _replacementTriangles = _renderer.TriangleCount;
@@ -544,7 +573,9 @@ public partial class App
                 {
                     var afterDispose = ReadRecovery(_recovery);
                     _completion.TrySetResult(new(_cancelWasPending, _cancelException,
-                        _disposeWasPending, _disposeException, _width, _height,
+                        _cancelCompleted?.Length ?? 0, _cancelCompletedPixelsMatch, _cancelCompletedSha256,
+                        _disposeWasPending, _disposeException, _disposeCompletedBytes, _disposeCompletedPixelsMatch,
+                        _disposeCompletedSha256, _width, _height,
                         _afterCancel!.Length, afterDispose.Length, _afterCancel.AsSpan().SequenceEqual(afterDispose),
                         _originalTriangles, _replacementTriangles, 2,
                         Convert.ToHexString(SHA256.HashData(afterDispose)), _elapsed.Elapsed.TotalMilliseconds));
@@ -573,12 +604,12 @@ public partial class App
             return bytes;
         }
 
-        private static string RequireFailure<TException>(Task<byte[]> pending) where TException : Exception
+        private byte[]? ReadTerminal<TException>(Task<byte[]> pending, out string exception) where TException : Exception
         {
             if (!pending.IsCompleted) throw new InvalidOperationException("Native cancellation did not settle its public task.");
-            try { _ = pending.GetAwaiter().GetResult(); }
-            catch (TException error) { return error.GetType().Name; }
-            throw new InvalidOperationException($"Native cancellation did not report {typeof(TException).Name}.");
+            exception = "";
+            try { return ReadRecovery(pending); }
+            catch (TException error) { exception = error.GetType().Name; return null; }
         }
 
         protected override void OnWebGpuUnavailable() =>
