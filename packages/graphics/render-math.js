@@ -8,7 +8,7 @@ export function reverseZMatrices(camera, width, height, origin = [0, 0, 0]) {
   if (!(width > 0 && height > 0) || !V3.finite(origin)) {
     throw new RangeError('A finite origin and positive viewport dimensions are required.');
   }
-  const basis = camera.basis(), eye = V3.sub(basis.eye, origin);
+  const basis = camera.basis(origin), { eye } = basis;
   const backward = V3.scale(basis.forward, -1), { right, up } = basis;
   const view = [
     right[0], up[0], backward[0], 0,

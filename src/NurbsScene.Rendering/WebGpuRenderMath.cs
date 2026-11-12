@@ -22,8 +22,7 @@ public static class WebGpuRenderMath
         ArgumentNullException.ThrowIfNull(camera);
         if (width <= 0 || height <= 0 || !origin.IsFinite)
             throw new ArgumentException("A finite origin and positive viewport dimensions are required.");
-        var (worldEye, forward, right, up) = camera.Basis();
-        var eye = worldEye - origin;
+        var (eye, forward, right, up) = camera.Basis(origin);
         var backward = -forward;
         var view = new Transform3([
             right.X, up.X, backward.X, 0,
@@ -73,7 +72,7 @@ public static class WebGpuRenderMath
         var up = Vec3.Cross(backward, right);
         var radius = Math.Max(bounds.Size.Length * .525, .001);
         var texel = 2 * radius / resolution;
-        var center = bounds.Center - origin;
+        var center = (bounds.Min - origin) / 2 + (bounds.Max - origin) / 2;
         var x = Math.Round(Vec3.Dot(right, center) / texel) * texel;
         var y = Math.Round(Vec3.Dot(up, center) / texel) * texel;
         var z = Vec3.Dot(backward, center) + 2 * radius;
@@ -102,7 +101,7 @@ public static class WebGpuRenderMath
         if (worldBounds.IsEmpty) return false;
         if (!worldBounds.Min.IsFinite || !worldBounds.Max.IsFinite || !origin.IsFinite)
             throw new ArgumentException("Visibility inputs must be finite.");
-        var center = worldBounds.Center - origin;
+        var center = (worldBounds.Min - origin) / 2 + (worldBounds.Max - origin) / 2;
         var extent = worldBounds.Max / 2 - worldBounds.Min / 2;
         var m = viewProjection.Values;
         bool Outside(double a, double b, double c, double d)

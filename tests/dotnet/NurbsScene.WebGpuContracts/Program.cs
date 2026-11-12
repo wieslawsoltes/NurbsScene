@@ -49,6 +49,50 @@ Test("double precision rebasing keeps float reverse-Z useful at large world coor
     Check(actual.Z > 0, "Float encoding lost reverse-Z depth.");
 });
 
+Test("local orbit offsets survive world translations larger than the camera distance", () =>
+{
+    foreach (var name in new[] { "Perspective", "Top", "Front", "Right" })
+    foreach (var distance in new[] { .001, 7.25, 125 })
+    foreach (var origin in new[] { new Vec3(1e12, -2e12, 3e12), new Vec3(1e16, -2e16, 3e16) })
+    {
+        var localTarget = new Vec3(8, -16, 32);
+        var camera = new Camera(name) { Target = localTarget, Distance = distance };
+        var expected = WebGpuRenderMath.ReverseZCameraMatrix(camera, 1231, 759, Vec3.Zero);
+        var expectedEye = camera.Basis().Eye;
+        var expectedProjection = camera.Project(localTarget, 1231, 759);
+        var legacy = camera.Matrix(1231, 759, Vec3.Zero);
+        camera.Target = origin + localTarget;
+        var actual = WebGpuRenderMath.ReverseZCameraMatrix(camera, 1231, 759, origin);
+        var actualEye = camera.Basis(origin).Eye;
+        for (var i = 0; i < 16; i++)
+        {
+            Near(actual.Values[i], expected.Values[i], 1e-13);
+            Near(camera.Matrix(1231, 759, origin).Values[i], legacy.Values[i], 1e-13);
+        }
+        Near(actualEye.X, expectedEye.X, 1e-13); Near(actualEye.Y, expectedEye.Y, 1e-13); Near(actualEye.Z, expectedEye.Z, 1e-13);
+        var projected = camera.Project(camera.Target, 1231, 759);
+        Near(projected.X, expectedProjection.X, 1e-13); Near(projected.Y, expectedProjection.Y, 1e-13);
+        Near(projected.Depth, distance, 1e-13);
+    }
+});
+
+Test("bounds are rebased before averaging for shadow projection and conservative culling", () =>
+{
+    var origin = new Vec3(1e16, -2e16, 3e16);
+    var local = new Bounds3(Vec3.Zero, new(2, 12, 20));
+    var translated = new Bounds3(local.Min + origin, local.Max + origin);
+    var light = new Vec3(-.45, -.6, 1);
+    var expected = WebGpuRenderMath.ShadowMatrix(local, Vec3.Zero, light);
+    var actual = WebGpuRenderMath.ShadowMatrix(translated, origin, light);
+    for (var i = 0; i < 16; i++) Near(actual.Values[i], expected.Values[i], 1e-13);
+    origin = new(1e16, 1e16, 1e16);
+    local = new(new(2, 0, 0), new(4, 2, 2));
+    translated = new(local.Min + origin, local.Max + origin);
+    var frustum = new Transform3([.8,0,0,0, 0,.5,0,0, 0,0,.25,0, -1,-.5,0,1]);
+    Check(WebGpuRenderMath.IsVisible(local, frustum, Vec3.Zero), "Local boundary box must be visible.");
+    Check(WebGpuRenderMath.IsVisible(translated, frustum, origin), "Rounded world-space midpoint culled a visible rebased box.");
+});
+
 Test("frustum culling is conservative on all six homogeneous planes and behind-camera geometry", () =>
 {
     var identity = Transform3.Identity;
