@@ -40,7 +40,7 @@
     },
     {
       "name": "rhino-workspace",
-      "minimumUiChecks": 64
+      "minimumUiChecks": 71
     },
     {
       "name": "rhino-grasshopper-ui",

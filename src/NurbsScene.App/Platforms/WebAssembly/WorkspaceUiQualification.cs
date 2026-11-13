@@ -89,7 +89,6 @@ public partial class App
             view.GraphEditor.Canvas.ObservePointerEvents=true;
             view.SetPreferences(new(DefinitionVisible:true,InspectorTab:"Layers"),false);controller.Scene.ShowGrid=true;controller.Scene.ShowIsocurves=true;
             view.Viewport.Canvas.RestoreFourViews();view.Viewport.Canvas.Fit();view.GraphEditor.Canvas.Fit();
-            view.Console.ClearHistory();view.Console.WriteLine("NurbsScene — independent NURBS modeling and visual programming");
             await Task.Delay(250);
             // Each isolated campaign has a fixed hard lifetime, including the
             // expanded native camera and rendering-preference workflows on the
@@ -181,7 +180,7 @@ public partial class App
                     }
                     FindPreview(view.GraphEditor);
                 }
-                var snapshot=new{status="ready",sample=++sample,controls,views,nodes,wires,previewLines,values=ObserveCanvasValues(view),lastGeometry=ObserveLastGeometry(view),typography=ObserveTypography(view),state=new{
+                var snapshot=new{status="ready",sample=++sample,controls,views,nodes,wires,previewLines,console=ObserveCommandConsole(view),values=ObserveCanvasValues(view),lastGeometry=ObserveLastGeometry(view),typography=ObserveTypography(view),state=new{
                     objects=controller.Document.Objects.Count,layers=controller.Document.Layers.Count,activeLayer=controller.Document.ActiveLayer,
                     layerRows=controller.Document.Layers.Select(l=>new{id=l.Id,name=l.Name,visible=l.Visible,locked=l.Locked,color=new[]{l.Color.R,l.Color.G,l.Color.B,l.Color.A}}).ToArray(),
                     layerFilter=view.Inspector.FilterText,layerVisibleIds=view.Inspector.VisibleLayerIds,layerSelectedId=view.Inspector.SelectedLayerId,

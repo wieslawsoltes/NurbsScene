@@ -1,0 +1,747 @@
+{
+  "schema": 1,
+  "application": "NurbsScene / Uno Platform 7",
+  "pullRequest": "https://github.com/wieslawsoltes/NurbsScene/pull/20",
+  "sourceHead": "a31a3a6041b08dd7b9ee5ac4d10365b1d54672e6",
+  "testedMergeCommit": "8de11424b02ee0c4c89230f5a739fb57c0e630d8",
+  "testedTree": "76bbde8fc798e02a9c5631cebd8d79e73392a824",
+  "workflow": {
+    "id": 43409888630,
+    "url": "https://github.com/wieslawsoltes/NurbsScene/actions/runs/43409888630",
+    "status": "passed",
+    "allRepositoryWorkflowsPassed": 23,
+    "unoJobsPassed": 15
+  },
+  "artifact": {
+    "id": 14030425540,
+    "name": "uno-browser-evidence-43409888630",
+    "url": "https://github.com/wieslawsoltes/NurbsScene/actions/runs/43409888630/artifacts/14030425540",
+    "zipBytes": 22171098,
+    "zipSha256": "02b3cbee956d21071a4830f4a04929e48d03eadb770ef1bfd00fdbc077537c7b"
+  },
+  "publication": {
+    "files": 849,
+    "manifestSha256": "93c8752275cfabbda7c7e37585aa50ae3747dd529c68e3e3ba44c3084e78c006",
+    "allCampaignManifestsIdentical": true
+  },
+  "qualification": {
+    "status": "passed",
+    "uiChecks": 414,
+    "aggregateSha256": "6ebc2f9f9693acf07420e9a2b5508ad68ed6e65ef034b70644afdc285eb1ae45",
+    "campaigns": [
+      {
+        "name": "workspace",
+        "status": "passed",
+        "uiChecks": 45,
+        "modelingChecks": 33,
+        "pageErrors": [],
+        "gpuError": null,
+        "cameraGeometryReused": true,
+        "campaignJsonSha256": "8a23d84c0b7b154577cf9e54eded32d5632a20279c91d0e59698137d0e0c82ff",
+        "initialGpu": {
+          "status": "passed",
+          "deviceRequests": 1,
+          "devices": 1,
+          "errors": [],
+          "mapRequests": 3,
+          "droppedMaps": 0,
+          "mapStatuses": [
+            "fulfilled",
+            "fulfilled",
+            "fulfilled"
+          ]
+        },
+        "finalGpu": {
+          "status": "passed",
+          "deviceRequests": 1,
+          "devices": 1,
+          "errors": [],
+          "mapRequests": 3,
+          "droppedMaps": 0,
+          "mapStatuses": [
+            "fulfilled",
+            "fulfilled",
+            "fulfilled"
+          ]
+        }
+      },
+      {
+        "name": "inputs-sliders",
+        "status": "passed",
+        "uiChecks": 31,
+        "modelingChecks": 33,
+        "pageErrors": [],
+        "gpuError": null,
+        "cameraGeometryReused": true,
+        "campaignJsonSha256": "ffddf62462fff828604b1ca41c84c185498aaeb3ce2257931187d79112ce6c2b",
+        "initialGpu": {
+          "status": "passed",
+          "deviceRequests": 1,
+          "devices": 1,
+          "errors": [],
+          "mapRequests": 3,
+          "droppedMaps": 0,
+          "mapStatuses": [
+            "fulfilled",
+            "fulfilled",
+            "fulfilled"
+          ]
+        },
+        "finalGpu": {
+          "status": "passed",
+          "deviceRequests": 1,
+          "devices": 1,
+          "errors": [],
+          "mapRequests": 3,
+          "droppedMaps": 0,
+          "mapStatuses": [
+            "fulfilled",
+            "fulfilled",
+            "fulfilled"
+          ]
+        }
+      },
+      {
+        "name": "panels",
+        "status": "passed",
+        "uiChecks": 35,
+        "modelingChecks": 33,
+        "pageErrors": [],
+        "gpuError": null,
+        "cameraGeometryReused": true,
+        "campaignJsonSha256": "391622d89170ea020cd0bc0a9ee7d020333361c38dda05ca92caaf454ebae7eb",
+        "initialGpu": {
+          "status": "passed",
+          "deviceRequests": 1,
+          "devices": 1,
+          "errors": [],
+          "mapRequests": 3,
+          "droppedMaps": 0,
+          "mapStatuses": [
+            "fulfilled",
+            "fulfilled",
+            "fulfilled"
+          ]
+        },
+        "finalGpu": {
+          "status": "passed",
+          "deviceRequests": 1,
+          "devices": 1,
+          "errors": [],
+          "mapRequests": 3,
+          "droppedMaps": 0,
+          "mapStatuses": [
+            "fulfilled",
+            "fulfilled",
+            "fulfilled"
+          ]
+        }
+      },
+      {
+        "name": "panel-edges",
+        "status": "passed",
+        "uiChecks": 43,
+        "modelingChecks": 33,
+        "pageErrors": [],
+        "gpuError": null,
+        "cameraGeometryReused": true,
+        "campaignJsonSha256": "1203f3ba282f94f194bdf4e430c0f9a2613c7eba917a44dd7670b8d9d0938118",
+        "initialGpu": {
+          "status": "passed",
+          "deviceRequests": 1,
+          "devices": 1,
+          "errors": [],
+          "mapRequests": 3,
+          "droppedMaps": 0,
+          "mapStatuses": [
+            "fulfilled",
+            "fulfilled",
+            "fulfilled"
+          ]
+        },
+        "finalGpu": {
+          "status": "passed",
+          "deviceRequests": 1,
+          "devices": 1,
+          "errors": [],
+          "mapRequests": 3,
+          "droppedMaps": 0,
+          "mapStatuses": [
+            "fulfilled",
+            "fulfilled",
+            "fulfilled"
+          ]
+        }
+      },
+      {
+        "name": "ellipse-loft",
+        "status": "passed",
+        "uiChecks": 29,
+        "modelingChecks": 33,
+        "pageErrors": [],
+        "gpuError": null,
+        "cameraGeometryReused": true,
+        "campaignJsonSha256": "0983217f646fde3e040d1a12f6fbacbf26486d1e5a4d9dceb24113acfe731612",
+        "initialGpu": {
+          "status": "passed",
+          "deviceRequests": 1,
+          "devices": 1,
+          "errors": [],
+          "mapRequests": 3,
+          "droppedMaps": 0,
+          "mapStatuses": [
+            "fulfilled",
+            "fulfilled",
+            "fulfilled"
+          ]
+        },
+        "finalGpu": {
+          "status": "passed",
+          "deviceRequests": 1,
+          "devices": 1,
+          "errors": [],
+          "mapRequests": 3,
+          "droppedMaps": 0,
+          "mapStatuses": [
+            "fulfilled",
+            "fulfilled",
+            "fulfilled"
+          ]
+        }
+      },
+      {
+        "name": "panel-display",
+        "status": "passed",
+        "uiChecks": 14,
+        "modelingChecks": 33,
+        "pageErrors": [],
+        "gpuError": null,
+        "cameraGeometryReused": true,
+        "campaignJsonSha256": "312c1ecf91fe9517aa66161e0837e68b82d8772a9fb6aacef4b7e7b992dacaab",
+        "initialGpu": {
+          "status": "passed",
+          "deviceRequests": 1,
+          "devices": 1,
+          "errors": [],
+          "mapRequests": 3,
+          "droppedMaps": 0,
+          "mapStatuses": [
+            "fulfilled",
+            "fulfilled",
+            "fulfilled"
+          ]
+        },
+        "finalGpu": {
+          "status": "passed",
+          "deviceRequests": 1,
+          "devices": 1,
+          "errors": [],
+          "mapRequests": 3,
+          "droppedMaps": 0,
+          "mapStatuses": [
+            "fulfilled",
+            "fulfilled",
+            "fulfilled"
+          ]
+        }
+      },
+      {
+        "name": "typography",
+        "status": "passed",
+        "uiChecks": 35,
+        "modelingChecks": 33,
+        "pageErrors": [],
+        "gpuError": null,
+        "cameraGeometryReused": true,
+        "campaignJsonSha256": "f6f8439ed02e3b01154eb0d8dc1065f536dbf5337c6a9e61c001ab4653c5c943",
+        "initialGpu": {
+          "status": "passed",
+          "deviceRequests": 1,
+          "devices": 1,
+          "errors": [],
+          "mapRequests": 3,
+          "droppedMaps": 0,
+          "mapStatuses": [
+            "fulfilled",
+            "fulfilled",
+            "fulfilled"
+          ]
+        },
+        "finalGpu": {
+          "status": "passed",
+          "deviceRequests": 1,
+          "devices": 1,
+          "errors": [],
+          "mapRequests": 3,
+          "droppedMaps": 0,
+          "mapStatuses": [
+            "fulfilled",
+            "fulfilled",
+            "fulfilled"
+          ]
+        }
+      },
+      {
+        "name": "pointer-selection",
+        "status": "passed",
+        "uiChecks": 39,
+        "modelingChecks": 33,
+        "pageErrors": [],
+        "gpuError": null,
+        "cameraGeometryReused": true,
+        "campaignJsonSha256": "e9b3d772d7ac90d877976104ca5579b0ddcef884c84005570ab851136e9a9cf8",
+        "initialGpu": {
+          "status": "passed",
+          "deviceRequests": 1,
+          "devices": 1,
+          "errors": [],
+          "mapRequests": 3,
+          "droppedMaps": 0,
+          "mapStatuses": [
+            "fulfilled",
+            "fulfilled",
+            "fulfilled"
+          ]
+        },
+        "finalGpu": {
+          "status": "passed",
+          "deviceRequests": 1,
+          "devices": 1,
+          "errors": [],
+          "mapRequests": 3,
+          "droppedMaps": 0,
+          "mapStatuses": [
+            "fulfilled",
+            "fulfilled",
+            "fulfilled"
+          ]
+        }
+      },
+      {
+        "name": "panel-scrolling",
+        "status": "passed",
+        "uiChecks": 22,
+        "modelingChecks": 33,
+        "pageErrors": [],
+        "gpuError": null,
+        "cameraGeometryReused": true,
+        "campaignJsonSha256": "26d46793c693d7b374dad6ab9352c3c02ddec32f2564f0bd9c150ac44e721159",
+        "initialGpu": {
+          "status": "passed",
+          "deviceRequests": 1,
+          "devices": 1,
+          "errors": [],
+          "mapRequests": 3,
+          "droppedMaps": 0,
+          "mapStatuses": [
+            "fulfilled",
+            "fulfilled",
+            "fulfilled"
+          ]
+        },
+        "finalGpu": {
+          "status": "passed",
+          "deviceRequests": 1,
+          "devices": 1,
+          "errors": [],
+          "mapRequests": 3,
+          "droppedMaps": 0,
+          "mapStatuses": [
+            "fulfilled",
+            "fulfilled",
+            "fulfilled"
+          ]
+        }
+      },
+      {
+        "name": "rhino-workspace",
+        "status": "passed",
+        "uiChecks": 71,
+        "modelingChecks": 33,
+        "pageErrors": [],
+        "gpuError": null,
+        "cameraGeometryReused": true,
+        "campaignJsonSha256": "bab6d57028d83894927939261ab6587e608fa87c7bdfc554426a3cefa2cd5bb2",
+        "initialGpu": {
+          "status": "passed",
+          "deviceRequests": 1,
+          "devices": 1,
+          "errors": [],
+          "mapRequests": 3,
+          "droppedMaps": 0,
+          "mapStatuses": [
+            "fulfilled",
+            "fulfilled",
+            "fulfilled"
+          ]
+        },
+        "finalGpu": {
+          "status": "passed",
+          "deviceRequests": 1,
+          "devices": 1,
+          "errors": [],
+          "mapRequests": 3,
+          "droppedMaps": 0,
+          "mapStatuses": [
+            "fulfilled",
+            "fulfilled",
+            "fulfilled"
+          ]
+        },
+        "preReloadGpu": {
+          "status": "passed",
+          "deviceRequests": 1,
+          "devices": 1,
+          "errors": [],
+          "mapRequests": 3,
+          "droppedMaps": 0,
+          "mapStatuses": [
+            "fulfilled",
+            "fulfilled",
+            "fulfilled"
+          ]
+        },
+        "postReloadGpu": {
+          "status": "passed",
+          "deviceRequests": 1,
+          "devices": 1,
+          "errors": [],
+          "mapRequests": 3,
+          "droppedMaps": 0,
+          "mapStatuses": [
+            "fulfilled",
+            "fulfilled",
+            "fulfilled"
+          ]
+        }
+      },
+      {
+        "name": "rhino-grasshopper-ui",
+        "status": "passed",
+        "uiChecks": 50,
+        "modelingChecks": 33,
+        "pageErrors": [],
+        "gpuError": null,
+        "cameraGeometryReused": true,
+        "campaignJsonSha256": "371aa768710dd5f20dbf9423d14731ea3dc70a54d765f0856954720070461d69",
+        "initialGpu": {
+          "status": "passed",
+          "deviceRequests": 1,
+          "devices": 1,
+          "errors": [],
+          "mapRequests": 3,
+          "droppedMaps": 0,
+          "mapStatuses": [
+            "fulfilled",
+            "fulfilled",
+            "fulfilled"
+          ]
+        },
+        "finalGpu": {
+          "status": "passed",
+          "deviceRequests": 1,
+          "devices": 1,
+          "errors": [],
+          "mapRequests": 3,
+          "droppedMaps": 0,
+          "mapStatuses": [
+            "fulfilled",
+            "fulfilled",
+            "fulfilled"
+          ]
+        },
+        "preReloadGpu": {
+          "status": "passed",
+          "deviceRequests": 1,
+          "devices": 1,
+          "errors": [],
+          "mapRequests": 3,
+          "droppedMaps": 0,
+          "mapStatuses": [
+            "fulfilled",
+            "fulfilled",
+            "fulfilled"
+          ]
+        },
+        "postReloadGpu": {
+          "status": "passed",
+          "deviceRequests": 1,
+          "devices": 1,
+          "errors": [],
+          "mapRequests": 3,
+          "droppedMaps": 0,
+          "mapStatuses": [
+            "fulfilled",
+            "fulfilled",
+            "fulfilled"
+          ]
+        }
+      }
+    ],
+    "gpuDeviceLifetimes": 13,
+    "pageErrors": []
+  },
+  "nativeDesktop": {
+    "sourceCommit": "a31a3a6041b08dd7b9ee5ac4d10365b1d54672e6",
+    "testedCommit": "8de11424b02ee0c4c89230f5a739fb57c0e630d8",
+    "tree": "76bbde8fc798e02a9c5631cebd8d79e73392a824",
+    "runId": 43409888630,
+    "jobId": 131833370918,
+    "artifactId": 14028593062,
+    "artifactUrl": "https://github.com/wieslawsoltes/NurbsScene/actions/runs/43409888630/artifacts/14028593062",
+    "artifactBytes": 203112,
+    "artifactSha256": "f178966ea04842eb9b9accac60e44fb68f1ac9f229c4d39f696c0b0680f5f6d6",
+    "status": "passed",
+    "checks": 40,
+    "webGpuContracts": 10,
+    "buildWarnings": 0,
+    "buildErrors": 0,
+    "runtime": ".NET 10.0.15",
+    "platform": "Ubuntu 26.04.1 LTS",
+    "architecture": "X64",
+    "backend": "WebGPU / Uno shared device / WGSL / HDR 4x MSAA",
+    "adapter": {
+      "source": "Uno native WebGPU device initialization log",
+      "adapters": [
+        {
+          "description": "llvmpipe (LLVM 21.1.8, 256 bits)",
+          "backend": "Vulkan",
+          "type": "Cpu"
+        }
+      ],
+      "softwareCorrectnessOnly": true
+    },
+    "windowClosed": true,
+    "gpuErrors": [],
+    "captureLifetime": {
+      "CancelWasPending": true,
+      "CancelException": "OperationCanceledException",
+      "CancelCompletedBytes": 0,
+      "CancelCompletedPixelsMatch": false,
+      "CancelCompletedSha256": "",
+      "DisposeWasPending": true,
+      "DisposeException": "ObjectDisposedException",
+      "DisposeCompletedBytes": 0,
+      "DisposeCompletedPixelsMatch": false,
+      "DisposeCompletedSha256": "",
+      "Width": 160,
+      "Height": 128,
+      "AfterCancelBytes": 81920,
+      "AfterDisposeBytes": 81920,
+      "IdenticalRecoveryPixels": true,
+      "OriginalTriangles": 10240,
+      "ReplacementTriangles": 10240,
+      "RendererInstances": 2,
+      "RecoverySha256": "94AC1B008CC4B50F8DC2C9F3BE83B56FA6A467A045A608B6E2CE258B3265DB03",
+      "ElapsedMilliseconds": 285.2459,
+      "CanvasUnloaded": true,
+      "CancelOutcome": "canceled-by-request",
+      "DisposeOutcome": "canceled-by-disposal"
+    },
+    "frames": 21,
+    "captureNames": [
+      "empty",
+      "filled",
+      "camera"
+    ],
+    "renderCacheStages": 13,
+    "cameraGeometryReused": true
+  },
+  "commandArea": {
+    "nativeChecks": 71,
+    "modelingChecks": 33,
+    "startupObservations": {
+      "uno-rhino-startup": {
+        "sample": 91,
+        "state": {
+          "objects": 0,
+          "nodes": 0,
+          "history": "",
+          "preferences": "2|Right|0|1|0.55|250|1|0|Properties",
+          "frames": 2,
+          "gpuError": null,
+          "workspaceWidth": 1600,
+          "workspaceHeight": 1100
+        },
+        "host": {
+          "documentVisibility": "visible",
+          "loaderCount": 0,
+          "canvas": {
+            "id": "uno-canvas",
+            "connected": true,
+            "visible": true,
+            "x": 0,
+            "y": 0,
+            "width": 1600,
+            "height": 1100,
+            "pixelWidth": 1600,
+            "pixelHeight": 1100
+          },
+          "presentation": {
+            "firstFrame": 17156.9,
+            "secondFrame": 17223.6,
+            "sample": 89
+          }
+        },
+        "entryHeight": 20,
+        "historyViewportHeight": 32,
+        "historyLineHeight": 16,
+        "promptFontSize": 12,
+        "promptWeight": 600,
+        "inputFontSize": 12,
+        "inputWeight": 400,
+        "promptInputGap": 3,
+        "promptBaseline": 90.826171875
+      },
+      "uno-rhino-startup-reload": {
+        "sample": 69,
+        "state": {
+          "objects": 0,
+          "nodes": 0,
+          "history": "",
+          "preferences": "2|Bottom|0|1|0.55|306.5|1|0|Layers",
+          "frames": 2,
+          "gpuError": null,
+          "workspaceWidth": 1600,
+          "workspaceHeight": 1100
+        },
+        "host": {
+          "documentVisibility": "visible",
+          "loaderCount": 0,
+          "canvas": {
+            "id": "uno-canvas",
+            "connected": true,
+            "visible": true,
+            "x": 0,
+            "y": 0,
+            "width": 1600,
+            "height": 1100,
+            "pixelWidth": 1600,
+            "pixelHeight": 1100
+          },
+          "presentation": {
+            "firstFrame": 11135.5,
+            "secondFrame": 11235.5,
+            "sample": 45
+          }
+        },
+        "entryHeight": 20,
+        "historyViewportHeight": 32,
+        "historyLineHeight": 16,
+        "promptFontSize": 12,
+        "promptWeight": 600,
+        "inputFontSize": 12,
+        "inputWeight": 400,
+        "promptInputGap": 3,
+        "promptBaseline": 90.826171875
+      }
+    },
+    "acceptedScenarioChecks": [
+      "Ordinary application startup is empty before the explicit qualification fixture",
+      "Ordinary startup preserves its actual clean command history before any modeling fixture",
+      "The ordinary native command prompt and editable control use compact matching fonts with no placeholder",
+      "Ordinary startup displays exactly two complete native history line boxes",
+      "Modeling layout gives the model space, opens clean viewport Properties and leaves no synthetic draft",
+      "Modeling layout renders four usable full-width native viewports",
+      "Changing workspace layout does not edit geometry or consume document undo",
+      "Compact command history follows the latest complete lines after more than two real outputs",
+      "F2 expands selectable command history and submitted command input remains clear",
+      "Expanded command history contains thirteen complete native line boxes without horizontal-scroll space",
+      "Native read-only command history supports selecting and copying its text",
+      "F2 restores compact command history without clearing it",
+      "Native Up recalls the preceding command without executing it or losing the unsent draft",
+      "Native Down restores the unsent draft in the same compact baseline-aligned editor",
+      "Typing on the model canvas transfers every character exactly once to command input",
+      "Canvas-initiated command entry creates an exact model curve",
+      "Immediate Enter submits a complete canvas draft before deferred text focus",
+      "Immediate canvas command remains one ordinary document undo record",
+      "Blank Enter repeats the last modeling command, not the intervening history command",
+      "A short right click repeats the last modeling command without opening a context menu",
+      "Space on the focused model canvas repeats the last modeling command",
+      "Control+Z on the model canvas undoes a model operation",
+      "Control+Y on the model canvas restores the operation",
+      "A native text editor retains its own undo instead of undoing the document",
+      "Model edits remain separate undo records after shell commands and text editing",
+      "Right drag orbits Perspective without moving its target",
+      "Shift+right drag pans Perspective without changing orbit angles",
+      "Control+right drag zooms around the actual press point on the target plane",
+      "Middle-button dragging pans the model view",
+      "Right drag pans a parallel viewport instead of attempting to orbit it",
+      "Escape restores the complete camera before a navigation gesture",
+      "Wheel zoom moves outward and preserves the cursor target-plane anchor within native DIP precision",
+      "All model navigation modes preserve geometry and document history",
+      "Clicking a viewport title changes the active view without clearing selection",
+      "Double-clicking the native viewport title maximizes it",
+      "Double-clicking empty model space does not unexpectedly maximize the viewport",
+      "Control+F1 selects and maximizes Top when the model canvas owns focus",
+      "Control+M restores the four-view layout from the model canvas",
+      "Releasing a secondary button preserves right-button navigation ownership and does not repeat a command",
+      "Dragging the actual inspector splitter commits a wider properties panel",
+      "Focused inspector splitter supports keyboard resizing",
+      "Escape restores the inspector width before an uncommitted resize",
+      "Left sidebar visibility changes actual native chrome, not just a setting",
+      "Right sidebar toggle removes both inspector and splitter from the layout",
+      "F3 reopens Properties after the right sidebar has been hidden",
+      "Narrow windows temporarily collapse the inspector without overwriting user preferences",
+      "Returning to a wide window restores the user-sized inspector",
+      "Opening the definition preserves the selected inspector tab",
+      "Definition docking no longer resets the user-sized inspector",
+      "Editing camera text creates a draft without changing the live camera",
+      "Invalid camera input rejects the entire draft without partially moving the viewport",
+      "Revert restores native camera fields and discards an invalid draft",
+      "Apply commits all validated camera fields together",
+      "Changing the active viewport cannot apply a stale draft to the previous camera",
+      "Parallel viewport properties enable view height and disable perspective-only orbit fields",
+      "Status layer menu changes the current layer when no objects are selected",
+      "Changing the current layer through the status bar remains undoable",
+      "Status layer menu assigns selected objects without changing the current layer",
+      "Layer assignment and layer creation undo independently",
+      "Holding the right mouse button opens the native model context menu",
+      "Native model context-menu actions invoke the same workspace commands",
+      "Shift+F10 opens the model context menu without a mouse hold",
+      "Invalid rendering drafts remain local and cannot fault the live WebGPU canvas",
+      "Revert restores the current rendering settings without applying the draft",
+      "Rendering Apply submits the validated settings without model edits or geometry reuploads",
+      "Cancel discards rendering edits and preserves the applied settings",
+      "A fresh application load restores the exact persisted version-two workspace preferences",
+      "A fresh application load restores the exact persisted rendering preferences",
+      "Rendering Defaults restores the authored studio appearance through native Apply",
+      "The real GPU and definition remain error-free after shell, input, camera and persistence workflows"
+    ]
+  },
+  "captures": [
+    {
+      "path": "docs/images/rhino-command-area/uno-rhino-startup.png",
+      "artifactPath": "campaigns/rhino-workspace/uno-rhino-startup.png",
+      "bytes": 175792,
+      "width": 1600,
+      "height": 1100,
+      "sha256": "bddaa68d996794f6698825f29d167c98fc27b2b4ef3832ed61def0bf107382f0"
+    },
+    {
+      "path": "docs/images/rhino-command-area/uno-rhino-modeling.png",
+      "artifactPath": "campaigns/rhino-workspace/uno-rhino-modeling.png",
+      "bytes": 390766,
+      "width": 1600,
+      "height": 1100,
+      "sha256": "4e0a97d3f059089306e7de7460f7739e045f8ceb291748f40d21dc846cec6c74"
+    },
+    {
+      "path": "docs/images/rhino-command-area/uno-rhino-command-history.png",
+      "artifactPath": "campaigns/rhino-workspace/uno-rhino-command-history.png",
+      "bytes": 367344,
+      "width": 1600,
+      "height": 1100,
+      "sha256": "8007c3576978d38eef3ac55ef212c9e3d66f2e5c10d30158bce54845e0087538"
+    },
+    {
+      "path": "docs/images/rhino-command-area/uno-rhino-startup-reload.png",
+      "artifactPath": "campaigns/rhino-workspace/uno-rhino-startup-reload.png",
+      "bytes": 181065,
+      "width": 1600,
+      "height": 1100,
+      "sha256": "07f388fd6f154dff2478af7b28c077ff0d78e3ff4cfa7225bedc09f25d867e83"
+    }
+  ],
+  "qualificationScope": "Actual native Uno pointer/keyboard interaction and WebGPU framebuffer correctness on hosted Chromium SwiftShader, plus native desktop Vulkan llvmpipe. No physical-GPU throughput claim. PNGs are unmodified bytes from the accepted aggregate artifact. The documentation follow-up changes no application, test, dependency or workflow source."
+}

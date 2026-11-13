@@ -71,6 +71,11 @@ public partial class App
                 finally {sample["elapsedMilliseconds"]=elapsed.Elapsed.TotalMilliseconds;}
             }
             Check(controller.Document.Objects.Count==0&&controller.Graph.Nodes.Count==0,"Ordinary startup is an empty modeling document, not an auto-loaded sample");
+            if(Uno.Foundation.WebAssemblyRuntime.InvokeJS("new URLSearchParams(location.search).get('qualificationStartup') === '1' ? 'yes' : 'no'")=="yes")
+            {
+                await Wait(()=>view.IsLoaded&&view.Console.IsLoaded&&(canvas.Frames>0||canvas.LastError is not null),"Ordinary Uno startup did not submit its first frame.");
+                report["startup"]=await ObserveOrdinaryStartupAsync(view);
+            }
             controller.LoadPavilion(); // Explicit qualification fixture; ordinary startup stays empty.
             await Wait(()=>canvas.Frames>0||canvas.LastError is not null,"Uno GPU canvas did not initialize.");
             report["gpuBackend"]=canvas.Backend;report["gpuApi"]="WebGPU";report["lastGpuError"]=canvas.LastError;

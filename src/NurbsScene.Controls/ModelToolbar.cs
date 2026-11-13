@@ -14,7 +14,7 @@ public sealed class ModelToolbar : Grid
         ("Display","Display"),("Select","Select"),("Transform","Transform"),
         ("Curve","Curve Tools"),("Surface","Surface Tools"),("Analyze","Analyze")];
     private readonly StackPanel _tabs=new(){Orientation=Orientation.Horizontal};
-    private readonly ScrollViewer _strip=new(){HorizontalScrollBarVisibility=ScrollBarVisibility.Auto,VerticalScrollBarVisibility=ScrollBarVisibility.Disabled};
+    private readonly ScrollViewer _strip=ClassicChrome.CompactHorizontal(null);
     private readonly Dictionary<string,Button> _categoryButtons=[];
     private readonly Dictionary<string,Page> _pages=[];
     private IReadOnlyDictionary<string,Button> _buttons=new Dictionary<string,Button>();
@@ -28,8 +28,8 @@ public sealed class ModelToolbar : Grid
     public ModelToolbar()
     {
         Background=ClassicChrome.Background;BorderBrush=ClassicChrome.Border;BorderThickness=new(0,1,0,1);
-        RowDefinitions.Add(new(){Height=new GridLength(25)});RowDefinitions.Add(new(){Height=new GridLength(33)});
-        Children.Add(ClassicChrome.Horizontal(_tabs));Children.Add(_strip);SetRow(_strip,1);
+        RowDefinitions.Add(new(){Height=new GridLength(23)});RowDefinitions.Add(new(){Height=new GridLength(30)});
+        Children.Add(ClassicChrome.CompactHorizontal(_tabs));Children.Add(_strip);SetRow(_strip,1);
         foreach(var (id,label) in Categories)
         {
             var button=ClassicChrome.TabButton(label,()=>SelectCategory(id),"Toolbar_"+id);
@@ -53,9 +53,9 @@ public sealed class ModelToolbar : Grid
         if(!_categoryButtons.ContainsKey(category))throw new ArgumentException("Unknown toolbar category.");
         if(!_pages.TryGetValue(category,out var page))
         {
-            var tools=new StackPanel{Orientation=Orientation.Horizontal,Spacing=1,Padding=new(3,2,4,2)};
+            var tools=new StackPanel{Orientation=Orientation.Horizontal,Spacing=0,Padding=new(3,1,3,1),VerticalAlignment=VerticalAlignment.Center};
             var buttons=new Dictionary<string,Button>();
-            tools.Children.Add(new WorkbenchIcon("Grip"){Width=10,Height=24});
+            tools.Children.Add(new WorkbenchIcon("Grip"){Width=7,Height=22,VerticalAlignment=VerticalAlignment.Center});
             void Add(WorkspaceTool tool)
             {
                 if(buttons.ContainsKey(tool.Id))return;

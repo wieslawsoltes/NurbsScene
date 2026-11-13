@@ -582,7 +582,9 @@ export class WebGpuRenderer {
       pass.end();
     }
     let pass = encoder.beginRenderPass({ label: '4x MSAA linear HDR',
-      colorAttachments: [this.#colorAttachment(targets.hdrMs, targets.hdr, [.67, .71, .75, 1])],
+      // Linear HDR, resolving to reference sRGB #9DA3AA after ACES at exposure 1;
+      // keep in sync with the managed WebGpuRenderer clear.
+      colorAttachments: [this.#colorAttachment(targets.hdrMs, targets.hdr, [.224357, .244384, .270711, 1])],
       depthStencilAttachment: { view: targets.depth.view, depthClearValue: 0, depthLoadOp: 'clear', depthStoreOp: 'store' },
     });
     for (const view of plan.views) {

@@ -138,6 +138,35 @@ def require_camera_reuse(performance, name):
         raise ValueError("Camera-only motion uploaded geometry again: " + name)
 
 
+def require_startup_checkpoint(folder, name):
+    observation = read_json(folder / (name + ".json"))
+    state = observation.get("state", {})
+    console = observation.get("console", {})
+    host = observation.get("host", {})
+    canvas = host.get("canvas") or {}
+    presentation = host.get("presentation") or {}
+    if (observation.get("status") != "ready" or type(observation.get("sample")) is not int
+            or observation["sample"] < 1 or state.get("objects") != 0 or state.get("nodes") != 0
+            or type(state.get("frames")) is not int or state["frames"] < 1
+            or "gpuError" not in state or state["gpuError"] is not None
+            or not isinstance(state.get("history"), str) or console.get("text") != state["history"]):
+        raise ValueError("Missing or invalid ordinary native startup observation: " + name)
+    if (host.get("documentVisibility") != "visible" or host.get("loaderCount") != 0
+            or canvas.get("id") != "uno-canvas" or canvas.get("connected") is not True
+            or canvas.get("visible") is not True
+            or any(type(canvas.get(key)) not in (int, float) or not math.isfinite(canvas[key]) or canvas[key] <= 0
+                   for key in ("width", "height", "pixelWidth", "pixelHeight"))
+            or type(presentation.get("sample")) is not int or presentation["sample"] < 1
+            or observation["sample"] < presentation["sample"] + 2
+            or any(type(presentation.get(key)) not in (int, float) or not math.isfinite(presentation[key])
+                   for key in ("firstFrame", "secondFrame"))
+            or presentation["firstFrame"] < 0 or presentation["secondFrame"] <= presentation["firstFrame"]):
+        raise ValueError("Startup screenshot lacks a visible Uno host and fresh samples after presentation: " + name)
+    if not (folder / (name + ".png")).read_bytes().startswith(b"\x89PNG\r\n\x1a\n"):
+        raise ValueError("Missing actual ordinary startup screenshot: " + name)
+    return observation
+
+
 def collect(evidence, site, commit, tree, output, registry_path=REGISTRY):
     manifest = verify_site(site, commit, tree)
     registry = campaigns(registry_path)
@@ -175,6 +204,12 @@ def collect(evidence, site, commit, tree, output, registry_path=REGISTRY):
         require_gpu_observation(record.get("gpuObservation"), name + " final")
         if name == "rhino-workspace":
             require_gpu_observation(read_json(path.parent / "uno-rhino-pre-reload-gpu.json"), name + " before reload")
+            startup = require_startup_checkpoint(path.parent, "uno-rhino-startup")
+            startup_reload = require_startup_checkpoint(path.parent, "uno-rhino-startup-reload")
+            if record.get("startup") != startup or modeling.get("startup", {}).get("state", {}).get("history") != startup["state"]["history"]:
+                raise ValueError("Ordinary startup evidence differs from the campaign/modeling observation")
+            if read_json(path.parent / "uno-rhino-workspace.json").get("startupReload") != startup_reload:
+                raise ValueError("Reload startup evidence differs from its native workflow observation")
         if name == "rhino-grasshopper-ui":
             require_gpu_observation(read_json(path.parent / "uno-rhino-grasshopper-pre-reload-gpu.json"), name + " before reload")
         check_strings(modeling.get("checks"), registry["minimumModelingChecks"], name + " modeling/framebuffer assertions")

@@ -114,9 +114,10 @@ deadline; the observer cannot renew its lifetime or dispatch application actions
 The expanded Rhino campaign reached the previous 10-minute lifetime after 55
 successful checks, before its rendering-preference and reload coverage. Normal
 completion still restores the disposable session immediately, and expiry still
-fails the campaign. All eleven campaigns and their combined minimum of 407 native
-UI checks are mandatory. The original ten campaigns retain their 357 checks; the
-new `rhino-grasshopper-ui` campaign adds 50. The [campaign registry](../tests/browser/uno-campaigns.json)
+fails the campaign. All eleven campaigns and their combined minimum of 414 native
+UI checks are mandatory. The original ten campaigns retain their 357 previous
+checks and add seven real-startup/command-layout checks; `rhino-grasshopper-ui`
+contributes another 50. The [campaign registry](../tests/browser/uno-campaigns.json)
 is the source of the required per-campaign minima. The interface implementation
 passed this complete gate on source `157b92229ab2094c648245aa59038fd34c25a3ad`; see
 [the exact acceptance record and captures](RHINO-GRASSHOPPER-UI.md).
@@ -297,10 +298,23 @@ an empty draft retains the repeat-command behavior. The Rhino workspace campaign
 types a command and immediately presses Enter without waiting for focus, then
 checks ordinary Undo. At that milestone, these two assertions raised its minimum
 from 56 to 58 and the then ten-campaign UI minimum from 349 to 351. These are
-historical counts; the current campaign registry requires 407 checks across eleven campaigns.
+historical counts; the current campaign registry requires 414 checks across eleven campaigns.
 Browser resize checks acknowledge the requested native workspace width and height
 before asserting responsive layout. New observer samples alone can still describe
 the preceding layout while the WebGPU host processes a browser resize.
+
+The Rhino command-area refinement additionally captures the ordinary empty
+startup before loading its modeling fixture, including a second startup capture
+after persisted-layout reload. Native command observations read the rendered
+TextBlocks, inner AutoSuggestBox editor and ScrollViewer metrics. The campaign
+requires complete two-/thirteen-line history viewports, aligned prompt/input
+baselines, exact native clipboard text and recall without execution. Both startup
+JSON/PNG pairs are mandatory artifacts. See [RHINO-COMMAND-AREA.md](RHINO-COMMAND-AREA.md).
+The complete 414-check gate passed on source `a31a3a6041b08dd7b9ee5ac4d10365b1d54672e6`
+in [run 43409888630](https://github.com/wieslawsoltes/NurbsScene/actions/runs/43409888630),
+alongside all 40 native desktop runtime checks and all repository workflows.
+The command-area document records the exact tested tree, artifact hashes and
+untouched startup/command captures; later revisions still require their own gate.
 
 Graph clipboard/menu/selection scenarios run inside the same actual Uno test via
 `test_graph_editing_ui.py`. `editing.yml` separately runs fragment/arrangement

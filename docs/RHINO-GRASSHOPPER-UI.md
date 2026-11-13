@@ -129,8 +129,8 @@ disposal, and deferred graph fitting waits for a visible, unfolded, loaded canva
 
 ## Qualification
 
-The mandatory registry now contains **11 campaigns and at least 407 native UI
-assertions**. All original ten campaigns and their 357 assertions remain intact.
+This milestone established **11 campaigns and at least 407 native UI
+assertions**. All original ten campaigns and their 357 assertions remained intact.
 The separate `rhino-grasshopper-ui` campaign adds 50 checks for actual native input:
 linked toolbar/sidebar pages; layer filter/rename/visibility/lock/color validation,
 no-op, cancellation and undo; grouped palette insertion and cache reuse; display
@@ -138,6 +138,11 @@ and chrome toggles; native menus/help; floating movement/resizing, Escape,
 fold/unfold, double click, hide/reopen/re-dock; and exact v3 restoration after reload.
 The campaign also persists history expansion during an unfinished title drag and
 checks that the canceled rectangle is not restored on reload.
+
+The subsequent [command-area refinement](RHINO-COMMAND-AREA.md) raises the current
+registry minimum to 414 by adding seven real-startup/native-text checks to the
+existing Rhino workspace campaign; the acceptance totals below describe this
+earlier milestone.
 
 All eleven campaigns retain the same 33 modeling/framebuffer checks, 20-second
 per-action observation bound, 15-minute passive observer lifetime and 20-minute job

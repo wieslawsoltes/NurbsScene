@@ -8,6 +8,7 @@ import json
 import math
 from pathlib import Path
 from ui_observation import read_ui, require_gpu_observation, settle, text_editor_point, wait_for_ui, wait_ready
+from command_console_observation import capture_startup, require_entry_layout, require_history_layout
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -86,6 +87,17 @@ async def verify_rhino_workspace(page):
         model_report = await page.evaluate('globalThis.nurbsSceneQualification')
         check(any('Ordinary startup is an empty modeling document' in c for c in model_report['checks']),
               'Ordinary application startup is empty before the explicit qualification fixture')
+        startup = model_report['startup']
+        startup_text = startup['state']['history']
+        check(startup['state']['objects'] == 0 and startup['state']['nodes'] == 0
+              and startup['state']['frames'] > 0 and startup['state']['gpuError'] is None
+              and startup_text == startup['console']['text']
+              and startup_text == '',
+              'Ordinary startup preserves its actual clean command history before any modeling fixture')
+        require_entry_layout(startup['console'])
+        check(True, 'The ordinary native command prompt and editable control use compact matching fonts with no placeholder')
+        require_history_layout(startup['console'], 2)
+        check(True, 'Ordinary startup displays exactly two complete native history line boxes')
         data = await command('ModelingLayout')
         check(not data['state']['definitionVisible'] and data['state']['inspector']=='Properties'
               and not data['state']['viewportPropertyDraft'],
@@ -96,20 +108,42 @@ async def verify_rhino_workspace(page):
               'Changing workspace layout does not edit geometry or consume document undo')
         await page.screenshot(path=str(ROOT/'evidence/uno-rhino-modeling.png'))
 
+        require_history_layout(data['console'], 2)
+        check(data['console']['history']['extentHeight'] >= 3 * data['console']['historyText']['lineHeight'],
+              'Compact command history follows the latest complete lines after more than two real outputs')
         compact = data['controls']['CommandHistory']['height']
         await page.keyboard.press('F2'); data=await settle(page)
         check(data['state']['historyExpanded'] and data['controls']['CommandHistory']['height']>compact+150
               and data['state']['commandInput']=='',
               'F2 expands selectable command history and submitted command input remains clear')
+        require_history_layout(data['console'], 13)
+        check(True, 'Expanded command history contains thirteen complete native line boxes without horizontal-scroll space')
         await click('CommandHistory'); await page.keyboard.press('Control+A'); await page.keyboard.press('Control+C')
         await page.wait_for_timeout(100)
         copied=await page.evaluate('navigator.clipboard.readText()')
-        check('ModelingLayout' in copied and 'NurbsScene' in copied,
+        data=await settle(page)
+        check('Command: ModelingLayout' in copied and copied == data['state']['commandHistory']
+              and data['console']['historyText']['selectedLength'] == len(copied.encode('utf-16-le')) // 2,
               'Native read-only command history supports selecting and copying its text')
         await page.screenshot(path=str(ROOT/'evidence/uno-rhino-command-history.png'))
         await page.keyboard.press('F2'); data=await settle(page)
         check(not data['state']['historyExpanded'] and data['controls']['CommandHistory']['height']==compact,
               'F2 restores compact command history without clearing it')
+        require_history_layout(data['console'], 2)
+
+        # Exercise the unchanged native editor's recall path with an unsent
+        # draft. Searching/recalling text must not dispatch a modeling command.
+        data=await command('ZoomExtents')
+        before_recall=data['state']['documentRevision']
+        await click('CommandInput'); await page.keyboard.type('unsubmitted draft',delay=15)
+        await page.keyboard.press('ArrowUp'); data=await settle(page)
+        check(data['state']['commandInput']=='ZoomExtents' and data['state']['documentRevision']==before_recall,
+              'Native Up recalls the preceding command without executing it or losing the unsent draft')
+        await page.keyboard.press('ArrowDown'); data=await settle(page)
+        require_entry_layout(data['console'])
+        check(data['state']['commandInput']=='unsubmitted draft' and data['state']['documentRevision']==before_recall,
+              'Native Down restores the unsent draft in the same compact baseline-aligned editor')
+        await page.keyboard.press('Escape'); await settle(page)
 
         # Type using real key events on the model canvas, not insert_text or a
         # direct command API: the initial character must not be lost or doubled.
@@ -352,10 +386,12 @@ async def verify_rhino_workspace(page):
         require_gpu_observation(before_reload_gpu)
         # Read-only startup evidence is captured before the fixture changes layout.
         await page.reload(wait_until='domcontentloaded')
+        startup_reload=await capture_startup(page, ROOT/'evidence/uno-rhino-startup-reload')
         await page.wait_for_function('globalThis.nurbsSceneQualification && globalThis.nurbsSceneQualification.status !== "running"',timeout=180000)
         report=await page.evaluate('globalThis.nurbsSceneQualification')
         reloaded=await wait_ready(page,timeout=20000)
-        check(report['status']=='passed' and reloaded['state']['startupPreferences']==expected,
+        check(report['status']=='passed' and startup_reload['state']['preferences']==expected
+              and reloaded['state']['startupPreferences']==expected,
               'A fresh application load restores the exact persisted version-two workspace preferences')
         check(reloaded['state']['startupRenderingSettings']==applied_rendering
               and reloaded['state']['renderingSettings']==applied_rendering,
@@ -370,7 +406,8 @@ async def verify_rhino_workspace(page):
         check(data['state']['gpuError'] is None and data['state']['graphErrors']==0,
               'The real GPU and definition remain error-free after shell, input, camera and persistence workflows')
         await page.screenshot(path=str(ROOT/'evidence/uno-rhino-final.png'))
-        (ROOT/'evidence/uno-rhino-workspace.json').write_text(json.dumps({'status':'passed','checks':checks,'final':data['state']},indent=2))
+        (ROOT/'evidence/uno-rhino-workspace.json').write_text(json.dumps({'status':'passed','checks':checks,'startup':startup,
+            'startupReload':startup_reload,'final':data['state']},indent=2))
     except Exception as error:
         observed=await page.evaluate('globalThis.nurbsSceneUi')
         (ROOT/'evidence/uno-rhino-workspace.json').write_text(json.dumps({'status':'failed','error':str(error),'checks':checks,'observed':observed},indent=2))
