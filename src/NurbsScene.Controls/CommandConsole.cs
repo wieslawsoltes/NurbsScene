@@ -62,10 +62,11 @@ public sealed class CommandConsole : Grid
     private readonly Button _expand;
     private string _historyText = "";
     private string? _repeatCommand;
+    private string? _programmaticInputText;
     private bool _setting, _canvasFocusQueued, _historyUpdateQueued, _snapQueued;
     private bool _followTail = true, _selectingHistory, _changingScroll, _applyingHistoryLayout;
     private double _historyViewportHeight = double.NaN, _historyExtentHeight = double.NaN;
-    private long _layoutGeneration;
+    private long _layoutGeneration, _snapGeneration;
     private long? _historySelectionToken;
 
     public event Action<string>? CommandSubmitted;
@@ -133,14 +134,18 @@ public sealed class CommandConsole : Grid
         AutomationProperties.SetAutomationId(row,"CommandEntryRow");
 
         ConfigureHistory();
-        _input.TextChanged += (_,_) =>
+        _input.TextChanged += (_,e) =>
         {
-            if (_setting) return;
-            var text = _input.Text.Trim();
-            _input.ItemsSource = text.Length > 0 && !text.Contains(' ')
-                ? WorkspaceShellCommands.Search(text).Concat(WorkspaceCommands.Search(text).Select(t => t.Command))
-                    .Distinct(StringComparer.OrdinalIgnoreCase).Take(12).ToArray()
-                : Array.Empty<string>();
+            // The native editor delivers text changes asynchronously. A recalled
+            // command must not reopen completion after SetText has returned.
+            if (_setting || e.Reason != AutoSuggestionBoxTextChangeReason.UserInput || !e.CheckCurrent()) return;
+            var text = FindInputTextBox()?.Text ?? _input.Text;
+            // An equal-value recall queues no new native TextChanged event to
+            // supersede an older user event. Retain the explicit command intent
+            // until a genuinely different editor value is observed.
+            if (text == _programmaticInputText) return;
+            _programmaticInputText = null;
+            UpdateSuggestions(text);
         };
         _input.QuerySubmitted += (_,e) =>
         {
@@ -158,7 +163,9 @@ public sealed class CommandConsole : Grid
             }
             else if (!_input.IsSuggestionListOpen && e.Key == VirtualKey.Up)
             {
-                SetText(_history.Previous(_input.Text)); CaretAtEnd(); e.Handled = true;
+                // AutoSuggestBox.Text can trail the user's actual draft while
+                // native TextChanged delivery is pending.
+                SetText(_history.Previous(FindInputTextBox()?.Text ?? _input.Text)); CaretAtEnd(); e.Handled = true;
             }
             else if (!_input.IsSuggestionListOpen && e.Key == VirtualKey.Down)
             {
@@ -249,7 +256,11 @@ public sealed class CommandConsole : Grid
             // Leave native handling and edge chaining entirely untouched.
             if ((wheel.MouseWheelDelta > 0 && _historyView.VerticalOffset > 0)
                 || (wheel.MouseWheelDelta < 0 && _historyView.VerticalOffset < _historyView.ScrollableHeight))
+            {
                 _followTail = false;
+                _snapGeneration++;
+                _snapQueued = false;
+            }
         }),true);
         _historyView.SizeChanged += (_,_) => QueueHistoryUpdate();
         _historyView.ViewChanged += (_,e) =>
@@ -324,11 +335,20 @@ public sealed class CommandConsole : Grid
         if (_snapQueued || _selectingHistory || !IsLoaded) return;
         _snapQueued = true;
         var generation = _layoutGeneration;
+        var snapGeneration = _snapGeneration;
         if (!DispatcherQueue.TryEnqueue(() =>
         {
-            if (generation != _layoutGeneration || !IsLoaded) return;
+            // An older snap must not stop a new wheel gesture or clear its
+            // replacement request's pending flag.
+            if (generation != _layoutGeneration || snapGeneration != _snapGeneration || !IsLoaded) return;
             _snapQueued = false;
-            if (!_selectingHistory) ChangeHistoryOffset(_historyView.VerticalOffset);
+            if (!_selectingHistory)
+            {
+                ChangeHistoryOffset(_historyView.VerticalOffset);
+                // Own ChangeView notifications are suppressed. Resume when a
+                // reader snaps onto the tail, preserving resize intent otherwise.
+                if (IsAtTail) _followTail = true;
+            }
         })) _snapQueued = false;
     }
 
@@ -358,8 +378,26 @@ public sealed class CommandConsole : Grid
     private void SetText(string text)
     {
         _setting = true;
-        try { _input.Text = text; _input.ItemsSource = Array.Empty<string>(); }
+        try
+        {
+            _programmaticInputText = text;
+            _input.Text = text;
+            // If the outer property already equaled this value, its callback
+            // cannot replace a newer, not-yet-delivered native editor draft.
+            if (FindInputTextBox() is { } box && box.Text != text) box.Text = text;
+            _input.ItemsSource = Array.Empty<string>();
+            _input.IsSuggestionListOpen = false;
+        }
         finally { _setting = false; }
+    }
+
+    private void UpdateSuggestions(string input)
+    {
+        var text = input.Trim();
+        _input.ItemsSource = text.Length > 0 && !text.Contains(' ')
+            ? WorkspaceShellCommands.Search(text).Concat(WorkspaceCommands.Search(text).Select(t => t.Command))
+                .Distinct(StringComparer.OrdinalIgnoreCase).Take(12).ToArray()
+            : Array.Empty<string>();
     }
 
     private void Submit(string input)
@@ -417,7 +455,7 @@ public sealed class CommandConsole : Grid
         QueueHistoryUpdate(force: command);
     }
 
-    private void CaretAtEnd()
+    private TextBox? FindInputTextBox()
     {
         TextBox? Find(DependencyObject element)
         {
@@ -426,7 +464,12 @@ public sealed class CommandConsole : Grid
                 if (Find(VisualTreeHelper.GetChild(element,i)) is { } found) return found;
             return null;
         }
-        Find(_input)?.Select(_input.Text.Length,0);
+        return Find(_input);
+    }
+
+    private void CaretAtEnd()
+    {
+        if (FindInputTextBox() is { } box) box.Select(box.Text.Length,0);
     }
 
     public void BeginCommand(string text)
@@ -440,10 +483,19 @@ public sealed class CommandConsole : Grid
             if (!_canvasFocusQueued)
             {
                 _canvasFocusQueued = true;
-                DispatcherQueue.TryEnqueue(() => { _canvasFocusQueued = false; _input.Focus(FocusState.Programmatic); CaretAtEnd(); });
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    _canvasFocusQueued = false;
+                    _input.Focus(FocusState.Programmatic);
+                    CaretAtEnd();
+                    // Canvas characters are genuine typing routed through a
+                    // programmatic assignment. Populate completion explicitly
+                    // after native focus, using the draft that still exists.
+                    UpdateSuggestions(FindInputTextBox()?.Text ?? _input.Text);
+                });
             }
             return;
         }
-        SetText(text); _input.Focus(FocusState.Programmatic); CaretAtEnd();
+        SetText(text); _input.Focus(FocusState.Programmatic); CaretAtEnd(); UpdateSuggestions(text);
     }
 }
