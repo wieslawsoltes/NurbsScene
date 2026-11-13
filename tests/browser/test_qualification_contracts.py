@@ -52,6 +52,15 @@ class QualificationContracts(unittest.TestCase):
                             "budgetMilliseconds": 60_000, "outerBudgetMilliseconds": 65_000,
                             "elapsedMilliseconds": 5.5, "byteCount": 4096} for capture in ("empty", "filled", "rotated")],
                         "gpuReadbackSha256": "A" * 64}
+            if name == "rhino-workspace":
+                startup = {"status": "ready", "sample": 3, "console": {"text": "NurbsScene"},
+                           "state": {"objects": 0, "nodes": 0, "frames": 1, "gpuError": None, "history": "NurbsScene"}}
+                record["startup"] = copy.deepcopy(startup)
+                modeling["startup"] = copy.deepcopy(startup)
+                for checkpoint in ("uno-rhino-startup", "uno-rhino-startup-reload"):
+                    GATE.write_json(folder / (checkpoint + ".json"), startup)
+                    (folder / (checkpoint + ".png")).write_bytes(b"\x89PNG\r\n\x1a\nfixture")
+                GATE.write_json(folder / "uno-rhino-workspace.json", {"startupReload": copy.deepcopy(startup)})
             GATE.write_json(folder / "uno-ui.json", report)
             GATE.write_json(folder / ("uno-browser-" + name + ".json"), modeling)
             GATE.write_json(folder / "uno-publication.json", self.manifest)
@@ -78,7 +87,7 @@ class QualificationContracts(unittest.TestCase):
 
     def test_all_eleven_campaigns_aggregate_without_losing_assertions(self):
         result = self.collect()
-        self.assertEqual(len(result["checks"]), 407)
+        self.assertEqual(len(result["checks"]), 414)
         self.assertEqual([r["campaign"] for r in result["campaigns"]], self.names)
         self.assertEqual(result["modelingChecksPerCampaign"], [33] * 11)
         self.assertEqual(len(list((self.output / "campaigns").glob("*/uno-ui.json"))), 11)
@@ -88,8 +97,10 @@ class QualificationContracts(unittest.TestCase):
         originals = [("workspace", 45), ("inputs-sliders", 31), ("panels", 35), ("panel-edges", 43),
                      ("ellipse-loft", 29), ("panel-display", 14), ("typography", 35),
                      ("pointer-selection", 39), ("panel-scrolling", 22), ("rhino-workspace", 64)]
-        self.assertEqual([(entry["name"], entry["minimumUiChecks"]) for entry in self.registry["campaigns"][:10]], originals)
+        expanded = originals[:-1] + [("rhino-workspace", 71)]
+        self.assertEqual([(entry["name"], entry["minimumUiChecks"]) for entry in self.registry["campaigns"][:10]], expanded)
         self.assertEqual(sum(count for _, count in originals), 357)
+        self.assertEqual(sum(count for _, count in expanded) - sum(count for _, count in originals), 7)
         self.assertEqual(self.registry["campaigns"][10:], [{"name": "rhino-grasshopper-ui", "minimumUiChecks": 50}])
         self.assertEqual(self.registry["minimumModelingChecks"], 33)
 
@@ -192,6 +203,26 @@ class QualificationContracts(unittest.TestCase):
 
     def test_missing_rhino_pre_reload_device_observation_rejects(self):
         (self.evidence / "rhino-workspace" / "uno-rhino-pre-reload-gpu.json").unlink()
+        self.rejected()
+
+    def test_missing_ordinary_startup_observation_rejects(self):
+        (self.evidence / "rhino-workspace" / "uno-rhino-startup.json").unlink()
+        self.rejected()
+
+    def test_missing_ordinary_startup_screenshot_rejects(self):
+        (self.evidence / "rhino-workspace" / "uno-rhino-startup.png").unlink()
+        self.rejected()
+
+    def test_fixture_geometry_cannot_be_published_as_ordinary_startup(self):
+        self.edit("uno-rhino-startup.json", lambda r: r["state"].update(objects=4), name="rhino-workspace")
+        self.rejected()
+
+    def test_changed_startup_history_rejects_even_with_clean_final_device(self):
+        self.edit("uno-rhino-startup.json", lambda r: r["state"].update(history="replacement banner"), name="rhino-workspace")
+        self.rejected()
+
+    def test_reload_startup_gpu_error_cannot_be_hidden_by_fixture(self):
+        self.edit("uno-rhino-startup-reload.json", lambda r: r["state"].update(gpuError="startup device failure"), name="rhino-workspace")
         self.rejected()
 
     def test_pre_reload_device_error_cannot_be_hidden_by_clean_reloaded_device(self):

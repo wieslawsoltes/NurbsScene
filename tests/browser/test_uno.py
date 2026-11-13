@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 from playwright.async_api import async_playwright
 from ui_observation import require_gpu_observation, wait_ready, wait_for_restored
+from command_console_observation import capture_startup
 from test_workspace_ui import verify_workspace_ui
 from test_graph_inputs_ui import verify_graph_inputs_ui
 from test_canvas_values_ui import verify_canvas_values_ui
@@ -80,7 +81,10 @@ async def main(url, campaign=None):
                 campaign_reports.append(record)
                 print("CAMPAIGN " + name, flush=True)
                 try:
-                    await page.goto(url + ("&" if "?" in url else "?") + "qualification=1", wait_until="domcontentloaded", timeout=60000)
+                    query = "qualification=1" + ("&qualificationStartup=1" if name == "rhino-workspace" else "")
+                    await page.goto(url + ("&" if "?" in url else "?") + query, wait_until="domcontentloaded", timeout=60000)
+                    if name == "rhino-workspace":
+                        record["startup"] = await capture_startup(page, EVIDENCE / "uno-rhino-startup")
                     await page.wait_for_function('globalThis.nurbsSceneQualification && globalThis.nurbsSceneQualification.status !== "running"', timeout=180000)
                     report = await page.evaluate("globalThis.nurbsSceneQualification")
                     report["pageErrors"] = list(campaign_errors)

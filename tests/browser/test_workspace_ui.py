@@ -51,13 +51,17 @@ async def verify_workspace_ui(page):
         await click('FourViewButton');await wait('globalThis.nurbsSceneUi.state.maximized===null')
         checks.append('Double-click title maximizes; four-view button restores')
         await click('Side_Line');await wait('globalThis.nurbsSceneUi.state.pending==="Line"')
-        data=await observe();v=next(v for v in data['views'] if v['name']=='Top')
+        data=await observe();start_prompt=data['console']['prompt']['text'];v=next(v for v in data['views'] if v['name']=='Top')
         await page.mouse.click(v['x']+v['width']*.29,v['y']+v['height']*.40)
         await wait('globalThis.nurbsSceneUi.state.anchor!==null')
+        end_prompt=(await observe())['console']['prompt']['text']
         await page.mouse.click(v['x']+v['width']*.70,v['y']+v['height']*.66)
         await wait(f'globalThis.nurbsSceneUi.state.objects==={objects+1} && globalThis.nurbsSceneUi.state.pending===""')
         points=(await state())['lastPoints'];a,b=points
-        check(abs(a[2])<1e-8 and abs(b[2])<1e-8 and all(abs(x-round(x))<1e-8 for x in a+b),'Pointer-created line obeys world grid snapping')
+        check(abs(a[2])<1e-8 and abs(b[2])<1e-8 and all(abs(x-round(x))<1e-8 for x in a+b)
+              and start_prompt=='Start of line:' and end_prompt=='End of line:'
+              and (await observe())['console']['prompt']['text']=='Command:',
+              'Pointer-created line obeys world grid snapping and advances the native start/end prompts')
         check(abs(a[0]-b[0])<1e-8 or abs(a[1]-b[1])<1e-8,'Pointer-created line obeys orthographic construction constraint')
         await click('Tool_Undo');await wait(f'globalThis.nurbsSceneUi.state.objects==={objects}')
         before=await state();await click('Side_SelectAll');await wait(f'globalThis.nurbsSceneUi.state.selected==={objects}')
