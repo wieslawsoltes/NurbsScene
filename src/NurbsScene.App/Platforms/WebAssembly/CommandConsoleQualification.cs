@@ -34,6 +34,8 @@ public partial class App
             {
                 x = origin.X, y = origin.Y, width = element.ActualWidth, height = element.ActualHeight,
                 desiredWidth = element.DesiredSize.Width, desiredHeight = element.DesiredSize.Height,
+                margin = new { left = element.Margin.Left, top = element.Margin.Top,
+                    right = element.Margin.Right, bottom = element.Margin.Bottom },
                 loaded = element.IsLoaded, visible = element.Visibility == Visibility.Visible
             };
         }

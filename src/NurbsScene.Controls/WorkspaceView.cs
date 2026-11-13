@@ -44,6 +44,9 @@ public sealed partial class WorkspaceView : UserControl,IDisposable
     public WorkspaceView(WorkspaceController? controller=null)
     {
         _ownsController=controller is null;Controller=controller??new();RequestedTheme=ElementTheme.Light;ClassicChrome.Install(Resources);
+        // Workspace accelerators are global actions, not a tooltip for the entire
+        // client area. Set this before registering them so Uno never creates it.
+        KeyboardAcceleratorPlacementMode=KeyboardAcceleratorPlacementMode.Hidden;
         try{if(ApplicationData.Current.LocalSettings.Values.TryGetValue(PreferenceKey,out var stored)&&WorkspacePreferences.TryParse(stored as string,out var parsed))Preferences=parsed;}catch(Exception error){Console.WriteLine("Layout preferences: "+error.Message);}
         LoadRenderingPreferences();
         var root=new Grid{Background=ClassicChrome.Background};
@@ -186,7 +189,13 @@ public sealed partial class WorkspaceView : UserControl,IDisposable
     private MenuBar CreateMenus()
     {
         var bar=new MenuBar{FontSize=11,MinHeight=0,Height=22,Padding=new(2,0,2,0)};
-        MenuBarItem Menu(string name){var menu=new MenuBarItem{Title=name,FontSize=11,MinHeight=0,Height=22,Padding=new(6,0,6,0)};AutomationProperties.SetAutomationId(menu,"ModelMenu_"+name);bar.Items.Add(menu);return menu;}
+        // Uno's native MenuBarItem template pads its ContentButton separately
+        // from the outer control. Its default 4-DIP vertical margins and button
+        // padding cannot fit this row; keep the native template and compact both.
+        bar.Resources["MenuBarItemButtonPadding"]=new Thickness(6,0,6,0);
+        bar.Resources["MenuBarItemMargin"]=new Thickness(0);
+        bar.Resources["ControlContentThemeFontSize"]=11d;
+        MenuBarItem Menu(string name){var menu=new MenuBarItem{Title=name,FontSize=11,MinHeight=0,Height=22,Margin=new(0),Padding=new(6,0,6,0)};AutomationProperties.SetAutomationId(menu,"ModelMenu_"+name);bar.Items.Add(menu);return menu;}
         void Item(MenuBarItem menu,string name,Action action){var item=ShellItem(name,action,"Menu_"+menu.Title+"_"+new string(name.Where(char.IsLetterOrDigit).ToArray()));menu.Items.Add(item);}
         var file=Menu("File");Item(file,"New workspace",()=>_ =SafeAsync(NewAsync));Item(file,"Open…",()=>_ =SafeAsync(OpenAsync));Item(file,"Save as…",()=>_ =SafeAsync(SaveAsync));Item(file,"Export display mesh (.obj)…",()=>_ =SafeAsync(()=>ExportAsync(false)));Item(file,"Export display mesh (.stl)…",()=>_ =SafeAsync(()=>ExportAsync(true)));Item(file,"Load pavilion sample",()=>_ =SafeAsync(async()=>{if(await ConfirmDiscardAsync())Controller.LoadPavilion();}));
         var edit=Menu("Edit");foreach(var id in new[]{"Undo","Redo","Delete","SelectAll","SelectNone"}){var tool=WorkspaceCommands.Tools.Single(t=>t.Id==id);Item(edit,tool.Label,()=>InvokeTool(tool));}

@@ -50,7 +50,7 @@ public sealed class CommandConsole : Grid
     {
         Text = "Command:", FontSize = CommandFontSize, FontWeight = FontWeights.SemiBold,
         Foreground = ClassicChrome.Ink, VerticalAlignment = VerticalAlignment.Center,
-        MaxWidth = 230, TextTrimming = TextTrimming.CharacterEllipsis, Margin = new(5,0,3,0)
+        MaxWidth = 230, TextTrimming = TextTrimming.CharacterEllipsis
     };
     private readonly TextBlock _historyArrow = new()
     {
@@ -100,7 +100,9 @@ public sealed class CommandConsole : Grid
         row.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
         row.ColumnDefinitions.Add(new() { Width = new GridLength(1,GridUnitType.Star) });
         row.ColumnDefinitions.Add(new() { Width = new GridLength(18) });
-        row.Children.Add(_prompt);
+        // Put spacing on the container, not the text. Uno's text ActualWidth
+        // includes its margin while TransformToVisual already offsets its origin.
+        row.Children.Add(new Border { Padding = new(5,0,3,0), Child = _prompt });
         row.Children.Add(_input);
         SetColumn(_input,1);
         _expand = ClassicChrome.Button("Expand command history", () => HistoryExpandedRequested?.Invoke(!HistoryExpanded), "ToggleCommandHistory");

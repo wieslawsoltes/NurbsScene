@@ -76,14 +76,19 @@ property callback. The pinned Uno version's generated `SelectionChanged` event
 is unimplemented, so selection notification uses the working
 `TextBlock.SelectedTextProperty` callback instead.
 
-The transcript is bounded to 500 physical lines and 4096 characters per incoming
-message, with newline normalization and surrogate-safe truncation. Existing
+The transcript is bounded to 500 physical lines, with a 4096-character truncation
+threshold per incoming message, normalized newlines and surrogate-safe truncation. Existing
 command recall, draft restoration, completion, repeat and the deferred
 canvas-to-command input handoff are retained.
 
 ## Surrounding desktop presentation
 
 The menu row is 22 DIP, the toolbar categories 23 DIP and the icon row 30 DIP.
+The native menu template's own button padding and four-DIP item margins are
+compacted too; reducing only the outer row clipped the menu text in the first
+real startup capture. Workspace-wide keyboard accelerators use hidden tooltip
+placement, preventing a Ctrl+S tooltip from appearing over the menu when the
+pointer rests on the root surface. The accelerators themselves remain active.
 Toolbar icons share a continuous background, with cell borders appearing during
 interaction. Selected tabs have a restrained raised outline without the previous
 blue underline. Toolbar, category, viewport-tab and status strips use native
@@ -125,6 +130,14 @@ viewport/extent/offset values. The inner AutoSuggestBox `TextBox` and its render
 text descendant are measured directly. No character rectangle or expected
 baseline is synthesized. Empty text has no painted baseline; populated command
 recall and restored drafts must align their real baseline with the prompt.
+
+The first hosted startup run confirmed matching painted prompt/input baselines,
+but exposed a native bounds detail: Uno's `TextBlock.ActualWidth` returns desired
+width including margins, while its transformed origin already includes the left
+margin. Prompt spacing now belongs to a padded parent with a margin-free text
+child. This preserves the visible three-DIP gap and lets the unchanged native
+spacing assertion measure the actual text width. Margin values are also retained
+in passive diagnostics; no tolerance was enlarged to accept the initial failure.
 
 The campaign grows from 64 to 71 checks. Across the same eleven campaigns, the
 minimum is now **414 native UI checks**. Existing behaviors remain covered;
