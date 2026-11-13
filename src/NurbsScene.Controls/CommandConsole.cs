@@ -238,6 +238,17 @@ public sealed class CommandConsole : Grid
         _log.AddHandler(UIElement.PointerReleasedEvent,new PointerEventHandler(EndSelection),true);
         _log.AddHandler(UIElement.PointerCanceledEvent,new PointerEventHandler(EndSelection),true);
         _log.AddHandler(UIElement.PointerCaptureLostEvent,new PointerEventHandler(EndSelection),true);
+        _historyView.AddHandler(UIElement.PointerWheelChangedEvent,new PointerEventHandler((_,e) =>
+        {
+            var wheel = e.GetCurrentPoint(_historyView).Properties;
+            if (e.KeyModifiers != VirtualKeyModifiers.None || wheel.IsHorizontalMouseWheel) return;
+            // Native wheel motion starts on the next frame. Record intent now
+            // so a pending append cannot cancel it before the first ViewChanged.
+            // Leave native handling and edge chaining entirely untouched.
+            if ((wheel.MouseWheelDelta > 0 && _historyView.VerticalOffset > 0)
+                || (wheel.MouseWheelDelta < 0 && _historyView.VerticalOffset < _historyView.ScrollableHeight))
+                _followTail = false;
+        }),true);
         _historyView.SizeChanged += (_,_) => QueueHistoryUpdate();
         _historyView.ViewChanged += (_,e) =>
         {
