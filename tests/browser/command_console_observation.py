@@ -3,8 +3,35 @@
 The checkpoint only delays the existing modeling fixture while its untouched
 startup is captured. It cannot dispatch a command or change native input state.
 """
+import asyncio
 import json
 import math
+
+
+_HOST_STATE = """() => {
+    // Pinned Uno's WebAssemblyWindowWrapper dismisses both its own splash and
+    // the persistent bootstrapper loader after the first composition record.
+    // Native CAD submissions can precede that browser presentation boundary.
+    const canvas = document.getElementById('uno-canvas');
+    const rectangle = canvas?.getBoundingClientRect();
+    const visible = canvas instanceof HTMLCanvasElement && canvas.isConnected
+        && canvas.checkVisibility({opacityProperty: true, visibilityProperty: true});
+    return {
+        documentVisibility: document.visibilityState,
+        loaderCount: document.querySelectorAll('#loading, #uno-loading, .uno-loader, .uno-persistent-loader').length,
+        canvas: canvas instanceof HTMLCanvasElement ? {
+            id: canvas.id, connected: canvas.isConnected, visible,
+            x: rectangle.x, y: rectangle.y, width: rectangle.width, height: rectangle.height,
+            pixelWidth: canvas.width, pixelHeight: canvas.height
+        } : null
+    };
+}"""
+
+_PRESENTATION_FRAME = """() => new Promise(resolve => {
+    requestAnimationFrame(firstFrame => requestAnimationFrame(secondFrame => resolve({
+        firstFrame, secondFrame, sample: globalThis.nurbsSceneStartup?.sample
+    })));
+})"""
 
 
 def require_startup(value):
@@ -16,27 +43,59 @@ def require_startup(value):
     return value
 
 
+def require_visible_startup_host(value):
+    host = value.get("host", {})
+    canvas = host.get("canvas") or {}
+    if (host.get("documentVisibility") != "visible" or host.get("loaderCount") != 0
+            or canvas.get("id") != "uno-canvas" or canvas.get("connected") is not True
+            or canvas.get("visible") is not True
+            or any(type(canvas.get(key)) not in (int, float) or not math.isfinite(canvas[key]) or canvas[key] <= 0
+                   for key in ("width", "height", "pixelWidth", "pixelHeight"))):
+        raise AssertionError("Ordinary startup is still hidden by the browser host: " + json.dumps(value))
+
+
 async def capture_startup(page, destination):
     """Capture before allowing the pre-existing qualification fixture to load."""
     async def wait(after_sample=0):
         predicate = """() => {
             const startup = globalThis.nurbsSceneStartup;
             const modeling = globalThis.nurbsSceneQualification;
-            if (startup && startup.status !== 'ready') return startup;
-            if (modeling && modeling.status === 'failed') return modeling;
-            return startup && startup.sample >= """ + str(after_sample) + """ ? startup : false;
+            const host = (""" + _HOST_STATE + """)();
+            if (startup && startup.status !== 'ready') return {...startup, host};
+            if (modeling && modeling.status === 'failed') return {...modeling, host};
+            const canvas = host.canvas;
+            const visible = host.documentVisibility === 'visible' && host.loaderCount === 0
+                && canvas?.connected && canvas.visible
+                && canvas.width > 0 && canvas.height > 0 && canvas.pixelWidth > 0 && canvas.pixelHeight > 0;
+            return visible && startup && startup.sample >= """ + str(after_sample) + """ ? {...startup, host} : false;
         }"""
         # The ordinary first frame uses the same bounded application startup
         # envelope as the existing managed qualification. Once the checkpoint
         # appears, its application-side lifetime is independently only 20s.
         handle = await page.wait_for_function(predicate, timeout=180000)
         try:
-            return require_startup(await handle.json_value())
+            snapshot = require_startup(await handle.json_value())
+            require_visible_startup_host(snapshot)
+            return snapshot
         finally:
             await handle.dispose()
 
-    first = await wait()
-    snapshot = await wait(first["sample"] + 2)
+    await wait()
+    # A pair of browser animation-frame callbacks crosses a real presentation
+    # opportunity after loader dismissal. It does not request a native redraw,
+    # mutate the canvas, or sample screenshots until some desired pixels appear.
+    # The application checkpoint still expires independently after 20 seconds.
+    presentation = await asyncio.wait_for(page.evaluate(_PRESENTATION_FRAME), timeout=20)
+    if (not isinstance(presentation, dict) or type(presentation.get("sample")) is not int
+            or presentation["sample"] < 1
+            or any(type(presentation.get(key)) not in (int, float) or not math.isfinite(presentation[key])
+                   for key in ("firstFrame", "secondFrame"))
+            or presentation["firstFrame"] < 0 or presentation["secondFrame"] <= presentation["firstFrame"]):
+        raise AssertionError("Browser startup did not cross a presentation frame: " + json.dumps(presentation))
+    snapshot = await wait(presentation["sample"] + 2)
+    if snapshot["sample"] < presentation["sample"] + 2:
+        raise AssertionError("Startup capture reused a sample from before browser presentation")
+    snapshot["host"]["presentation"] = presentation
     destination.with_suffix(".json").write_text(json.dumps(snapshot, indent=2))
     await page.screenshot(path=str(destination.with_suffix(".png")))
     await page.evaluate("globalThis.nurbsSceneStartupContinue=true")

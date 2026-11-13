@@ -53,8 +53,12 @@ class QualificationContracts(unittest.TestCase):
                             "elapsedMilliseconds": 5.5, "byteCount": 4096} for capture in ("empty", "filled", "rotated")],
                         "gpuReadbackSha256": "A" * 64}
             if name == "rhino-workspace":
-                startup = {"status": "ready", "sample": 3, "console": {"text": "NurbsScene"},
-                           "state": {"objects": 0, "nodes": 0, "frames": 1, "gpuError": None, "history": "NurbsScene"}}
+                startup = {"status": "ready", "sample": 3, "console": {"text": ""},
+                           "state": {"objects": 0, "nodes": 0, "frames": 1, "gpuError": None, "history": ""},
+                           "host": {"documentVisibility": "visible", "loaderCount": 0,
+                                    "canvas": {"id": "uno-canvas", "connected": True, "visible": True,
+                                               "width": 1600, "height": 1100, "pixelWidth": 1600, "pixelHeight": 1100},
+                                    "presentation": {"firstFrame": 1000, "secondFrame": 1016, "sample": 1}}}
                 record["startup"] = copy.deepcopy(startup)
                 modeling["startup"] = copy.deepcopy(startup)
                 for checkpoint in ("uno-rhino-startup", "uno-rhino-startup-reload"):
@@ -212,6 +216,32 @@ class QualificationContracts(unittest.TestCase):
     def test_missing_ordinary_startup_screenshot_rejects(self):
         (self.evidence / "rhino-workspace" / "uno-rhino-startup.png").unlink()
         self.rejected()
+
+    def test_native_frames_cannot_qualify_loader_or_unpainted_canvas_screenshots(self):
+        folder = self.evidence / "rhino-workspace"
+        path = folder / "uno-rhino-startup.json"
+        original = GATE.read_json(path)
+        for change in (lambda r: r.pop("host"),
+                       lambda r: r["host"].update(loaderCount=1),
+                       lambda r: r["host"].update(documentVisibility="hidden"),
+                       lambda r: r["host"]["canvas"].update(visible=False),
+                       lambda r: r["host"]["canvas"].update(pixelWidth=0)):
+            value = copy.deepcopy(original)
+            change(value)
+            GATE.write_json(path, value)
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                GATE.require_startup_checkpoint(folder, "uno-rhino-startup")
+
+    def test_startup_capture_requires_fresh_native_samples_after_browser_presentation(self):
+        folder = self.evidence / "rhino-workspace"
+        path = folder / "uno-rhino-startup.json"
+        original = GATE.read_json(path)
+        for update in ({"sample": 2}, {"firstFrame": 1016}, {"secondFrame": float("nan")}):
+            value = copy.deepcopy(original)
+            value["host"]["presentation"].update(update)
+            GATE.write_json(path, value)
+            with self.subTest(update=update), self.assertRaises(ValueError):
+                GATE.require_startup_checkpoint(folder, "uno-rhino-startup")
 
     def test_fixture_geometry_cannot_be_published_as_ordinary_startup(self):
         self.edit("uno-rhino-startup.json", lambda r: r["state"].update(objects=4), name="rhino-workspace")

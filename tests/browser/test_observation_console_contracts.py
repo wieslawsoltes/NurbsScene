@@ -89,7 +89,9 @@ class Handle:
 
 
 class Page:
-    def __init__(self, values): self.values, self.events = iter(values), []
+    def __init__(self, values, presentation=None):
+        self.values, self.events = iter(values), []
+        self.presentation = presentation or {"firstFrame": 1000, "secondFrame": 1016, "sample": 2}
     async def wait_for_function(self, predicate, timeout):
         self.events.append("observe")
         return Handle(next(self.values))
@@ -97,22 +99,55 @@ class Page:
         self.events.append("screenshot")
         Path(path).write_bytes(b"\x89PNG\r\n\x1a\nfixture")
     async def evaluate(self, expression):
-        if expression != "globalThis.nurbsSceneStartupContinue=true":
-            raise AssertionError("Unexpected application mutation")
-        self.events.append("release")
+        if "requestAnimationFrame(" in expression:
+            self.events.append("presentation")
+            return self.presentation
+        if expression == "globalThis.nurbsSceneStartupContinue=true":
+            self.events.append("release")
+            return
+        raise AssertionError("Unexpected application mutation")
+
+
+def startup(sample=1):
+    return {"status": "ready", "sample": sample, "state": {}, "console": native_console(),
+            "host": {"documentVisibility": "visible", "loaderCount": 0,
+                     "canvas": {"id": "uno-canvas", "connected": True, "visible": True,
+                                "x": 0, "y": 0, "width": 1600, "height": 1100,
+                                "pixelWidth": 1600, "pixelHeight": 1100}}}
 
 
 class StartupCheckpointContracts(unittest.IsolatedAsyncioTestCase):
     async def test_original_snapshot_and_screenshot_are_saved_before_fixture_release(self):
-        first = {"status": "ready", "sample": 1, "state": {}, "console": native_console()}
-        final = first | {"sample": 3}
+        first, final = startup(), startup(4)
         page = Page([first, final])
         with tempfile.TemporaryDirectory() as folder:
             destination = Path(folder) / "startup"
             result = await capture_startup(page, destination)
+            final["host"]["presentation"] = page.presentation
             self.assertEqual(json.loads(destination.with_suffix(".json").read_text()), final)
             self.assertEqual(result, final)
-            self.assertEqual(page.events, ["observe", "observe", "screenshot", "release"])
+            self.assertEqual(page.events, ["observe", "presentation", "observe", "screenshot", "release"])
+
+    async def test_native_frame_submission_cannot_qualify_a_hidden_browser_host(self):
+        for update in ({"loaderCount": 1}, {"documentVisibility": "hidden"}, {"canvas": None}):
+            value = startup()
+            value["host"].update(update)
+            page = Page([value])
+            with self.subTest(update=update), tempfile.TemporaryDirectory() as folder, self.assertRaises(AssertionError):
+                await capture_startup(page, Path(folder) / "startup")
+            self.assertEqual(page.events, ["observe"])
+
+    async def test_pre_presentation_samples_are_not_captured_or_released(self):
+        page = Page([startup(), startup(3)])
+        with tempfile.TemporaryDirectory() as folder, self.assertRaises(AssertionError):
+            await capture_startup(page, Path(folder) / "startup")
+        self.assertEqual(page.events, ["observe", "presentation", "observe"])
+
+    async def test_missing_presentation_opportunity_is_not_captured_or_released(self):
+        page = Page([startup()], {"firstFrame": 1000, "secondFrame": 1000, "sample": 2})
+        with tempfile.TemporaryDirectory() as folder, self.assertRaises(AssertionError):
+            await capture_startup(page, Path(folder) / "startup")
+        self.assertEqual(page.events, ["observe", "presentation"])
 
     async def test_failed_startup_is_not_released_or_retried(self):
         page = Page([{"status": "failed", "error": "native startup failed"}])
