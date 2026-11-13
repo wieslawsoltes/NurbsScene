@@ -177,7 +177,58 @@ reported as a complete application build.
 
 ## Acceptance record
 
-Implementation and qualification are committed in PR #20. Hosted runtime,
-screenshots and exact-revision acceptance will be recorded here after the full
-gate finishes. Historical totals and captures in the previous interface milestone
-remain historical evidence, not acceptance of this revision.
+The complete implementation passed **all 23 repository workflows** and **all 15
+Uno jobs** in [run 43409888630](https://github.com/wieslawsoltes/NurbsScene/actions/runs/43409888630).
+
+| Identity | Accepted value |
+| --- | --- |
+| Application/test source | `a31a3a6041b08dd7b9ee5ac4d10365b1d54672e6` |
+| Tested PR merge | `8de11424b02ee0c4c89230f5a739fb57c0e630d8` |
+| Tested tree | `76bbde8fc798e02a9c5631cebd8d79e73392a824` |
+| Aggregate artifact | `14030425540` / 22,171,098 bytes |
+| Artifact SHA-256 | `02b3cbee956d21071a4830f4a04929e48d03eadb770ef1bfd00fdbc077537c7b` |
+| Publication | 849 files; identical manifests in every campaign |
+
+The aggregate records **414 passed UI checks across eleven campaigns**, including
+all **71 Rhino command/navigation checks**, and **33 modeling/framebuffer checks
+in each campaign**. The thirteen browser device lifetimes, including both
+pre-/post-reload pairs, each recorded one device and three fulfilled readbacks,
+with zero dropped maps, GPU errors or browser-page errors. Native desktop passed
+40 runtime checks and ten WebGPU contracts on software Vulkan, closed normally,
+and compiled with zero warnings and errors. These are software-GPU correctness
+results; they do not measure physical-GPU throughput.
+
+Both ordinary-startup captures have a visible 1600 × 1100 host canvas, no loader,
+empty document/graph/history and two CAD submissions. Measured geometry is a
+20 DIP input row, a 32 DIP compact history viewport, 16 DIP line height, 12 DIP
+prompt/editor fonts and a three-DIP text-to-input gap. The expanded 208 DIP
+history, exact native clipboard transcript, immediate Up/Down draft restoration
+and populated-text baseline alignment all passed their unchanged assertions.
+
+The [machine-readable acceptance record](RHINO-COMMAND-AREA-EVIDENCE.json) preserves
+artifact hashes, per-campaign results, native desktop evidence, host presentation
+measurements and screenshot hashes. The following documentation commit only
+records this accepted source and its captures; application, test, dependency and
+workflow source remain unchanged. Every subsequent revision still runs its own
+complete gate before merge/deployment.
+
+### Actual application captures
+
+These are untouched PNG bytes from the accepted aggregate artifact, verified
+against the individual Rhino campaign artifact as well. They are not mockups or
+replacement browser markup.
+
+Ordinary startup, before any modeling fixture:
+
+![Ordinary empty modeling startup](images/rhino-command-area/uno-rhino-startup.png)
+
+Populated compact history with two complete lines above the live prompt:
+
+![Compact command area and shaded modeling workspace](images/rhino-command-area/uno-rhino-modeling.png)
+
+Expanded native history after selecting and copying the entire transcript:
+
+![Expanded selectable command history](images/rhino-command-area/uno-rhino-command-history.png)
+
+The separate [startup-after-reload capture](images/rhino-command-area/uno-rhino-startup-reload.png)
+records restored layout/rendering preferences before the fixture loads again.

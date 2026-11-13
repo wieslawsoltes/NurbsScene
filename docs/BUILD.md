@@ -310,6 +310,11 @@ TextBlocks, inner AutoSuggestBox editor and ScrollViewer metrics. The campaign
 requires complete two-/thirteen-line history viewports, aligned prompt/input
 baselines, exact native clipboard text and recall without execution. Both startup
 JSON/PNG pairs are mandatory artifacts. See [RHINO-COMMAND-AREA.md](RHINO-COMMAND-AREA.md).
+The complete 414-check gate passed on source `a31a3a6041b08dd7b9ee5ac4d10365b1d54672e6`
+in [run 43409888630](https://github.com/wieslawsoltes/NurbsScene/actions/runs/43409888630),
+alongside all 40 native desktop runtime checks and all repository workflows.
+The command-area document records the exact tested tree, artifact hashes and
+untouched startup/command captures; later revisions still require their own gate.
 
 Graph clipboard/menu/selection scenarios run inside the same actual Uno test via
 `test_graph_editing_ui.py`. `editing.yml` separately runs fragment/arrangement

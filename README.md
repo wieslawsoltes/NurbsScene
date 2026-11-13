@@ -81,6 +81,9 @@ both must pass so a new device after reload cannot hide earlier interaction erro
 The Rhino/Grasshopper interface implementation passed all 23 workflows and 407
 native UI checks. See its [implementation, actual captures and acceptance record](docs/RHINO-GRASSHOPPER-UI.md)
 for the exact accepted source, artifact hashes and the documentation-only follow-up.
+The subsequent [command-area refinement](docs/RHINO-COMMAND-AREA.md) passed all 23
+workflows and 414 native UI checks, including real empty-startup captures and
+native command text, selection, clipboard and draft-recall validation.
 
 ## Modeling and visual programming
 
