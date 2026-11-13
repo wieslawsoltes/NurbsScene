@@ -53,8 +53,9 @@ surfaces, with retained shaped text and bundled DejaVu fonts for offline fallbac
 Read the [migration journal](docs/UNO7-WEBGPU-MIGRATION.md) for architecture,
 resource ownership, per-commit evidence and remaining quality work. Production
 WGSL execution and all eleven actual Uno input/framebuffer campaigns are required
-by CI, with a combined minimum of 407 native UI checks. The original ten campaigns
-and their 357 checks remain intact; the new `rhino-grasshopper-ui` campaign adds 50.
+by CI, with a combined minimum of 414 native UI checks. The original ten campaigns
+retain their 357 prior checks and add seven real-startup/command-layout checks;
+`rhino-grasshopper-ui` contributes another 50.
 Hardware performance and an AAA production quality claim require their own
 representative scenes, visual review and device/driver measurements.
 
@@ -94,6 +95,7 @@ component palettes, retained canvas appearance settings and native workspace men
 Model-canvas typing starts command entry; short right-click/Space repeat, modifier
 navigation, cursor-anchored zoom and camera-draft validation use the actual controls.
 See the [Rhino/Grasshopper interface implementation](docs/RHINO-GRASSHOPPER-UI.md)
+and [command-area fidelity refinement](docs/RHINO-COMMAND-AREA.md)
 for the current behavior and acceptance requirements, and the earlier
 [Rhino-style UI/UX review](docs/RHINO-UI-REVIEW.md) for that milestone's evidence and differences.
 The graph editor provides executable search, typed wiring, numeric sliders,
