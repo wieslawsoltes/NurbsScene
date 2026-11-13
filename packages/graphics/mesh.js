@@ -11,7 +11,9 @@ export function buildDisplayMesh(geometry,{segments=36,curveTolerance=.035,isocu
  for(const i of levels)for(let j=0;j<segments;j++){line(i*rows+j,i*rows+j+1);line(j*rows+i,(j+1)*rows+i);}
  return{vertices,indices:mesh.indices,lines:Float32Array.from(lines),positions:mesh.positions,normals:mesh.normals,uv:mesh.uv,bounds:geometry.bounds(),source:geometry,triangleCount:mesh.indices.length/3};
 }
-export function gridLines(origin=[0,0,0],extent=100,step=5){const fine=[],major=[],xAxis=[],yAxis=[];const push=(target,a,b)=>target.push(...V3.sub(a,origin),...V3.sub(b,origin));for(let i=-extent;i<=extent;i+=step){if(i===0)continue;const target=i%(step*5)===0?major:fine;push(target,[i,-extent,0],[i,extent,0]);push(target,[-extent,i,0],[extent,i,0]);}push(xAxis,[-extent,0,0],[extent,0,0]);push(yAxis,[0,-extent,0],[0,extent,0]);return[{lines:Float32Array.from(fine),color:[.55,.55,.55,.45]},{lines:Float32Array.from(major),color:[.44,.44,.44,.55]},{lines:Float32Array.from(xAxis),color:[.68,.18,.16,.8]},{lines:Float32Array.from(yAxis),color:[.18,.48,.18,.8]}];}
+// The fine-grid sRGB color matches the managed WebGpuRenderer. Major and axis
+// colors remain distinct; the renderer continues to honor supplied grid colors.
+export function gridLines(origin=[0,0,0],extent=100,step=5){const fine=[],major=[],xAxis=[],yAxis=[];const push=(target,a,b)=>target.push(...V3.sub(a,origin),...V3.sub(b,origin));for(let i=-extent;i<=extent;i+=step){if(i===0)continue;const target=i%(step*5)===0?major:fine;push(target,[i,-extent,0],[i,extent,0]);push(target,[-extent,i,0],[extent,i,0]);}push(xAxis,[-extent,0,0],[extent,0,0]);push(yAxis,[0,-extent,0],[0,extent,0]);return[{lines:Float32Array.from(fine),color:[.448172,.465350,.486168,.48]},{lines:Float32Array.from(major),color:[.44,.44,.44,.55]},{lines:Float32Array.from(xAxis),color:[.68,.18,.16,.8]},{lines:Float32Array.from(yAxis),color:[.18,.48,.18,.8]}];}
 
 export function constructionGrids(origin=[0,0,0]){
  const groups=[];

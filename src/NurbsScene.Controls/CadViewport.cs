@@ -2,6 +2,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Text;
 using NurbsScene.Geometry;
 using NurbsScene.Rendering;
 using NurbsScene.Presentation;
@@ -364,6 +365,7 @@ public sealed class CadViewport : WebGpuCanvasElement
 /// Reused title controls preserve double-click state and focus during activation.</summary>
 public sealed class ViewportControl : Grid
 {
+    private const double HeaderHeight=20;
     public CadViewport Canvas {get;}=new();
     private readonly Microsoft.UI.Xaml.Controls.Canvas _headers=new();
     private readonly Dictionary<string,Button> _titles=[];
@@ -379,11 +381,11 @@ public sealed class ViewportControl : Grid
         Canvas.DiagnosticsChanged+=message=>{_error.Text=message;_error.Visibility=Canvas.LastError is null?Visibility.Collapsed:Visibility.Visible;};
         foreach(var name in new[]{"Top","Perspective","Front","Right"})
         {
-            var title=ClassicChrome.Button(name,()=>Canvas.Activate(name),"Viewport_"+name);title.Height=22;title.BorderThickness=new(0);title.Padding=new(6,0,4,0);
+            var title=ClassicChrome.Button(name,()=>Canvas.Activate(name),"Viewport_"+name);title.Height=HeaderHeight-2;title.BorderThickness=new(0);title.Padding=new(5,0,3,0);
             ToolTipService.SetToolTip(title,name+" · Click to activate; double-click to maximize or restore");
             title.DoubleTapped+=(_,e)=>{Canvas.Maximize(name);e.Handled=true;};_titles[name]=title;
             var arrow=HeaderArrow();_arrows[name]=arrow;
-            var drop=ClassicChrome.Button(name+" viewport options",()=>{},"ViewportOptions_"+name);drop.Content=arrow;drop.Width=19;drop.Height=22;drop.Padding=new(5,6,5,6);drop.BorderThickness=new(0);
+            var drop=ClassicChrome.Button(name+" viewport options",()=>{},"ViewportOptions_"+name);drop.Content=arrow;drop.Width=16;drop.Height=HeaderHeight-2;drop.Padding=new(4,5,4,5);drop.BorderThickness=new(0);
             ToolTipService.SetToolTip(drop,name+" viewport options");_options[name]=drop;
             var menu=new MenuFlyout();
             void Item(string text,Action action){var item=new MenuFlyoutItem{Text=text,FontSize=11,MinHeight=25,Padding=new(8,2,8,2)};item.Click+=(_,_)=>action();menu.Items.Add(item);}
@@ -395,7 +397,7 @@ public sealed class ViewportControl : Grid
             menu.Items.Add(new MenuFlyoutSeparator());
             menu.Items.Add(new MenuFlyoutItem{Text="Display mode · all viewports",FontSize=10,MinHeight=24,Padding=new(8,2,8,2),IsEnabled=false});
             foreach(var mode in Enum.GetValues<DisplayMode>())Item(mode.ToString(),()=>{Canvas.Scene.Mode=mode;Canvas.NotifyViewChanged();});
-            drop.Flyout=menu;title.ContextFlyout=menu;var group=new StackPanel{Orientation=Orientation.Horizontal,Background=ClassicChrome.Background,BorderBrush=ClassicChrome.Border,BorderThickness=new(1)};group.Children.Add(title);group.Children.Add(drop);_titleGroups[name]=group;_headers.Children.Add(group);
+            drop.Flyout=menu;title.ContextFlyout=menu;var group=new StackPanel{Height=HeaderHeight,Orientation=Orientation.Horizontal,Background=ClassicChrome.Background,BorderBrush=ClassicChrome.Border,BorderThickness=new(1)};group.Children.Add(title);group.Children.Add(drop);_titleGroups[name]=group;_headers.Children.Add(group);
         }
         Canvas.LayoutChanged+=Headers;Canvas.ViewChanged+=()=>_overlay.Invalidate();Canvas.CursorMoved+=_=>_overlay.Invalidate();SizeChanged+=(_,_)=>Headers();Headers();
     }
@@ -407,12 +409,14 @@ public sealed class ViewportControl : Grid
     }
     private static void HeaderColors(Button button,bool active)
     {
-        button.Background=active?ClassicChrome.Accent:ClassicChrome.PanelBackground;
-        button.Foreground=active?ClassicChrome.Surface:ClassicChrome.Ink;
-        // Explicit pointer states preserve the white-on-blue title contrast.
+        button.Background=active?ClassicChrome.ActiveTitle:ClassicChrome.PanelBackground;
+        button.Foreground=ClassicChrome.Ink;
+        button.FontWeight=active?FontWeights.SemiBold:FontWeights.Normal;
+        // Rhino-style title tabs use dark text on a pale active fill. Explicit
+        // pointer states keep the native template from restoring a dark accent.
         // Controls and their gesture state remain retained across activation.
-        button.Resources["ButtonBackgroundPointerOver"]=active?ClassicChrome.Accent:ClassicChrome.Hover;
-        button.Resources["ButtonBackgroundPressed"]=active?ClassicChrome.Accent:ClassicChrome.Selected;
+        button.Resources["ButtonBackgroundPointerOver"]=active?ClassicChrome.ActiveTitle:ClassicChrome.Hover;
+        button.Resources["ButtonBackgroundPressed"]=active?ClassicChrome.ActiveTitle:ClassicChrome.Selected;
         button.Resources["ButtonForegroundPointerOver"]=button.Foreground;
         button.Resources["ButtonForegroundPressed"]=button.Foreground;
     }
@@ -426,11 +430,11 @@ public sealed class ViewportControl : Grid
             if(!visible.TryGetValue(name,out var v))continue;
             var active=Canvas.ActiveViewport==name;
             HeaderColors(_titles[name],active);HeaderColors(_options[name],active);
-            _arrows[name].Fill=active?ClassicChrome.Surface:ClassicChrome.Ink;
-            group.Background=active?ClassicChrome.Accent:ClassicChrome.PanelBackground;
-            group.BorderBrush=active?ClassicChrome.Accent:ClassicChrome.Border;
-            _titles[name].MaxWidth=Math.Max(10,v.Width-30);
-            Microsoft.UI.Xaml.Controls.Canvas.SetLeft(group,v.X+3);Microsoft.UI.Xaml.Controls.Canvas.SetTop(group,v.Y+3);
+            _arrows[name].Fill=active?ClassicChrome.Ink:ClassicChrome.MutedInk;
+            group.Background=active?ClassicChrome.ActiveTitle:ClassicChrome.PanelBackground;
+            group.BorderBrush=active?ClassicChrome.ActiveTitle:ClassicChrome.Border;
+            _titles[name].MaxWidth=Math.Max(10,v.Width-22);
+            Microsoft.UI.Xaml.Controls.Canvas.SetLeft(group,v.X+1);Microsoft.UI.Xaml.Controls.Canvas.SetTop(group,v.Y+1);
         }
         _overlay.Invalidate();
     }

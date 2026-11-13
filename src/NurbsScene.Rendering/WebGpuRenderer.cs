@@ -129,7 +129,9 @@ public sealed unsafe partial class WebGpuRenderer : IDisposable
             || _itemMetallic != settings.Metallic || _itemRoughness != settings.Roughness)
         {
             EnsureObjectCapacity(checked(scene.Items.Count * 2 + 1));
-            SetObject(0, new(.46f, .50f, .54f, .48f), .8f, settings);
+            // sRGB grid color blends in linear HDR, then resolves near #949AA1
+            // over the reference gray at exposure 1. Match graphics/mesh.js.
+            SetObject(0, new(.448172f, .465350f, .486168f, .48f), .8f, settings);
             _draws.Clear();
             _nextCasters.Clear();
             _hasTransparency = false;
@@ -299,7 +301,9 @@ public sealed unsafe partial class WebGpuRenderer : IDisposable
     }
     private void RenderOpaque(CommandEncoder* encoder, DisplayScene scene)
     {
-        var color = Attachment(_hdrMultisample!.View, _hdr!.View, new(.67, .71, .75, 1));
+        // Linear HDR clear resolves to the reference sRGB gray #9DA3AA through
+        // the shared ACES transform at exposure 1. Match graphics/webgpu.js.
+        var color = Attachment(_hdrMultisample!.View, _hdr!.View, new(.224357, .244384, .270711, 1));
         var depth = new RenderPassDepthStencilAttachment { View = _depth!.View, DepthLoadOp = LoadOp.Clear, DepthStoreOp = StoreOp.Store, DepthClearValue = 0 };
         var descriptor = new RenderPassDescriptor { ColorAttachmentCount = 1, ColorAttachments = &color, DepthStencilAttachment = &depth };
         var pass = Require(_api.CommandEncoderBeginRenderPass(encoder, &descriptor), "HDR opaque pass");
