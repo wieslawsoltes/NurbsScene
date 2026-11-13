@@ -212,6 +212,32 @@ records this accepted source and its captures; application, test, dependency and
 workflow source remain unchanged. Every subsequent revision still runs its own
 complete gate before merge/deployment.
 
+### Post-merge panel draw handoff
+
+PR #20 merged as `45c8281bb70f8b8cb6988a5347f7668152677227` with the
+application/test source unchanged from its accepted final PR head. Its separate
+[main run 43415245539](https://github.com/wieslawsoltes/NurbsScene/actions/runs/43415245539)
+caught a panel-display observation race before deployment. In job `131852637656`,
+samples 203 and 204 already had committed and solved revision 22 with wrapping
+disabled, but the actual panel draw still contained the previous four wrapped
+rows. The existing renderer stamp reported `current=false`. The failing artifact
+is `14031362972` (1,043,649 bytes; SHA-256
+`dd8ad67f97526e2c20c8518e633e94c8e2e961c6ddbbc434bf9d104dd95d4dcd`).
+It contains no later completed paint for that edited panel, so it does not establish
+whether the repaint would have completed after the assertion.
+
+The panel-display campaign now waits for the existing completed-draw stamp as
+well as the solved graph and closed editor lifetime, then asserts against that
+exact observation. In-place display/text edits also require a newer graph
+revision. Undo/Redo use the stamp's graph/node/result identity, because restoring
+a graph can reuse revision numbers. The original ellipsis, Unicode, retained
+data and undo assertions, 20-second wait deadline, fourteen campaign checks and
+414-check aggregate remain unchanged. No renderer behavior, cache, native
+observer, timeout or retry policy is changed. A missing repaint still fails at
+the existing deadline, and an incorrect completed draw reaches the original
+assertion immediately. Nine observer contracts cover this handoff, including the
+captured stale-draw state and an incorrect current draw.
+
 ### Actual application captures
 
 These are untouched PNG bytes from the accepted aggregate artifact, verified
