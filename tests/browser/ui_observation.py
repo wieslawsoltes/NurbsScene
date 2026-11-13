@@ -102,6 +102,19 @@ async def wait_for_solved_ui(page, *, editor_closed: bool = False, after_revisio
     return await wait_for_ui(page, solution_condition(editor_closed=editor_closed, after_revision=after_revision))
 
 
+def panel_render_condition(panel_id: str, *, after_revision: int | None = None) -> str:
+    """A solved graph can still expose the previous panel draw. Wait for the
+    renderer's existing immutable-input stamp, never expected text or options.
+    Use after_revision only for in-place edits; Undo/Redo replace the graph and
+    can reuse revision numbers, while the paint stamp compares object identity.
+    """
+    if not isinstance(panel_id, str) or not panel_id:
+        raise ValueError("A panel identity is required")
+    return (solution_condition(editor_closed=True, after_revision=after_revision)
+            + " && !!value.typography && value.typography.panels.some(p=>p.id==="
+            + json.dumps(panel_id) + " && p.current === true)")
+
+
 async def wait_ready(page, timeout: int = 30000) -> dict:
     """Compatible PR10 entry point, using the race-free snapshot handle."""
     try:

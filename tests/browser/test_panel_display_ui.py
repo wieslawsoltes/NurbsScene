@@ -1,7 +1,7 @@
 """Display-only panel menus, retained data and actual rendered preview text."""
 import json
 from pathlib import Path
-from ui_observation import settle, read_ui, wait_for_ui
+from ui_observation import settle, read_ui, wait_for_ui, panel_render_condition
 ROOT=Path(__file__).resolve().parents[2]
 
 async def verify_panel_display_ui(page):
@@ -15,15 +15,18 @@ async def verify_panel_display_ui(page):
         if not b['enabled']:raise AssertionError('Disabled '+identity)
         await page.mouse.click(b['x']+b['width']/2,b['y']+b['height']/2);return await settle(page)
     async def node(identity):return next(n for n in (await read())['nodes'] if n['id']==identity)
-    async def panel(identity):return next(p for p in (await read())['values']['panels'] if p['id']==identity)
+    def panel(data,identity):return next(p for p in data['values']['panels'] if p['id']==identity)
+    async def rendered(identity, *, after_revision=None):
+        return await wait_for_ui(page,panel_render_condition(identity,after_revision=after_revision))
     def check(value,name):
         if not value:raise AssertionError(name)
         checks.append(name);print('PANEL DISPLAY CHECK '+name,flush=True)
     async def toggle(identity,option):
+        before=await read()
         n=await node(identity)
         await page.mouse.click(n['x']+n['width']/2,n['y']+8,button='right');await settle(page)
         await click('GraphPanel_'+option)
-        return await wait('globalThis.nurbsSceneUi.values.solvedRevision===globalThis.nurbsSceneUi.state.graphRevision')
+        return await rendered(identity,after_revision=before['state']['graphRevision'])
     await click('GraphDockBottom');await click('GraphFit');initial=await settle(page)
     baseline=initial['state']['nodeCount'];ids={n['id'] for n in initial['nodes']}
     try:
@@ -36,17 +39,16 @@ async def verify_panel_display_ui(page):
         # Enlarge through the actual handle so the low-zoom text floor has room.
         x=n['x']+n['width']-3;y=n['y']+n['height']-3
         await page.mouse.move(x,y);await page.mouse.down();await page.mouse.move(x+80,y+55,steps=8);await page.mouse.up();await settle(page)
-        original=await panel(pid)
-        await wait('globalThis.nurbsSceneUi.values.panels.some(p=>p.id==='+json.dumps(pid)+'&&p.drawnLines!==null)')
-        before=await read();data=await toggle(pid,'DrawPaths');p=await panel(pid)
+        original=panel(await rendered(pid),pid)
+        before=await read();data=await toggle(pid,'DrawPaths');p=panel(data,pid)
         check(not p['drawPaths'] and all(not line.startswith('{') for line in p['drawnLines']),
               'Draw paths menu hides branch headers in the actual rendered preview')
         check(data['values']['evaluated']==0 and p['items']==original['items'] and data['state']['graphPathBuilds']==before['state']['graphPathBuilds'],
               'Display-only menu preserves solved data and native wire paths')
-        await toggle(pid,'DrawIndices');p=await panel(pid)
+        data=await toggle(pid,'DrawIndices');p=panel(data,pid)
         check(p['drawIndices'] and any(line.startswith('0: ') for line in p['drawnLines']),
               'Draw indices menu labels actual panel items with zero-based indices')
-        await toggle(pid,'WrapItems');p=await panel(pid)
+        data=await toggle(pid,'WrapItems');p=panel(data,pid)
         check(not p['wrapItems'] and p['drawnTruncated'] and any('…' in line for line in p['drawnLines']),
               'Disabling wrap clips long rendered items with a visible ellipsis')
         check(p['items']==original['items'],'Display clipping never truncates authoritative panel output')
@@ -55,13 +57,13 @@ async def verify_panel_display_ui(page):
         await wait('globalThis.nurbsSceneUi.values.editorOpen')
         await click('PanelTextInput');await page.keyboard.press('Control+A')
         unicode_text=('👩‍💻e\u0301 '*18)+'\n🌐tail'
-        await page.keyboard.insert_text(unicode_text);await click('PanelTextApply')
-        await wait('!globalThis.nurbsSceneUi.values.editorOpen');await settle(page);p=await panel(pid)
+        await page.keyboard.insert_text(unicode_text);before=await read();await click('PanelTextApply')
+        data=await rendered(pid,after_revision=before['state']['graphRevision']);p=panel(data,pid)
         check(p['items']==unicode_text.split('\n') and p['drawnTruncated'] and
               any('e\u0301' in line for line in p['drawnLines']) and
               all(not line.endswith('\u200d') for line in p['drawnLines']),
               'Native Unicode editing preserves complete data and grapheme-safe clipped draw rows')
-        await click('GraphUndo');p=await panel(pid)
+        await click('GraphUndo');p=panel(await rendered(pid),pid)
         check(p['items']==original['items'] and p['drawIndices'] and not p['wrapItems'] and not p['drawPaths'],
               'Undoing Unicode text retains independent panel display options')
         n=await node(pid);await page.mouse.click(n['x']+n['width']/2,n['y']+8);await settle(page)
@@ -73,10 +75,10 @@ async def verify_panel_display_ui(page):
         await click('GraphUndo');await wait('globalThis.nurbsSceneUi.state.nodeCount==='+str(baseline+1))
         n=await node(pid);await page.mouse.click(n['x']+n['width']/2,n['y']+8,button='right');await settle(page)
         await page.screenshot(path=str(ROOT/'evidence/uno-panel-display-menu.png'));await page.keyboard.press('Escape');await settle(page)
-        await click('GraphUndo');p=await panel(pid);check(p['wrapItems'] and p['drawIndices'] and not p['drawPaths'],'One undo restores only the last display option')
-        await click('GraphUndo');p=await panel(pid);check(not p['drawIndices'] and not p['drawPaths'],'Indices have an independent undo record')
-        await click('GraphUndo');p=await panel(pid);check(p['drawPaths'] and not p['drawIndices'] and p['wrapItems'],'Undo restores the complete legacy display defaults')
-        await click('GraphRedo');p=await panel(pid);check(not p['drawPaths'],'Redo reapplies the display-only edit')
+        await click('GraphUndo');p=panel(await rendered(pid),pid);check(p['wrapItems'] and p['drawIndices'] and not p['drawPaths'],'One undo restores only the last display option')
+        await click('GraphUndo');p=panel(await rendered(pid),pid);check(not p['drawIndices'] and not p['drawPaths'],'Indices have an independent undo record')
+        await click('GraphUndo');p=panel(await rendered(pid),pid);check(p['drawPaths'] and not p['drawIndices'] and p['wrapItems'],'Undo restores the complete legacy display defaults')
+        await click('GraphRedo');p=panel(await rendered(pid),pid);check(not p['drawPaths'],'Redo reapplies the display-only edit')
         await click('GraphUndo');await click('GraphUndo');await click('GraphUndo')
         await click('GraphDockRight');await click('GraphFit');final=await settle(page)
         check(final['state']['nodeCount']==baseline and final['state']['graphErrors']==0 and final['state']['gpuError'] is None,
