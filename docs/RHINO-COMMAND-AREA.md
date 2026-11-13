@@ -68,7 +68,9 @@ viewport/extent measurements even when no offset-change event is raised. Native
 wheel motion can begin on a later frame, so a passive handled-event observer
 records an actual in-range vertical wheel gesture immediately. It neither handles
 the event nor changes its offset, preserving native scrolling and edge chaining.
-Settled offsets snap to complete visual lines, including wrapped results.
+It also invalidates an older queued snap before that callback can stop the new
+gesture. Settled offsets snap to complete visual lines, including wrapped results;
+snapping onto the actual tail resumes following.
 
 Dispatcher callbacks are coalesced and guarded by the load generation. Unload
 invalidates pending layout work and unregisters the selected-text dependency
@@ -80,6 +82,16 @@ The transcript is bounded to 500 physical lines, with a 4096-character truncatio
 threshold per incoming message, normalized newlines and surrogate-safe truncation. Existing
 command recall, draft restoration, completion, repeat and the deferred
 canvas-to-command input handoff are retained.
+
+Actual native recall exposed a pre-existing asynchronous editing race. Uno can
+deliver a programmatic `TextChanged` after the synchronous setter returns, and
+the outer `AutoSuggestBox.Text` can trail the visible editor. Recall now snapshots
+the real inner `TextBox.Text`; text assignment synchronizes both values even when
+the outer dependency property already equals the requested string. Completion
+responds to current `UserInput` events, retains explicit assignment intent across
+equal-value pending events, and stays closed during history navigation. Canvas
+typing still populates completion explicitly after native focus transfers. The
+existing immediate Up/Down test retains its complete unsent-draft expectation.
 
 ## Surrounding desktop presentation
 
@@ -124,6 +136,16 @@ releases the existing fixture. It adds no command, geometry, focus or input
 mutation API. Only the existing Rhino campaign opts into it. Both startup
 JSON/PNG pairs are required by the artifact gate.
 
+The first attempts also exposed a presentation boundary: CAD submissions can
+precede Uno's loading-screen removal. The pinned host removes its splash after
+font preload, layout and a composition frame. Startup capture now waits for the
+actual loader nodes to disappear and the connected `uno-canvas` to be visible
+with positive CSS/backing dimensions. It crosses two browser animation callbacks,
+then requires two newer passive native samples before its single screenshot.
+Measured host state and frame timestamps are saved and required by the artifact
+gate. No redraw, screenshot retry, artificial delay or application mutation is
+used to obtain the expected image; the independent checkpoint timeout remains.
+
 Passive command observations inspect actual native bounds, desired sizes,
 `TextBlock.BaselineOffset`, font metrics, line height, selection and scrollbar
 viewport/extent/offset values. The inner AutoSuggestBox `TextBox` and its rendered
@@ -145,7 +167,7 @@ history copying additionally requires the complete native selection and exact
 clipboard transcript, and point-entry checks require the actual prompt
 transitions. The 33 modeling/framebuffer checks in every campaign remain intact.
 
-Local verification passed 56 observation contracts, 58 artifact-gate contracts
+Local verification passed 59 observation contracts, 60 artifact-gate contracts
 and eight existing JavaScript WebGPU contracts. Source whitespace checks pass.
 The local native compilation reached Uno resource injection with no C# warnings;
 the full build stopped at the environment's `EmbeddedResourceInjectorTask`
