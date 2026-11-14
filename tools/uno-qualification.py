@@ -177,7 +177,7 @@ def require_grasshopper_discovery(folder, name, startup, *, saved=False):
         raise ValueError("Grasshopper discovery requires exactly two native launcher clicks: " + name)
     original = startup.get("grasshopper", {})
     state = original.get("state", {})
-    model_fields = ("objects", "nodes", "documentRevision", "graphRevision", "documentUndo", "documentRedo", "graphUndo", "graphRedo", "history")
+    model_fields = ("objects", "nodes", "documentRevision", "graphRevision", "documentUndo", "documentRedo", "graphUndo", "graphRedo")
     if (any(key not in state for key in model_fields) or state.get("objects") != 0 or state.get("nodes") != 0
             or state.get("definitionVisible") is not False or state.get("definitionFolded") is not saved
             or state.get("history") != "" or state.get("preferences") != startup["state"].get("preferences")
@@ -211,6 +211,8 @@ def require_grasshopper_discovery(folder, name, startup, *, saved=False):
                 or "graphError" not in current or current["graphError"] is not None):
             raise ValueError("Grasshopper discovery changed the model or reused a native observation: " + name + " " + stage)
         previous_sample = sample["sample"]
+        if current.get("history") != "\n".join(["Command: Grasshopper"] * len(observations)):
+            raise ValueError("Grasshopper native input lost or added ordinary command echoes: " + name + " " + stage)
         box(workspace, "OpenGrasshopper")
         if stage == "before":
             if current.get("preferences") != state["preferences"] or current.get("definitionVisible") is not False:

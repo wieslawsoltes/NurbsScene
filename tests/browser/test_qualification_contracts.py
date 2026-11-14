@@ -33,7 +33,7 @@ def discovery_workspace(*, opened=False, saved=False):
                          for i, identity in enumerate(("ParametricCanvas", "GraphGettingStarted", "GraphStartAddComponent", "GraphStartExample"))})
     return {"controls": controls, "state": {"objects": 0, "nodes": 0, "documentRevision": 0, "graphRevision": 0,
         "documentUndo": False, "documentRedo": False, "graphUndo": False, "graphRedo": False,
-        "history": "", "preferences": preferences, "definitionVisible": opened, "definitionFolded": saved and not opened,
+        "history": "Command: Grasshopper" if opened else "", "preferences": preferences, "definitionVisible": opened, "definitionFolded": saved and not opened,
         "editorFolded": saved and not opened, "definitionFloating": saved, "openPending": False,
         "gettingStartedVisible": opened, "graphFocused": opened, "graphFocus": "Programmatic" if opened else "Unfocused",
         "graphFrames": 1 if opened else 0, "graphError": None, "frames": 2, "gpuError": None,
@@ -44,6 +44,7 @@ def discovery_record(startup, *, saved=False):
     before = {"status": "ready", "sample": 1, "workspace": copy.deepcopy(startup["grasshopper"])}
     opened = {"status": "ready", "sample": 4, "workspace": discovery_workspace(opened=True, saved=saved)}
     reopened = {"status": "ready", "sample": 7, "workspace": discovery_workspace(opened=True, saved=saved)}
+    reopened["workspace"]["state"]["history"] = "Command: Grasshopper\nCommand: Grasshopper"
     box = before["workspace"]["controls"]["OpenGrasshopper"]
     return {"status": "passed", "startup": copy.deepcopy(startup), "before": before, "opened": opened, "reopened": reopened,
             "checks": [("reload" if saved else "initial") + " discovery fixture " + str(i) for i in range(3)],
@@ -302,7 +303,7 @@ class QualificationContracts(unittest.TestCase):
         path = folder / "uno-grasshopper-discovery.json"
         original = GATE.read_json(path)
         startup = GATE.read_json(folder / "uno-grasshopper-startup.json")
-        for field in ("objects", "nodes", "documentRevision", "graphRevision", "documentUndo", "graphRedo", "history"):
+        for field in ("objects", "nodes", "documentRevision", "graphRevision", "documentUndo", "graphRedo"):
             value = copy.deepcopy(original)
             value["reopened"]["workspace"]["state"][field] = "changed"
             GATE.write_json(path, value)
@@ -314,7 +315,7 @@ class QualificationContracts(unittest.TestCase):
         path = folder / "uno-grasshopper-discovery.json"
         original = GATE.read_json(path)
         startup = GATE.read_json(folder / "uno-grasshopper-startup.json")
-        for change in ({"definitionVisible": False}, {"preferences": "different layout"}):
+        for change in ({"definitionVisible": False}, {"preferences": "different layout"}, {"history": "unexpected command echo"}):
             value = copy.deepcopy(original)
             value["reopened"]["workspace"]["state"].update(change)
             GATE.write_json(path, value)

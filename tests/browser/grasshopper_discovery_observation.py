@@ -8,7 +8,7 @@ import math
 
 
 MODEL_FIELDS = ("objects", "nodes", "documentRevision", "graphRevision",
-                "documentUndo", "documentRedo", "graphUndo", "graphRedo", "history")
+                "documentUndo", "documentRedo", "graphUndo", "graphRedo")
 
 
 def require_discovery_snapshot(value):
@@ -63,6 +63,11 @@ def require_native_box(workspace, identity):
 def require_unchanged_model(before, after):
     if any(before.get(key) != after.get(key) for key in MODEL_FIELDS):
         raise AssertionError("Opening Grasshopper changed ordinary model/history state: " + json.dumps({"before": before, "after": after}))
+
+
+def require_launcher_echo(state, count):
+    if state.get("history") != "\n".join(["Command: Grasshopper"] * count):
+        raise AssertionError("Native Grasshopper input did not retain exactly its ordinary command echoes: " + json.dumps(state))
 
 
 def require_open_workspace(workspace):
@@ -126,17 +131,20 @@ async def verify_startup_discovery(page, startup, destination, *, saved_preferen
               label + " exposes labelled Grasshopper launchers while preserving the empty, hidden document")
         before = record["before"] = await wait_for_discovery(page)
         require_unchanged_model(state, before["workspace"]["state"])
+        require_launcher_echo(before["workspace"]["state"], 0)
         if before["workspace"]["state"]["preferences"] != state["preferences"]:
             raise AssertionError("Discovery started after an unrecorded layout change")
         opened = record["opened"] = await open_once(before)
         save()
         require_open_workspace(opened["workspace"])
         require_unchanged_model(state, opened["workspace"]["state"])
+        require_launcher_echo(opened["workspace"]["state"], 1)
         check(True, label + " launcher opens an unfolded, focused canvas with real component-search and example actions")
         reopened = record["reopened"] = await open_once(opened)
         save()
         require_open_workspace(reopened["workspace"])
         require_unchanged_model(state, reopened["workspace"]["state"])
+        require_launcher_echo(reopened["workspace"]["state"], 2)
         check(reopened["workspace"]["state"]["preferences"] == opened["workspace"]["state"]["preferences"],
               label + " repeated launch stays open without changing model history or the restored layout")
         await page.screenshot(path=str(destination.with_suffix(".png")))

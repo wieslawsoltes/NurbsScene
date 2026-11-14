@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 
 from grasshopper_discovery_observation import (discovery_predicate, require_open_workspace,
-                                             require_unchanged_model, verify_startup_discovery)
+                                             require_launcher_echo, require_unchanged_model, verify_startup_discovery)
 
 
 def workspace(*, opened=False, saved=False):
@@ -28,7 +28,7 @@ def workspace(*, opened=False, saved=False):
     return {"controls": controls, "state": {
         "objects": 0, "nodes": 0, "documentRevision": 0, "graphRevision": 0,
         "documentUndo": False, "documentRedo": False, "graphUndo": False, "graphRedo": False,
-        "history": "", "preferences": preferences, "definitionVisible": opened,
+        "history": "Command: Grasshopper" if opened else "", "preferences": preferences, "definitionVisible": opened,
         "definitionFolded": saved and not opened, "editorFolded": saved and not opened,
         "definitionFloating": saved, "openPending": False, "gettingStartedVisible": opened,
         "graphFocused": opened, "graphFocus": "Programmatic" if opened else "Unfocused",
@@ -43,7 +43,10 @@ def startup(*, saved=False):
 
 
 def sample(number, *, opened=False, saved=False):
-    return {"status": "ready", "sample": number, "workspace": workspace(opened=opened, saved=saved)}
+    native = workspace(opened=opened, saved=saved)
+    if opened and number >= 5:
+        native["state"]["history"] = "Command: Grasshopper\nCommand: Grasshopper"
+    return {"status": "ready", "sample": number, "workspace": native}
 
 
 class Handle:
@@ -141,11 +144,19 @@ class DiscoveryContracts(unittest.IsolatedAsyncioTestCase):
 
     def test_opening_must_preserve_each_model_revision_and_undo_history(self):
         native = workspace()["state"]
-        for key in ("objects", "nodes", "documentRevision", "graphRevision", "documentUndo", "graphRedo", "history"):
+        for key in ("objects", "nodes", "documentRevision", "graphRevision", "documentUndo", "graphRedo"):
             changed = copy.deepcopy(native)
             changed[key] = "changed"
             with self.subTest(key=key), self.assertRaises(AssertionError):
                 require_unchanged_model(native, changed)
+
+    def test_only_the_two_actual_launcher_command_echoes_are_expected_after_clean_startup(self):
+        require_launcher_echo({"history": ""}, 0)
+        require_launcher_echo({"history": "Command: Grasshopper"}, 1)
+        require_launcher_echo({"history": "Command: Grasshopper\nCommand: Grasshopper"}, 2)
+        for text in ("", "Command: Grasshopper", "renderer frame submitted", "Command: Grasshopper\nCommand: Grasshopper\nextra"):
+            with self.subTest(text=text), self.assertRaises(AssertionError):
+                require_launcher_echo({"history": text}, 2)
 
 
 if __name__ == "__main__":
