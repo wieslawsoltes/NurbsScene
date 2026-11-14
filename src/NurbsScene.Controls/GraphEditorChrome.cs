@@ -9,7 +9,7 @@ public sealed partial class GraphEditorControl
 {
     private readonly Grid _titleDragHandle=new(){Background=ClassicChrome.Brush(224,227,219)};
     private readonly Grid _editorBody=new(),_menuHost=new();
-    private readonly TextBlock _heading=ClassicChrome.Label("Untitled — Definition",11);
+    private readonly TextBlock _heading=ClassicChrome.Label("Grasshopper · Untitled",11);
     private readonly TextBlock _documentLabel=ClassicChrome.Label("Untitled",10);
     private readonly TextBlock _solutionState=ClassicChrome.Label("Not solved",10);
     private readonly ScrollViewer _toolbarStrip;
@@ -34,7 +34,7 @@ public sealed partial class GraphEditorControl
         set
         {
             _documentName=string.IsNullOrWhiteSpace(value)?"Untitled":value;
-            _heading.Text=_documentName+" — Definition";_documentLabel.Text=_documentName;
+            _heading.Text="Grasshopper · "+_documentName;_documentLabel.Text=_documentName;
             if(_documentMenuButton is not null)ToolTipService.SetToolTip(_documentMenuButton,_documentName+" · Workspace files");
         }
     }
@@ -115,7 +115,7 @@ public sealed partial class GraphEditorControl
         _recomputeButton=ClassicChrome.IconButton("Recompute the current definition","Recompute",()=>_ =RecomputeAsync(),"GraphRecompute");tools.Children.Add(_recomputeButton);
         tools.Children.Add(ClassicChrome.IconButton("Enable selected previews","PreviewOn",()=>_ =RunActionAsync("PreviewOn"),"GraphPreviewOn"));
         tools.Children.Add(ClassicChrome.IconButton("Disable selected previews","PreviewOff",()=>_ =RunActionAsync("PreviewOff"),"GraphPreviewOff"));
-        tools.Children.Add(ClassicChrome.IconButton("Definition editor help","Help",()=>_ =ShowEditorHelpAsync(),"GraphHelp"));return tools;
+        tools.Children.Add(ClassicChrome.IconButton("Grasshopper visual programming help","Help",()=>_ =ShowEditorHelpAsync(),"GraphHelp"));return tools;
     }
     private Border CreateDefinitionStatus()
     {
@@ -178,7 +178,7 @@ public sealed partial class GraphEditorControl
         if(_chromeDisposed||XamlRoot is null||_helpDialog is not null||_textPanelDialog is not null||_numberSliderDialog is not null||_panelTypographyDialog is not null)return;
         CloseActionPopups();
         var text=new StackPanel{Spacing=10,MaxWidth=500};
-        text.Children.Add(new TextBlock{Text="Build a definition by placing components and connecting their typed ports. Component palettes and search expose the same executable catalog.",FontSize=12,TextWrapping=TextWrapping.Wrap});
+        text.Children.Add(new TextBlock{Text="Build a Grasshopper-style definition by placing components and connecting their typed ports. Component palettes and search expose the same executable catalog. Slider edits solve the graph and update the model viewport preview; Bake creates model objects from selected geometry outputs.",FontSize=12,TextWrapping=TextWrapping.Wrap});
         text.Children.Add(ClassicChrome.SectionHeader("Canvas navigation"));
         text.Children.Add(new TextBlock{Text="Right-drag / middle-drag     Pan\nMouse wheel                       Zoom around the pointer\nCtrl + right-drag                 Continuous zoom\nF                                           Zoom extents\nDouble-click empty canvas  Find or create a component",FontSize=12,TextWrapping=TextWrapping.Wrap});
         text.Children.Add(ClassicChrome.SectionHeader("Editing"));
@@ -186,7 +186,7 @@ public sealed partial class GraphEditorControl
         text.Children.Add(ClassicChrome.SectionHeader("Preview and display"));
         text.Children.Add(new TextBlock{Text="Green capsules are selected; orange means an upstream component is blocked; red indicates an evaluation error. Right-click for component options and data matching. Display settings change the canvas without changing your definition. Bake creates exact model objects from selected outputs.",FontSize=12,TextWrapping=TextWrapping.Wrap});
         AutomationProperties.SetAutomationId(text,"GraphHelpContent");
-        var dialog=new ContentDialog{Title="Definition editor",Content=new ScrollViewer{Content=text,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,MaxHeight=520},CloseButtonText="Close",XamlRoot=XamlRoot};_helpDialog=dialog;
+        var dialog=new ContentDialog{Title="Grasshopper · Visual programming",Content=new ScrollViewer{Content=text,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,MaxHeight=520},CloseButtonText="Close",XamlRoot=XamlRoot};_helpDialog=dialog;
         try{await dialog.ShowAsync();}catch(Exception error){if(!_chromeDisposed)Report(error.Message);}finally{_helpDialog=null;}
     }
     private void DisposeChrome(){_chromeDisposed=true;_recomputeCancellation?.Cancel();_helpDialog?.Hide();Shelf.CloseGroupMenu();_documentMenu?.Hide();}

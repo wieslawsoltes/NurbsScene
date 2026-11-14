@@ -15,7 +15,7 @@ public static class WorkspaceCommands
         new("Fit","Zoom extents","View","Fit","ZoomExtents"),new("FourViews","Four viewports","View","FourViews","@FourViews"),
         new("Wireframe","Wireframe","View","Wireframe","Wireframe"),new("Shaded","Shaded","View","Shaded","Shaded"),
         new("Ghosted","Ghosted","View","Ghosted","Ghosted"),new("Grid","Show grid","View","Grid","@Grid"),
-        new("Definition","Definition panel","View","Graph","@Definition"),
+        new("Definition","Open Grasshopper","View","Graph","@Grasshopper"),
         new("FloatingDefinition","Floating definition window","View","Float","@FloatingDefinition"),
         new("ViewTop","Activate Top viewport","View","FourViews","@ViewTop"),
         new("ViewFront","Activate Front viewport","View","FourViews","@ViewFront"),

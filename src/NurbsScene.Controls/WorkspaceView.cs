@@ -53,6 +53,7 @@ public sealed partial class WorkspaceView : UserControl,IDisposable
         foreach(var height in new[]{new GridLength(21),new GridLength(22),GridLength.Auto,GridLength.Auto,new GridLength(1,GridUnitType.Star),new GridLength(23)})root.RowDefinitions.Add(new(){Height=height});
         var titleRow=new Grid{Background=ClassicChrome.Brush(248,248,248)};titleRow.ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star)});titleRow.ColumnDefinitions.Add(new(){Width=GridLength.Auto});
         _title.Margin=new(8,0,0,0);_title.TextTrimming=TextTrimming.CharacterEllipsis;titleRow.Children.Add(_title);
+        var grasshopper=CreateGrasshopperLauncher();titleRow.Children.Add(grasshopper);Grid.SetColumn(grasshopper,1);
         root.Children.Add(titleRow);
         var menus=CreateMenus();root.Children.Add(menus);Grid.SetRow(menus,1);root.Children.Add(Console);Grid.SetRow(Console,2);root.Children.Add(Toolbar);Grid.SetRow(Toolbar,3);Toolbar.Invoked+=InvokeTool;
         _body.ColumnDefinitions.Add(new(){Width=new GridLength(SidebarWidth)});_body.ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star)});_body.ColumnDefinitions.Add(new(){Width=new GridLength(4)});_body.ColumnDefinitions.Add(_inspectorColumn);
@@ -80,7 +81,7 @@ public sealed partial class WorkspaceView : UserControl,IDisposable
         Controller.Changed+=Refresh;Controller.Message+=Console.WriteLine;Controller.FitRequested+=Viewport.Canvas.Fit;Controller.WorkspaceReplaced+=Replaced;
         Console.CommandSubmitted+=Run;GraphEditor.Message+=Console.WriteLine;Inspector.Message+=Console.WriteLine;
         GraphEditor.DockRequested+=HandleDefinitionDock;
-        GraphEditor.WorkspaceActionRequested+=action=>{if(action=="Open")_ =SafeAsync(OpenAsync);else if(action is "Save" or "SaveAs")_ =SafeAsync(SaveAsync);};
+        GraphEditor.WorkspaceActionRequested+=action=>{if(action=="Open")_ =SafeAsync(OpenAsync);else if(action is "Save" or "SaveAs")_ =SafeAsync(SaveAsync);else if(action=="InsertExample")Run("GrasshopperExample");};
         GraphEditor.BakeRequested+=ids=>{try{Controller.Bake(ids);}catch(Exception error){Console.WriteLine(error.Message);}};
         Viewport.Canvas.ObjectSelectionRequested+=PickObject;
         Viewport.Canvas.ConstructionPointPicked+=p=>{try{Controller.AcceptPoint(p);}catch(Exception error){Console.WriteLine(error.Message);Controller.CancelCommand();}};
@@ -88,20 +89,21 @@ public sealed partial class WorkspaceView : UserControl,IDisposable
         Viewport.Canvas.DiagnosticsChanged+=OnRenderingDiagnostics;Viewport.Canvas.LayoutChanged+=Refresh;
         _layoutFit.Tick+=(_,_)=>{
             _layoutFit.Stop();
-            if(!_disposed&&_fitAfterLayout&&Preferences.DefinitionVisible&&!DefinitionFolded&&GraphEditor.Canvas.IsLoaded
-                &&GraphEditor.Canvas.ActualWidth>120&&GraphEditor.Canvas.ActualHeight>80)
-            {_fitAfterLayout=false;GraphEditor.Canvas.Fit();}
+            if(!_disposed&&(_fitAfterLayout||_definitionFocusRequested)&&Preferences.DefinitionVisible&&!DefinitionFolded&&GraphEditor.Canvas.IsLoaded
+                &&GraphEditor.Canvas.ActualWidth>0&&GraphEditor.Canvas.ActualHeight>0)
+            {if(_fitAfterLayout&&GraphEditor.Canvas.ActualWidth>120&&GraphEditor.Canvas.ActualHeight>80){_fitAfterLayout=false;GraphEditor.Canvas.Fit();}CompleteGrasshopperOpen();FrameGrasshopperExamplePreview();}
         };
         GraphEditor.Canvas.SizeChanged+=(_,_)=>QueueLayoutFit();
         GraphEditor.Canvas.Loaded+=(_,_)=>QueueLayoutFit();
         SizeChanged+=(_,_)=>ApplyLayout();Loaded+=(_,_)=>{if(_disposed)return;ApplyLayout();QueueLayoutFit();Viewport.Canvas.Fit();};
         var save=new KeyboardAccelerator{Key=VirtualKey.S,Modifiers=VirtualKeyModifiers.Control};save.Invoked+=(sender,e)=>{_ =SafeAsync(SaveAsync);e.Handled=true;};KeyboardAccelerators.Add(save);
         foreach(var key in new[]{VirtualKey.F2,VirtualKey.F7,VirtualKey.F8,VirtualKey.F9}){var accelerator=new KeyboardAccelerator{Key=key};accelerator.Invoked+=(_,e)=>{if(key==VirtualKey.F2)Run("CommandHistory");else if(key==VirtualKey.F7){Controller.Scene.ShowGrid=!Controller.Scene.ShowGrid;Refresh();}else if(key==VirtualKey.F8){Aids.Ortho=!Aids.Ortho;UpdateAids();}else{Aids.GridSnap=!Aids.GridSnap;UpdateAids();}e.Handled=true;};KeyboardAccelerators.Add(accelerator);}
-        ConfigureShell();_savedDocument=Controller.Document.Revision;_savedGraph=Controller.Graph.Revision;ApplyLayout();Refresh();UpdateAids();
+        ConfigureShell();ConfigureGrasshopperShortcut();_savedDocument=Controller.Document.Revision;_savedGraph=Controller.Graph.Revision;ApplyLayout();Refresh();UpdateAids();
     }
     public void SetPreferences(WorkspacePreferences preferences,bool persist=true)
     {
         ArgumentNullException.ThrowIfNull(preferences);preferences.Encode();
+        if(!preferences.DefinitionVisible||(preferences.Dock=="Float"&&preferences.FloatingFolded)){CancelGrasshopperOpen();_examplePreviewToFrame=null;}
         if(_floatingPointer is not null&&(preferences.Dock!=Preferences.Dock||!preferences.DefinitionVisible||preferences.FloatingFolded!=Preferences.FloatingFolded))
         {
             var draft=Preferences.Placement;var before=_floatingBefore;CancelFloatingGesture();
@@ -145,12 +147,12 @@ public sealed partial class WorkspaceView : UserControl,IDisposable
     {
         // Docking can produce several intermediate SizeChanged events. Coalesce
         // them before reading final ActualWidth/Height, not the first event.
-        if(_disposed||!_fitAfterLayout)return;
+        if(_disposed||(!_fitAfterLayout&&!_definitionFocusRequested))return;
         _layoutFit.Stop();_layoutFit.Start();
     }
     private void UpdateAids(){SnapButton.Background=Aids.GridSnap?ClassicChrome.Selected:ClassicChrome.PanelBackground;OrthoButton.Background=Aids.Ortho?ClassicChrome.Selected:ClassicChrome.PanelBackground;EndButton.Background=Aids.EndSnap?ClassicChrome.Selected:ClassicChrome.PanelBackground;}
     private bool IsDirty=>Controller.Document.Revision!=_savedDocument||Controller.Graph.Revision!=_savedGraph;
-    private void Replaced(){Inspector.Document=Controller.Document;Refresh();}
+    private void Replaced(){CancelGrasshopperOpen();_examplePreviewToFrame=null;Inspector.Document=Controller.Document;Refresh();}
     private string? _reportedRenderingError;
     private void OnRenderingDiagnostics(string text)
     {
@@ -169,6 +171,7 @@ public sealed partial class WorkspaceView : UserControl,IDisposable
         if(_disposed)return;Viewport.Canvas.Invalidate();_title.Text=$"{Controller.Document.Name}{(IsDirty?" *":"")} — NurbsScene";GraphEditor.DocumentName=Controller.Document.Name;Console.SetPrompt(Controller.PendingCommand=="Line"?(Controller.CommandAnchor is null?"Start of line":"End of line"):Controller.PendingCommand);
         _status.Text=$"{Controller.Document.Selection.Count} selected";RefreshStatus();_viewportProperties?.Refresh();Toolbar.SetUndo(Controller.Document.CanUndo,Controller.Document.CanRedo);
         UpdateViewportTabs();
+        FrameGrasshopperExamplePreview();
     }
     private void Run(string command)
     {
@@ -196,15 +199,16 @@ public sealed partial class WorkspaceView : UserControl,IDisposable
         bar.Resources["MenuBarItemMargin"]=new Thickness(0);
         bar.Resources["ControlContentThemeFontSize"]=11d;
         MenuBarItem Menu(string name){var menu=new MenuBarItem{Title=name,FontSize=11,MinHeight=0,Height=22,Margin=new(0),Padding=new(6,0,6,0)};AutomationProperties.SetAutomationId(menu,"ModelMenu_"+name);bar.Items.Add(menu);return menu;}
-        void Item(MenuBarItem menu,string name,Action action){var item=ShellItem(name,action,"Menu_"+menu.Title+"_"+new string(name.Where(char.IsLetterOrDigit).ToArray()));menu.Items.Add(item);}
+        void Item(MenuBarItem menu,string name,Action action,string? id=null){var item=ShellItem(name,action,id??"Menu_"+menu.Title+"_"+new string(name.Where(char.IsLetterOrDigit).ToArray()));menu.Items.Add(item);}
         var file=Menu("File");Item(file,"New workspace",()=>_ =SafeAsync(NewAsync));Item(file,"Open…",()=>_ =SafeAsync(OpenAsync));Item(file,"Save as…",()=>_ =SafeAsync(SaveAsync));Item(file,"Export display mesh (.obj)…",()=>_ =SafeAsync(()=>ExportAsync(false)));Item(file,"Export display mesh (.stl)…",()=>_ =SafeAsync(()=>ExportAsync(true)));Item(file,"Load pavilion sample",()=>_ =SafeAsync(async()=>{if(await ConfirmDiscardAsync())Controller.LoadPavilion();}));
         var edit=Menu("Edit");foreach(var id in new[]{"Undo","Redo","Delete","SelectAll","SelectNone"}){var tool=WorkspaceCommands.Tools.Single(t=>t.Id==id);Item(edit,tool.Label,()=>InvokeTool(tool));}
         foreach(var category in WorkspaceCommands.Categories.Where(c=>c!="Standard"))
         {
-            var menu=Menu(category);foreach(var tool in WorkspaceCommands.Category(category))Item(menu,tool.Label,()=>InvokeTool(tool));
+            var menu=Menu(category);foreach(var tool in WorkspaceCommands.Category(category))Item(menu,tool.Label,()=>InvokeTool(tool),tool.Id=="Definition"?"Menu_View_Definitionpanel":null);
             if(category=="View")Item(menu,"Command history (F2)",()=>Run("CommandHistory"));
         }
         var tools=Menu("Tools");Item(tools,"Rendering…",()=>_ =SafeAsync(RenderingSettingsAsync));Item(tools,"Construction grid…",()=>_ =SafeAsync(GridOptionsAsync));Item(tools,"Solve definition",()=>_ =SafeAsync(async()=>{await Controller.SolveAsync();}));Item(tools,"Bake selected components",()=>{try{Controller.Bake(GraphEditor.Canvas.Selection);}catch(Exception e){Console.WriteLine(e.Message);}});
+        AddGrasshopperMenuItems(Menu("Grasshopper"));
         var panels=Menu("Panels");foreach(var name in new[]{"Layers","Properties","Objects"})Item(panels,name,()=>Run(name));Item(panels,"Definition: dock right",()=>HandleDefinitionDock("Right"));Item(panels,"Definition: dock bottom",()=>HandleDefinitionDock("Bottom"));Item(panels,"Definition: float",()=>HandleDefinitionDock("Float"));Item(panels,"Definition: fold or unfold",ToggleDefinitionFold);Item(panels,"Toggle left sidebar",()=>Run("ToggleLeftSidebar"));Item(panels,"Toggle right sidebar",()=>Run("ToggleRightSidebar"));
         var window=Menu("Window");Item(window,"Modeling layout",()=>Run("ModelingLayout"));Item(window,"Modeling + definition layout",()=>Run("DefinitionLayout"));Item(window,"Reset layout",()=>Run("ResetLayout"));
         var help=Menu("Help");Item(help,"About NurbsScene",()=>_ =SafeAsync(async()=>{await new ContentDialog{XamlRoot=XamlRoot,Title="NurbsScene — independent CAD alpha",Content=new TextBlock{Text="Exact positive-weight NURBS, modular modeling libraries and typed visual programming on Uno Platform 7 with WebGPU rendering.\n\nThe compact interface follows Rhino/Grasshopper conventions but is not identical. B-rep/solid operations, arbitrary trims, SubD, proprietary formats/plugins, complete command coverage remain unfinished.\n\nOnly implemented commands are shown. Construction aids currently provide world-aligned grid, 90-degree ortho and curve-end snapping.\n\nNo proprietary application icons, code or binaries are included.",TextWrapping=TextWrapping.Wrap},CloseButtonText="Close"}.ShowAsync();}));return bar;
@@ -218,7 +222,7 @@ public sealed partial class WorkspaceView : UserControl,IDisposable
     {
         var picker=new FileOpenPicker();picker.FileTypeFilter.Add(".nscene");var file=await picker.PickSingleFileAsync();if(file is null)return;var properties=await file.GetBasicPropertiesAsync();if(properties.Size>WorkspaceFormat.MaximumBytes)throw new InvalidOperationException("Workspace exceeds 64 MiB.");var text=await FileIO.ReadTextAsync(file);
         // Validate before offering to discard or modifying the current document.
-        WorkspaceFormat.Deserialize(Controller.Kernel.Evaluator,Controller.Registry,text);if(!await ConfirmDiscardAsync())return;Controller.Load(text);_savedDocument=Controller.Document.Revision;_savedGraph=Controller.Graph.Revision;Viewport.Canvas.Fit();GraphEditor.Canvas.Fit();
+        WorkspaceFormat.Deserialize(Controller.Kernel.Evaluator,Controller.Registry,text);if(!await ConfirmDiscardAsync())return;Controller.Load(text);_savedDocument=Controller.Document.Revision;_savedGraph=Controller.Graph.Revision;Viewport.Canvas.Fit();if(Controller.Graph.NodeCount>0){_fitAfterLayout=true;OpenGrasshopper();}else GraphEditor.Canvas.Fit();
     }
     private async Task SaveAsync()
     {
@@ -228,5 +232,5 @@ public sealed partial class WorkspaceView : UserControl,IDisposable
     {
         var objects=Controller.Document.Selection.Count>0?Controller.Document.Objects.Where(o=>Controller.Document.Selection.Contains(o.Id)).ToArray():Controller.Document.Objects.ToArray();var picker=new FileSavePicker{SuggestedFileName=Controller.Document.Name};picker.FileTypeChoices.Add(stl?"Display mesh STL":"Display mesh OBJ",new List<string>{stl?".stl":".obj"});var file=await picker.PickSaveFileAsync();if(file is null)return;if(stl)await FileIO.WriteBytesAsync(file,WorkspaceFormat.ExportStl(objects));else await FileIO.WriteTextAsync(file,WorkspaceFormat.ExportObj(objects));Console.WriteLine("Exported display triangulation. This is not exact CAD interchange or a watertight-solid certificate.");
     }
-    public new void Dispose(){if(_disposed)return;CancelFloatingGesture();_disposed=true;_renderingSettingsDialog?.Hide();_layoutFit.Stop();Controller.Changed-=Refresh;Controller.Message-=Console.WriteLine;Controller.FitRequested-=Viewport.Canvas.Fit;Controller.WorkspaceReplaced-=Replaced;Viewport.Canvas.DiagnosticsChanged-=OnRenderingDiagnostics;Viewport.Canvas.LayoutChanged-=Refresh;Viewport.Canvas.CancelNavigation();_graphGrip.Cancel();_sideGrip.Cancel();_viewportProperties?.Dispose();Inspector.Detach();GraphEditor.Dispose();if(_ownsController)Controller.Dispose();base.Dispose();}
+    public new void Dispose(){if(_disposed)return;CancelFloatingGesture();CancelGrasshopperOpen();_examplePreviewToFrame=null;_disposed=true;_renderingSettingsDialog?.Hide();_layoutFit.Stop();Controller.Changed-=Refresh;Controller.Message-=Console.WriteLine;Controller.FitRequested-=Viewport.Canvas.Fit;Controller.WorkspaceReplaced-=Replaced;Viewport.Canvas.DiagnosticsChanged-=OnRenderingDiagnostics;Viewport.Canvas.LayoutChanged-=Refresh;Viewport.Canvas.CancelNavigation();_graphGrip.Cancel();_sideGrip.Cancel();_viewportProperties?.Dispose();Inspector.Detach();GraphEditor.Dispose();if(_ownsController)Controller.Dispose();base.Dispose();}
 }

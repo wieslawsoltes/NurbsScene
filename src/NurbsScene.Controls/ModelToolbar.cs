@@ -60,6 +60,12 @@ public sealed class ModelToolbar : Grid
             {
                 if(buttons.ContainsKey(tool.Id))return;
                 var button=ClassicChrome.IconButton(tool.Label,tool.Icon,()=>Invoked?.Invoke(tool),"Tool_"+tool.Id);
+                if(tool.Id=="Definition")
+                {
+                    var caption=new StackPanel{Orientation=Orientation.Horizontal,Spacing=5};
+                    caption.Children.Add(new WorkbenchIcon(tool.Icon){Width=20,Height=20});caption.Children.Add(ClassicChrome.Label("Grasshopper",11));
+                    button.Content=caption;button.Width=double.NaN;button.Padding=new(5,1,6,1);
+                }
                 buttons.Add(tool.Id,button);tools.Children.Add(button);
             }
             foreach(var id in new[]{"New","Open","Save"})Add(WorkspaceCommands.Tools.Single(t=>t.Id==id));
