@@ -167,6 +167,92 @@ def require_startup_checkpoint(folder, name):
     return observation
 
 
+def require_grasshopper_discovery(folder, name, startup, *, saved=False):
+    """Require the two native clicks and their original pre-fixture evidence."""
+    record = read_json(folder / (name + ".json"))
+    if record.get("status") != "passed" or record.get("startup") != startup:
+        raise ValueError("Grasshopper discovery does not retain its untouched startup: " + name)
+    check_strings(record.get("checks"), 3, name + " discovery assertions")
+    if len(record["checks"]) != 3 or len(record.get("inputs", [])) != 2:
+        raise ValueError("Grasshopper discovery requires exactly two native launcher clicks: " + name)
+    original = startup.get("grasshopper", {})
+    state = original.get("state", {})
+    model_fields = ("objects", "nodes", "documentRevision", "graphRevision", "documentUndo", "documentRedo", "graphUndo", "graphRedo", "history")
+    if (any(key not in state for key in model_fields) or state.get("objects") != 0 or state.get("nodes") != 0
+            or state.get("definitionVisible") is not False or state.get("definitionFolded") is not saved
+            or state.get("history") != "" or state.get("preferences") != startup["state"].get("preferences")
+            or any(state.get(key) is not False for key in ("documentUndo", "documentRedo", "graphUndo", "graphRedo"))
+            or (saved and state.get("definitionFloating") is not True)):
+        raise ValueError("Grasshopper discovery did not start from the actual empty hidden workspace: " + name)
+
+    def box(workspace, identity):
+        value = workspace.get("controls", {}).get(identity) or {}
+        layout = workspace.get("state", {})
+        if (value.get("enabled") is not True
+                or any(type(value.get(key)) not in (int, float) or not math.isfinite(value[key]) for key in ("x", "y", "width", "height"))
+                or value["width"] <= 0 or value["height"] <= 0 or value["x"] < -1 or value["y"] < -1
+                or value["x"] + value["width"] > layout.get("workspaceWidth", 0) + 1
+                or value["y"] + value["height"] > layout.get("workspaceHeight", 0) + 1):
+            raise ValueError("Missing visible native Grasshopper bounds: " + name + " " + identity)
+        return value
+
+    for identity in ("OpenGrasshopper", "Tool_Definition", "ModelMenu_Grasshopper"):
+        if "Grasshopper" not in box(original, identity).get("labels", []):
+            raise ValueError("Grasshopper discovery has no rendered launcher label: " + name + " " + identity)
+    previous_sample = 0
+    observations = []
+    for stage in ("before", "opened", "reopened"):
+        sample = record.get(stage) or {}
+        workspace = sample.get("workspace") or {}
+        current = workspace.get("state") or {}
+        if (sample.get("status") != "ready" or type(sample.get("sample")) is not int or sample["sample"] <= previous_sample
+                or any(key not in current or current[key] != state[key] for key in model_fields)
+                or "gpuError" not in current or current["gpuError"] is not None
+                or "graphError" not in current or current["graphError"] is not None):
+            raise ValueError("Grasshopper discovery changed the model or reused a native observation: " + name + " " + stage)
+        previous_sample = sample["sample"]
+        box(workspace, "OpenGrasshopper")
+        if stage == "before":
+            if current.get("preferences") != state["preferences"] or current.get("definitionVisible") is not False:
+                raise ValueError("Grasshopper was opened before its native input phase: " + name)
+        else:
+            canvas = box(workspace, "ParametricCanvas")
+            for identity in ("GraphGettingStarted", "GraphStartAddComponent", "GraphStartExample"):
+                box(workspace, identity)
+            if (current.get("definitionVisible") is not True or current.get("definitionFolded") is not False
+                    or current.get("editorFolded") is not False or current.get("openPending") is not False
+                    or current.get("gettingStartedVisible") is not True or current.get("graphFocused") is not True
+                    or current.get("graphFocus") == "Unfocused" or canvas.get("focused") is not True
+                    or type(current.get("graphFrames")) is not int or current["graphFrames"] < 1
+                    or canvas["width"] <= 120 or canvas["height"] <= 80):
+                raise ValueError("Grasshopper discovery did not complete the native focused opener: " + name + " " + stage)
+        observations.append(sample)
+    if observations[1]["workspace"]["state"]["preferences"] != observations[2]["workspace"]["state"]["preferences"]:
+        raise ValueError("Repeated Grasshopper opening changed the restored layout: " + name)
+    for input_record, before in zip(record["inputs"], observations):
+        bounds = box(before["workspace"], "OpenGrasshopper")
+        if (input_record.get("control") != "OpenGrasshopper" or input_record.get("button") != "left"
+                or input_record.get("beforeSample") != before["sample"]
+                or input_record.get("point") != [bounds["x"] + bounds["width"] / 2, bounds["y"] + bounds["height"] / 2]):
+            raise ValueError("Grasshopper discovery input is not bound to its observed native launcher: " + name)
+    if not (folder / (name + ".png")).read_bytes().startswith(b"\x89PNG\r\n\x1a\n"):
+        raise ValueError("Missing actual opened Grasshopper screenshot: " + name)
+    return record
+
+
+def require_discovery_handoff(modeling, startup, discovery, name):
+    observed_startup = modeling.get("startup", {}).get("state", {})
+    original = startup["state"]
+    if any(observed_startup.get(key) != original.get(key) for key in ("objects", "nodes", "history", "preferences")):
+        raise ValueError("Grasshopper startup differs from its managed pre-fixture handoff: " + name)
+    released = modeling.get("discovery", {})
+    final = discovery["reopened"]
+    if (released.get("status") != "ready" or type(released.get("sample")) is not int or released["sample"] < final["sample"]
+            or any(released.get("workspace", {}).get("state", {}).get(key) != final["workspace"]["state"].get(key)
+                   for key in ("objects", "nodes", "documentRevision", "graphRevision", "preferences", "history", "definitionVisible", "definitionFolded", "graphFocused", "openPending"))):
+        raise ValueError("Grasshopper discovery did not finish before the modeling fixture: " + name)
+
+
 def collect(evidence, site, commit, tree, output, registry_path=REGISTRY):
     manifest = verify_site(site, commit, tree)
     registry = campaigns(registry_path)
@@ -212,6 +298,19 @@ def collect(evidence, site, commit, tree, output, registry_path=REGISTRY):
                 raise ValueError("Reload startup evidence differs from its native workflow observation")
         if name == "rhino-grasshopper-ui":
             require_gpu_observation(read_json(path.parent / "uno-rhino-grasshopper-pre-reload-gpu.json"), name + " before reload")
+            startup = require_startup_checkpoint(path.parent, "uno-grasshopper-startup")
+            startup_reload = require_startup_checkpoint(path.parent, "uno-grasshopper-startup-reload")
+            discovery = require_grasshopper_discovery(path.parent, "uno-grasshopper-discovery", startup)
+            discovery_reload = require_grasshopper_discovery(path.parent, "uno-grasshopper-discovery-reload", startup_reload, saved=True)
+            if record.get("startup") != startup or record.get("discovery") != discovery:
+                raise ValueError("Grasshopper startup/discovery differs from its campaign observation")
+            if any(check not in checks for item in (discovery, discovery_reload) for check in item["checks"]):
+                raise ValueError("Grasshopper startup discovery assertions are missing from native acceptance")
+            require_discovery_handoff(modeling, startup, discovery, name)
+            reloaded = read_json(path.parent / "uno-rhino-grasshopper-reload.json")
+            if reloaded.get("status") != "passed" or reloaded.get("application") != "Uno Platform" or reloaded.get("gpuApi") != "WebGPU":
+                raise ValueError("Grasshopper reload did not pass the actual modeling/framebuffer qualification")
+            require_discovery_handoff(reloaded, startup_reload, discovery_reload, name + " reload")
         check_strings(modeling.get("checks"), registry["minimumModelingChecks"], name + " modeling/framebuffer assertions")
         if report.get("modelingChecksPerCampaign") != [len(modeling["checks"])]:
             raise ValueError("Inconsistent modeling assertion count: " + name)

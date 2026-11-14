@@ -16,6 +16,41 @@ SPEC.loader.exec_module(GATE)
 COMMIT, TREE = "1" * 40, "2" * 40
 
 
+def discovery_workspace(*, opened=False, saved=False):
+    preferences = "3|Float|0|1|0.55|250|1|1|Layers|0.3|0.1|0.6|0.7|1" if saved else "2|Right|0|1|0.55|250|1|0|Properties"
+    if opened:
+        fields = preferences.split("|")
+        fields[2] = "1"
+        if saved:
+            fields[13] = "0"
+        preferences = "|".join(fields)
+    controls = {identity: {"x": 10 + i * 130, "y": 0, "width": 120, "height": 20,
+                           "enabled": True, "focused": False, "labels": ["Grasshopper"]}
+                for i, identity in enumerate(("OpenGrasshopper", "Tool_Definition", "ModelMenu_Grasshopper"))}
+    if opened:
+        controls.update({identity: {"x": 800, "y": 300 + i * 50, "width": 300, "height": 40 if i else 500,
+                                    "enabled": True, "focused": i == 0, "labels": []}
+                         for i, identity in enumerate(("ParametricCanvas", "GraphGettingStarted", "GraphStartAddComponent", "GraphStartExample"))})
+    return {"controls": controls, "state": {"objects": 0, "nodes": 0, "documentRevision": 0, "graphRevision": 0,
+        "documentUndo": False, "documentRedo": False, "graphUndo": False, "graphRedo": False,
+        "history": "", "preferences": preferences, "definitionVisible": opened, "definitionFolded": saved and not opened,
+        "editorFolded": saved and not opened, "definitionFloating": saved, "openPending": False,
+        "gettingStartedVisible": opened, "graphFocused": opened, "graphFocus": "Programmatic" if opened else "Unfocused",
+        "graphFrames": 1 if opened else 0, "graphError": None, "frames": 2, "gpuError": None,
+        "workspaceWidth": 1600, "workspaceHeight": 1100}}
+
+
+def discovery_record(startup, *, saved=False):
+    before = {"status": "ready", "sample": 1, "workspace": copy.deepcopy(startup["grasshopper"])}
+    opened = {"status": "ready", "sample": 4, "workspace": discovery_workspace(opened=True, saved=saved)}
+    reopened = {"status": "ready", "sample": 7, "workspace": discovery_workspace(opened=True, saved=saved)}
+    box = before["workspace"]["controls"]["OpenGrasshopper"]
+    return {"status": "passed", "startup": copy.deepcopy(startup), "before": before, "opened": opened, "reopened": reopened,
+            "checks": [("reload" if saved else "initial") + " discovery fixture " + str(i) for i in range(3)],
+            "inputs": [{"control": "OpenGrasshopper", "button": "left", "point": [box["x"] + box["width"] / 2, box["y"] + box["height"] / 2],
+                        "beforeSample": sample} for sample in (1, 4)]}
+
+
 class QualificationContracts(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -52,19 +87,41 @@ class QualificationContracts(unittest.TestCase):
                             "budgetMilliseconds": 60_000, "outerBudgetMilliseconds": 65_000,
                             "elapsedMilliseconds": 5.5, "byteCount": 4096} for capture in ("empty", "filled", "rotated")],
                         "gpuReadbackSha256": "A" * 64}
-            if name == "rhino-workspace":
+            if name in ("rhino-workspace", "rhino-grasshopper-ui"):
                 startup = {"status": "ready", "sample": 3, "console": {"text": ""},
                            "state": {"objects": 0, "nodes": 0, "frames": 1, "gpuError": None, "history": ""},
                            "host": {"documentVisibility": "visible", "loaderCount": 0,
                                     "canvas": {"id": "uno-canvas", "connected": True, "visible": True,
                                                "width": 1600, "height": 1100, "pixelWidth": 1600, "pixelHeight": 1100},
                                     "presentation": {"firstFrame": 1000, "secondFrame": 1016, "sample": 1}}}
-                record["startup"] = copy.deepcopy(startup)
-                modeling["startup"] = copy.deepcopy(startup)
-                for checkpoint in ("uno-rhino-startup", "uno-rhino-startup-reload"):
-                    GATE.write_json(folder / (checkpoint + ".json"), startup)
-                    (folder / (checkpoint + ".png")).write_bytes(b"\x89PNG\r\n\x1a\nfixture")
-                GATE.write_json(folder / "uno-rhino-workspace.json", {"startupReload": copy.deepcopy(startup)})
+                if name == "rhino-workspace":
+                    record["startup"] = copy.deepcopy(startup)
+                    modeling["startup"] = copy.deepcopy(startup)
+                    for checkpoint in ("uno-rhino-startup", "uno-rhino-startup-reload"):
+                        GATE.write_json(folder / (checkpoint + ".json"), startup)
+                        (folder / (checkpoint + ".png")).write_bytes(b"\x89PNG\r\n\x1a\nfixture")
+                    GATE.write_json(folder / "uno-rhino-workspace.json", {"startupReload": copy.deepcopy(startup)})
+                else:
+                    for saved in (False, True):
+                        value = copy.deepcopy(startup)
+                        value["grasshopper"] = discovery_workspace(saved=saved)
+                        value["state"]["preferences"] = value["grasshopper"]["state"]["preferences"]
+                        discovery = discovery_record(value, saved=saved)
+                        suffix = "-reload" if saved else ""
+                        for checkpoint, data in (("uno-grasshopper-startup" + suffix, value),
+                                                 ("uno-grasshopper-discovery" + suffix, discovery)):
+                            GATE.write_json(folder / (checkpoint + ".json"), data)
+                            (folder / (checkpoint + ".png")).write_bytes(b"\x89PNG\r\n\x1a\nfixture")
+                        if not saved:
+                            record["startup"] = copy.deepcopy(value)
+                            record["discovery"] = copy.deepcopy(discovery)
+                            modeling["startup"] = copy.deepcopy(value)
+                            modeling["discovery"] = copy.deepcopy(discovery["reopened"])
+                            checks[:3] = discovery["checks"]
+                        else:
+                            checks[3:6] = discovery["checks"]
+                            GATE.write_json(folder / "uno-rhino-grasshopper-reload.json", modeling | {
+                                "startup": copy.deepcopy(value), "discovery": copy.deepcopy(discovery["reopened"])})
             GATE.write_json(folder / "uno-ui.json", report)
             GATE.write_json(folder / ("uno-browser-" + name + ".json"), modeling)
             GATE.write_json(folder / "uno-publication.json", self.manifest)
@@ -91,7 +148,7 @@ class QualificationContracts(unittest.TestCase):
 
     def test_all_eleven_campaigns_aggregate_without_losing_assertions(self):
         result = self.collect()
-        self.assertEqual(len(result["checks"]), 414)
+        self.assertEqual(len(result["checks"]), 439)
         self.assertEqual([r["campaign"] for r in result["campaigns"]], self.names)
         self.assertEqual(result["modelingChecksPerCampaign"], [33] * 11)
         self.assertEqual(len(list((self.output / "campaigns").glob("*/uno-ui.json"))), 11)
@@ -105,7 +162,7 @@ class QualificationContracts(unittest.TestCase):
         self.assertEqual([(entry["name"], entry["minimumUiChecks"]) for entry in self.registry["campaigns"][:10]], expanded)
         self.assertEqual(sum(count for _, count in originals), 357)
         self.assertEqual(sum(count for _, count in expanded) - sum(count for _, count in originals), 7)
-        self.assertEqual(self.registry["campaigns"][10:], [{"name": "rhino-grasshopper-ui", "minimumUiChecks": 50}])
+        self.assertEqual(self.registry["campaigns"][10:], [{"name": "rhino-grasshopper-ui", "minimumUiChecks": 75}])
         self.assertEqual(self.registry["minimumModelingChecks"], 33)
 
     def test_hidden_site_files_are_part_of_exact_content_verification(self):
@@ -216,6 +273,93 @@ class QualificationContracts(unittest.TestCase):
     def test_missing_ordinary_startup_screenshot_rejects(self):
         (self.evidence / "rhino-workspace" / "uno-rhino-startup.png").unlink()
         self.rejected()
+
+    def test_grasshopper_discovery_requires_both_original_and_opened_screenshots(self):
+        folder = self.evidence / "rhino-grasshopper-ui"
+        for filename in ("uno-grasshopper-startup.png", "uno-grasshopper-discovery.png",
+                         "uno-grasshopper-startup-reload.png", "uno-grasshopper-discovery-reload.png"):
+            path = folder / filename
+            content = path.read_bytes()
+            path.unlink()
+            with self.subTest(filename=filename):
+                self.rejected()
+            path.write_bytes(content)
+
+    def test_grasshopper_completed_native_opener_requires_actual_focus_and_a_draw(self):
+        folder = self.evidence / "rhino-grasshopper-ui"
+        path = folder / "uno-grasshopper-discovery.json"
+        original = GATE.read_json(path)
+        startup = GATE.read_json(folder / "uno-grasshopper-startup.json")
+        for change in ({"graphFocused": False}, {"graphFrames": 0}, {"openPending": True}, {"gpuError": "lost"}):
+            value = copy.deepcopy(original)
+            value["opened"]["workspace"]["state"].update(change)
+            GATE.write_json(path, value)
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                GATE.require_grasshopper_discovery(folder, "uno-grasshopper-discovery", startup)
+
+    def test_grasshopper_launch_cannot_consume_model_history_before_fixture(self):
+        folder = self.evidence / "rhino-grasshopper-ui"
+        path = folder / "uno-grasshopper-discovery.json"
+        original = GATE.read_json(path)
+        startup = GATE.read_json(folder / "uno-grasshopper-startup.json")
+        for field in ("objects", "nodes", "documentRevision", "graphRevision", "documentUndo", "graphRedo", "history"):
+            value = copy.deepcopy(original)
+            value["reopened"]["workspace"]["state"][field] = "changed"
+            GATE.write_json(path, value)
+            with self.subTest(field=field), self.assertRaisesRegex(ValueError, "changed the model"):
+                GATE.require_grasshopper_discovery(folder, "uno-grasshopper-discovery", startup)
+
+    def test_grasshopper_repeated_launch_cannot_toggle_closed_or_change_layout(self):
+        folder = self.evidence / "rhino-grasshopper-ui"
+        path = folder / "uno-grasshopper-discovery.json"
+        original = GATE.read_json(path)
+        startup = GATE.read_json(folder / "uno-grasshopper-startup.json")
+        for change in ({"definitionVisible": False}, {"preferences": "different layout"}):
+            value = copy.deepcopy(original)
+            value["reopened"]["workspace"]["state"].update(change)
+            GATE.write_json(path, value)
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                GATE.require_grasshopper_discovery(folder, "uno-grasshopper-discovery", startup)
+
+    def test_grasshopper_native_clicks_are_bound_to_the_observed_launcher(self):
+        folder = self.evidence / "rhino-grasshopper-ui"
+        path = folder / "uno-grasshopper-discovery.json"
+        original = GATE.read_json(path)
+        startup = GATE.read_json(folder / "uno-grasshopper-startup.json")
+        for change in ({"point": [0, 0]}, {"beforeSample": 99}, {"control": "CommandInput"}):
+            value = copy.deepcopy(original)
+            value["inputs"][0].update(change)
+            GATE.write_json(path, value)
+            with self.subTest(change=change), self.assertRaisesRegex(ValueError, "observed native launcher"):
+                GATE.require_grasshopper_discovery(folder, "uno-grasshopper-discovery", startup)
+
+    def test_grasshopper_managed_handoff_must_precede_model_fixture(self):
+        folder = self.evidence / "rhino-grasshopper-ui"
+        self.edit("uno-browser-rhino-grasshopper-ui.json", lambda value: value["discovery"]["workspace"]["state"].update(nodes=5),
+                  name="rhino-grasshopper-ui")
+        with self.assertRaisesRegex(ValueError, "before the modeling fixture"):
+            self.collect()
+        self.assertFalse(self.output.exists())
+
+    def test_grasshopper_saved_hidden_folded_capture_cannot_be_overwritten_by_opened_state(self):
+        folder = self.evidence / "rhino-grasshopper-ui"
+        startup = GATE.read_json(folder / "uno-grasshopper-startup-reload.json")
+        startup["grasshopper"] = discovery_workspace(opened=True, saved=True)
+        startup["state"]["preferences"] = startup["grasshopper"]["state"]["preferences"]
+        value = GATE.read_json(folder / "uno-grasshopper-discovery-reload.json")
+        value["startup"] = copy.deepcopy(startup)
+        GATE.write_json(folder / "uno-grasshopper-discovery-reload.json", value)
+        with self.assertRaisesRegex(ValueError, "actual empty hidden workspace"):
+            GATE.require_grasshopper_discovery(folder, "uno-grasshopper-discovery-reload", startup, saved=True)
+
+    def test_grasshopper_discovery_checks_cannot_be_omitted_from_full_native_acceptance(self):
+        self.edit("uno-ui.json", lambda value: value["checks"].__setitem__(0, "unrelated replacement"), name="rhino-grasshopper-ui")
+        # Keep the aggregate/campaign check lists consistent so the discovery
+        # requirement itself rejects the otherwise complete-count evidence.
+        self.edit("uno-ui.json", lambda value: value["campaigns"][0]["checks"].__setitem__(0, "unrelated replacement"), name="rhino-grasshopper-ui")
+        with self.assertRaisesRegex(ValueError, "discovery assertions are missing"):
+            self.collect()
+        self.assertFalse(self.output.exists())
 
     def test_native_frames_cannot_qualify_loader_or_unpainted_canvas_screenshots(self):
         folder = self.evidence / "rhino-workspace"

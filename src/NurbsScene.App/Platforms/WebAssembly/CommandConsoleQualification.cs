@@ -93,7 +93,7 @@ public partial class App
         };
     }
 
-    // Only the existing rhino-workspace campaign opts into this checkpoint. It
+    // The existing Rhino/Grasshopper campaigns opt into this checkpoint. It
     // pauses before any modeling fixture is loaded so the runner can capture
     // ordinary startup. The flag releases that existing fixture; it exposes no
     // command, geometry, focus, or application-state mutation API.
@@ -113,6 +113,7 @@ public partial class App
             latest = new
             {
                 status = "ready", sample = ++sample, console = ObserveCommandConsole(view),
+                grasshopper = ObserveGrasshopperWorkspace(view),
                 state = new
                 {
                     objects = view.Controller.Document.Objects.Count, nodes = view.Controller.Graph.Nodes.Count,

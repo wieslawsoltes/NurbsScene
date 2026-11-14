@@ -44,7 +44,7 @@
     },
     {
       "name": "rhino-grasshopper-ui",
-      "minimumUiChecks": 50
+      "minimumUiChecks": 75
     }
   ]
 }

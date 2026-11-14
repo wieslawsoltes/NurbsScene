@@ -6,6 +6,9 @@ pointer/keyboard input; the application exposes only passive state and bounds.
 """
 import json
 from pathlib import Path
+from command_console_observation import capture_startup
+from grasshopper_discovery_observation import verify_startup_discovery
+from grasshopper_onboarding_ui import verify_grasshopper_onboarding
 from ui_observation import (read_ui, require_gpu_observation, settle,
                             solution_condition, text_editor_point,
                             wait_for_ui, wait_ready)
@@ -231,6 +234,9 @@ async def verify_rhino_grasshopper_ui(page):
         check((data["state"]["shelfPageBuilds"], data["state"]["shelfButtonBuilds"]) == builds,
               "Returning to visited component categories reuses their retained palette pages and buttons")
 
+        await verify_grasshopper_onboarding(page, click, menu, command, check)
+        data = await read_ui(page)
+
         document_revision = data["state"]["documentRevision"]
         graph_revision = data["state"]["graphRevision"]
         appearance = (("Grid", "graphGridVisible"), ("Icons", "graphComponentIconsVisible"),
@@ -305,7 +311,11 @@ async def verify_rhino_grasshopper_ui(page):
               "Unfolding restores expanded dimensions and the user's editor chrome choices")
         data = await click("GraphTitleDragHandle", double=True)
         check(data["state"]["definitionFolded"], "Double-clicking the actual floating title folds the definition")
-        await click("GraphFold")
+        await click("OpenGrasshopper")
+        data = await wait_for_ui(page, "value.state.grasshopperOpenPending === false")
+        check(data["state"]["definitionVisible"] and not data["state"]["definitionFolded"]
+              and same_box(data["controls"]["GraphFloatFrame"], expanded) and data["controls"]["GraphCanvas"]["focused"],
+              "The persistent Grasshopper launcher unfolds and focuses an already visible floating editor")
         await page.screenshot(path=str(EVIDENCE / "uno-grasshopper-floating.png"))
         data = await click("GraphHide")
         check(not data["state"]["definitionVisible"] and "GraphFloatFrame" not in data["controls"],
@@ -332,6 +342,12 @@ async def verify_rhino_grasshopper_ui(page):
         check(not same_box(during["controls"]["GraphFloatFrame"], folded)
               and data["state"]["historyExpanded"] and data["state"]["preferences"] == saved_preferences,
               "Persisting command history during a title drag preserves the committed placement after Escape")
+        data = await click("GraphHide")
+        saved_fields[2] = "0"
+        saved_preferences = "|".join(saved_fields)
+        check(not data["state"]["definitionVisible"] and data["state"]["preferences"] == saved_preferences
+              and "OpenGrasshopper" in data["controls"] and "GraphFloatFrame" not in data["controls"],
+              "Closing a folded window saves its hidden state while keeping the labelled Grasshopper launcher available")
 
         # Reload creates a new GPU device. Retain and qualify the first device's
         # complete observation before navigation can discard its error history.
@@ -339,6 +355,10 @@ async def verify_rhino_grasshopper_ui(page):
         (EVIDENCE / "uno-rhino-grasshopper-pre-reload-gpu.json").write_text(json.dumps(observation, indent=2))
         require_gpu_observation(observation)
         await page.reload(wait_until="domcontentloaded", timeout=60000)
+        startup_reload = await capture_startup(page, EVIDENCE / "uno-grasshopper-startup-reload")
+        discovery_reload = await verify_startup_discovery(page, startup_reload,
+            EVIDENCE / "uno-grasshopper-discovery-reload", saved_preferences=saved_preferences)
+        checks.extend(discovery_reload["checks"])
         await page.wait_for_function(
             'globalThis.nurbsSceneQualification && globalThis.nurbsSceneQualification.status !== "running"', timeout=180000)
         report = await page.evaluate("globalThis.nurbsSceneQualification")
@@ -346,7 +366,8 @@ async def verify_rhino_grasshopper_ui(page):
         check(report.get("application") == "Uno Platform" and report.get("gpuApi") == "WebGPU" and report.get("status") == "passed",
               "Reloading the floating workspace passes the actual Uno modeling and framebuffer qualification again")
         data = await wait_ready(page)
-        check(saved_preferences.startswith("3|Float|") and data["state"]["startupPreferences"] == saved_preferences,
+        check(saved_preferences.startswith("3|Float|") and startup_reload["state"]["preferences"] == saved_preferences
+              and data["state"]["startupPreferences"] == discovery_reload["reopened"]["workspace"]["state"]["preferences"],
               "Reload restores the exact version-three floating placement and folded preference before the test fixture opens")
         # The fixture opens a consistent docked workspace after observing startup.
         # Capture the complete restored editor with ordinary native input.
