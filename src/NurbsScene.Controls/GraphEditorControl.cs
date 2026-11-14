@@ -54,6 +54,7 @@ public sealed partial class GraphEditorControl : Grid,IDisposable
         UndoButton=ClassicChrome.IconButton("Undo definition edit","Undo",()=>Session?.Undo(),"GraphUndo");RedoButton=ClassicChrome.IconButton("Redo definition edit","Redo",()=>Session?.Redo(),"GraphRedo");
         _toolbarStrip=ClassicChrome.Horizontal(CreateCanvasToolbar());Children.Add(_toolbarStrip);SetRow(_toolbarStrip,3);
         _editorBody.ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star)});_editorBody.ColumnDefinitions.Add(_inspectorColumn);_editorBody.Children.Add(Canvas);
+        _editorBody.Children.Add(CreateGettingStarted());
         _inspectorScroll.Background=ClassicChrome.Surface;_inspectorScroll.Content=_inspector;SetColumn(_inspectorScroll,1);_editorBody.Children.Add(_inspectorScroll);SetRow(_editorBody,4);Children.Add(_editorBody);
         _statusFrame=CreateDefinitionStatus();SetRow(_statusFrame,5);Children.Add(_statusFrame);
         AutomationProperties.SetAutomationId(_search,"ComponentSearch");AutomationProperties.SetName(_search,"Search components");AutomationProperties.SetAutomationId(Canvas,"ParametricCanvas");AutomationProperties.SetAutomationId(_resultPanel,"GraphResultPreview");AutomationProperties.SetAutomationId(_inspectorScroll,"GraphInspector");
@@ -62,7 +63,8 @@ public sealed partial class GraphEditorControl : Grid,IDisposable
         Shelf.ComponentRequested+=AddComponent;
         Canvas.SliderEditRequested+=id=>{if(Session is{} session)QueueNumberSliderEdit(session.Graph,id);};
         Canvas.SelectionChanged+=()=>{RefreshInspector();UpdateStatus();};Canvas.SearchRequested+=ShowCanvasSearch;Canvas.Message+=Report;Canvas.ViewChanged+=UpdateStatus;Canvas.AppearanceChanged+=UpdateAppearanceChecks;
-        SizeChanged+=(_,_)=>SizeInspector();
+        SizeChanged+=(_,_)=>SizeInspector();Canvas.SizeChanged+=(_,_)=>SizeGettingStarted();
+        Loaded+=(_,_)=>SizeGettingStarted();
         InitializeActions();InitializeValueEditing();
     }
     private void AddComponent(string id)
@@ -83,6 +85,7 @@ public sealed partial class GraphEditorControl : Grid,IDisposable
     private void OnSolved(GraphResult result){UpdateStatus();RefreshResult();}
     private void UpdateStatus()
     {
+        UpdateGettingStarted();
         if(Session is null)
         {
             _status.Text="No definition";_solutionState.Text="Not solved";UndoButton.IsEnabled=RedoButton.IsEnabled=false;

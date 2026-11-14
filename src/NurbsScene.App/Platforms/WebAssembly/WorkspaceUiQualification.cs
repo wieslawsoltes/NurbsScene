@@ -180,13 +180,14 @@ public partial class App
                     }
                     FindPreview(view.GraphEditor);
                 }
-                var snapshot=new{status="ready",sample=++sample,controls,views,nodes,wires,previewLines,console=ObserveCommandConsole(view),values=ObserveCanvasValues(view),lastGeometry=ObserveLastGeometry(view),typography=ObserveTypography(view),state=new{
+                var snapshot=new{status="ready",sample=++sample,controls,views,nodes,wires,previewLines,console=ObserveCommandConsole(view),values=ObserveCanvasValues(view),lastGeometry=ObserveLastGeometry(view),graphGeometry=ObserveSelectedGraphGeometry(view),typography=ObserveTypography(view),state=new{
                     objects=controller.Document.Objects.Count,layers=controller.Document.Layers.Count,activeLayer=controller.Document.ActiveLayer,
                     layerRows=controller.Document.Layers.Select(l=>new{id=l.Id,name=l.Name,visible=l.Visible,locked=l.Locked,color=new[]{l.Color.R,l.Color.G,l.Color.B,l.Color.A}}).ToArray(),
                     layerFilter=view.Inspector.FilterText,layerVisibleIds=view.Inspector.VisibleLayerIds,layerSelectedId=view.Inspector.SelectedLayerId,
                     layerColorEditorOpen=view.Inspector.ColorEditorIsOpen,layerColorEditorPending=view.Inspector.ColorEditor is not null,layerColorValidation=view.Inspector.ColorEditorValidation,
                     selectedLayers=controller.Document.Objects.Where(o=>controller.Document.Selection.Contains(o.Id)).Select(o=>o.LayerId).Distinct().ToArray(),
                     selected=controller.Document.Selection.Count,documentRevision=controller.Document.Revision,documentUndo=controller.Document.CanUndo,documentRedo=controller.Document.CanRedo,
+                    documentObjects=controller.Document.Objects.Take(128).Select(o=>new{id=o.Id,name=o.Name,source=o.Source,geometryId=o.Geometry.Id}).ToArray(),
                     nodeCount=controller.Graph.Nodes.Count,wireCount=controller.Graph.Wires.Count,graphRevision=controller.Graph.Revision,
                     graphFocus=graph.FocusState.ToString(),focusedElement=focusedElement?.GetType().FullName,
                     modelInputObservations=inputTrace.ToArray(),
@@ -199,6 +200,7 @@ public partial class App
                     shelfPageBuilds=view.GraphEditor.Shelf.PageBuildCount,shelfButtonBuilds=view.GraphEditor.Shelf.ButtonBuildCount,
                     paletteGroupOpen=view.GraphEditor.Shelf.IsGroupMenuOpen,paletteOpenedGroup=view.GraphEditor.Shelf.OpenedGroup,
                     componentPaletteVisible=view.GraphEditor.ComponentPaletteVisible,canvasToolbarVisible=view.GraphEditor.CanvasToolbarVisible,
+                    grasshopperOpenPending=view.IsGrasshopperOpenPending,gettingStartedVisible=view.GraphEditor.GettingStartedVisible,
                     graphGridVisible=graph.GridVisible,graphComponentIconsVisible=graph.ComponentIconsVisible,graphComponentNamesVisible=graph.ComponentNamesVisible,graphFancyWires=graph.FancyWires,
                     toolbar=view.Toolbar.Category,category=view.GraphEditor.Shelf.Category,inspector=view.Inspector.ActiveTab,
                     startupPreferences=preferences.Encode(),preferences=view.Preferences.Encode(),sidebarVisible=view.Preferences.SidebarVisible,inspectorWidth=view.Preferences.InspectorWidth,historyExpanded=view.Console.HistoryExpanded,commandInput=view.Console.InputText,commandHistoryCount=view.Console.HistoryCount,commandHistory=view.Console.HistoryText,

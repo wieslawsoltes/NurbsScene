@@ -296,7 +296,7 @@ async def verify_rhino_workspace(page):
         await click('GraphDockBottom'); data=await settle(page)
         check(data['state']['inspectorWidth']==width and data['controls']['GraphCanvas']['y']>data['controls']['CadCanvas']['y'],
               'Definition docking no longer resets the user-sized inspector')
-        await command('Grasshopper'); await command('Properties'); await command('SelNone'); await click('Viewport_Perspective')
+        await command('HideGrasshopper'); await command('Properties'); await command('SelNone'); await click('Viewport_Perspective')
 
         # The inspector commits complete validated camera drafts atomically.
         before=await camera(); await editor('ViewportPropertyX','12.5'); data=await settle(page)

@@ -8,6 +8,29 @@ uses exact positive-weight rational curves and untrimmed tensor-product surfaces
 robust solids, arbitrary trims, proprietary formats/plugins and complete UI parity
 remain unfinished. See [the compatibility inventory](docs/PARITY.md).
 
+## Open Grasshopper
+
+Click **Grasshopper** at the top right of the application, use the labeled
+**Grasshopper** toolbar button, or choose **Grasshopper → Open Grasshopper**.
+**Ctrl+Alt+G** and the `Grasshopper` command open the same native visual programming
+editor. These actions reveal and unfold it in its saved dock or floating position;
+opening it again keeps the current definition and focuses its canvas.
+
+In an empty editor, choose **Insert extrusion example** to create an editable
+definition with **Radius** and **Height** sliders, a circle, a Z vector and an
+extrusion. Drag either slider to update the live viewport preview. The extrusion
+component is selected, so **Bake** creates an exact NURBS model object from it.
+The example is one undoable graph edit and preserves existing model objects.
+**Grasshopper → Insert extrusion example** also appends it to an existing definition.
+
+Choose **Add a component** to search the executable component catalog, or use the
+component palettes. Connect an output port to an input port to build a definition.
+The Grasshopper menu provides workspace files, docking and an explicit hide action.
+Opening an `.nscene` workspace with graph nodes also reveals the editor. See the
+[discovery and first-use implementation](docs/GRASSHOPPER-DISCOVERY.md) for behavior,
+shortcuts and validation. Native `.nscene` workspaces store both the model and graph;
+Grasshopper `.gh`/`.ghx` files and proprietary Grasshopper plugins are not implemented.
+
 ## Reusable packages
 
 | Package | Responsibility |
@@ -53,9 +76,10 @@ surfaces, with retained shaped text and bundled DejaVu fonts for offline fallbac
 Read the [migration journal](docs/UNO7-WEBGPU-MIGRATION.md) for architecture,
 resource ownership, per-commit evidence and remaining quality work. Production
 WGSL execution and all eleven actual Uno input/framebuffer campaigns are required
-by CI, with a combined minimum of 414 native UI checks. The original ten campaigns
+by CI, with a combined minimum of 439 native UI checks. The original ten campaigns
 retain their 357 prior checks and add seven real-startup/command-layout checks;
-`rhino-grasshopper-ui` contributes another 50.
+`rhino-grasshopper-ui` contributes another 75, including startup discovery,
+idempotent opening and the executable first-use definition.
 Hardware performance and an AAA production quality claim require their own
 representative scenes, visual review and device/driver measurements.
 

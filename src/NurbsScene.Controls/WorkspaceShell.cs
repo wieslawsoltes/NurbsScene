@@ -121,7 +121,11 @@ public sealed partial class WorkspaceView
             case "viewfront":Viewport.Canvas.Activate("Front");break;
             case "viewright":Viewport.Canvas.Activate("Right");break;
             case "viewperspective":Viewport.Canvas.Activate("Perspective");break;
-            case "grasshopper":case "definition":SetPreferences(Preferences with{DefinitionVisible=!Preferences.DefinitionVisible});break;
+            case "grasshopper":case "definition":case "showgrasshopper":OpenGrasshopper();break;
+            case "hidegrasshopper":case "hidedefinition":HandleDefinitionDock("Hide");break;
+            case "toggledefinition":if(Preferences.DefinitionVisible)HandleDefinitionDock("Hide");else OpenGrasshopper();break;
+            case "grasshoppersearch":OpenGrasshopper(search:true);break;
+            case "grasshopperexample":InsertGrasshopperExample();break;
             case "floatingdefinition":HandleDefinitionDock("Float");break;
             case "folddefinition":ToggleDefinitionFold();break;
             case "rendering":_ =SafeAsync(RenderingSettingsAsync);break;

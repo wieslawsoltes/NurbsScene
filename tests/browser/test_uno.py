@@ -12,6 +12,7 @@ from pathlib import Path
 from playwright.async_api import async_playwright
 from ui_observation import require_gpu_observation, wait_ready, wait_for_restored
 from command_console_observation import capture_startup
+from grasshopper_discovery_observation import verify_startup_discovery
 from test_workspace_ui import verify_workspace_ui
 from test_graph_inputs_ui import verify_graph_inputs_ui
 from test_canvas_values_ui import verify_canvas_values_ui
@@ -81,10 +82,16 @@ async def main(url, campaign=None):
                 campaign_reports.append(record)
                 print("CAMPAIGN " + name, flush=True)
                 try:
-                    query = "qualification=1" + ("&qualificationStartup=1" if name == "rhino-workspace" else "")
+                    query = "qualification=1" + ("&qualificationStartup=1" if name in ("rhino-workspace", "rhino-grasshopper-ui") else "")
+                    if name == "rhino-grasshopper-ui":
+                        query += "&qualificationDiscovery=1"
                     await page.goto(url + ("&" if "?" in url else "?") + query, wait_until="domcontentloaded", timeout=60000)
                     if name == "rhino-workspace":
                         record["startup"] = await capture_startup(page, EVIDENCE / "uno-rhino-startup")
+                    elif name == "rhino-grasshopper-ui":
+                        record["startup"] = await capture_startup(page, EVIDENCE / "uno-grasshopper-startup")
+                        record["discovery"] = await verify_startup_discovery(page, record["startup"], EVIDENCE / "uno-grasshopper-discovery")
+                        record["checks"].extend(record["discovery"]["checks"])
                     await page.wait_for_function('globalThis.nurbsSceneQualification && globalThis.nurbsSceneQualification.status !== "running"', timeout=180000)
                     report = await page.evaluate("globalThis.nurbsSceneQualification")
                     report["pageErrors"] = list(campaign_errors)
@@ -104,7 +111,7 @@ async def main(url, campaign=None):
                         # Capture that ready layout before the input campaign edits it.
                         await page.screenshot(path=str(EVIDENCE / "uno-webgpu-initial.png"))
                     record["firstSample"] = ready["sample"]
-                    record["checks"] = await verify(page)
+                    record["checks"].extend(await verify(page))
                     record["final"] = await page.evaluate("globalThis.nurbsSceneUi")
                     await page.evaluate("globalThis.nurbsSceneUiFinish=true")
                     await wait_for_restored(page)

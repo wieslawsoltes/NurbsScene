@@ -75,6 +75,8 @@ public partial class App
             {
                 await Wait(()=>view.IsLoaded&&view.Console.IsLoaded&&(canvas.Frames>0||canvas.LastError is not null),"Ordinary Uno startup did not submit its first frame.");
                 report["startup"]=await ObserveOrdinaryStartupAsync(view);
+                if(Uno.Foundation.WebAssemblyRuntime.InvokeJS("new URLSearchParams(location.search).get('qualificationDiscovery') === '1' ? 'yes' : 'no'")=="yes")
+                    report["discovery"]=await ObserveGrasshopperDiscoveryAsync(view);
             }
             controller.LoadPavilion(); // Explicit qualification fixture; ordinary startup stays empty.
             await Wait(()=>canvas.Frames>0||canvas.LastError is not null,"Uno GPU canvas did not initialize.");
